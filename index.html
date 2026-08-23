@@ -51,6 +51,7 @@
   #canvasWrap{position:relative;background:#fff;box-shadow:0 2px 14px rgba(0,0,0,0.18);}
   #pdfCanvas{display:block;}
   body.tag-mode #canvasWrap{cursor:crosshair;}
+  body.system-mode #canvasWrap{cursor:row-resize;}
   .marker-line{position:absolute;width:2px;margin-left:-1px;background:var(--accent);opacity:0.75;cursor:pointer;z-index:5;}
   .marker-line:hover{opacity:1;width:3px;margin-left:-1.5px;}
   .marker-line.linked{background:var(--good);}
@@ -63,7 +64,11 @@
   .marker-badge.linked{background:var(--good);}
   .marker-badge.selected{background:var(--bad);}
   .marker-badge[contenteditable="true"]{cursor:text;outline:2px solid #fff;}
-  .system-band{position:absolute;left:0;right:0;background:var(--accent);opacity:0.05;pointer-events:none;z-index:1;}
+  .system-band{position:absolute;left:0;right:0;background:var(--accent);opacity:0.05;pointer-events:none;z-index:1;border-top:1px dashed transparent;border-bottom:1px dashed transparent;}
+  body.system-mode .system-band{pointer-events:auto;cursor:pointer;}
+  body.system-mode .system-band:hover{background:var(--bad);opacity:0.15;border-color:var(--bad);}
+  .system-band.manual{border-top:1px dashed var(--good);border-bottom:1px dashed var(--good);}
+  #systemDragPreview{position:absolute;left:0;right:0;background:var(--bad);opacity:0.15;border-top:1px dashed var(--bad);border-bottom:1px dashed var(--bad);pointer-events:none;z-index:2;display:none;}
 
   #detectStatus{padding:6px 14px;font-size:0.76rem;color:var(--ink-soft);border-bottom:1px dashed var(--line);}
   #advPanel{padding:8px 14px;border-bottom:1px solid var(--line);background:var(--accent-soft);display:none;font-size:0.78rem;}
@@ -82,6 +87,8 @@
   .note-top{display:flex;flex-wrap:wrap;align-items:center;gap:8px;}
   .where-badge{font-size:0.72rem;font-weight:700;padding:3px 10px;border-radius:999px;background:var(--accent-soft);color:var(--accent);cursor:pointer;border:none;}
   .where-badge.unlinked{background:var(--warn-bg);color:var(--warn);cursor:default;}
+  .range-btn{font-size:0.7rem;padding:3px 9px;border-radius:999px;border:1px dashed var(--line);background:var(--panel);color:var(--ink-soft);cursor:pointer;}
+  .range-btn:hover{border-color:var(--accent);color:var(--accent);}
   .section-field{font-size:0.8rem;color:var(--ink);flex:1;min-width:80px;border:none;background:transparent;font-weight:600;}
   .section-field::placeholder{color:var(--ink-soft);font-weight:400;}
   .note-del{margin-left:auto;font-size:0.72rem;color:var(--bad);background:none;border:none;cursor:pointer;padding:2px 6px;}
@@ -112,6 +119,7 @@
   #vwRailTrack{position:relative;height:16px;background:var(--accent-soft);border-radius:6px;cursor:pointer;}
   .vw-progress{position:absolute;top:0;left:0;height:100%;background:var(--accent);opacity:0.3;border-radius:6px 0 0 6px;pointer-events:none;}
   .vw-tick{position:absolute;top:2px;bottom:2px;width:2px;background:var(--good);cursor:pointer;}
+  .vw-range{position:absolute;top:2px;bottom:2px;background:var(--good);opacity:0.35;border-radius:3px;cursor:pointer;}
   .vw-playhead{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--ink);opacity:0.7;pointer-events:none;}
   .vw-labels{display:flex;justify-content:space-between;font-size:0.62rem;color:var(--ink-soft);}
 
@@ -131,6 +139,7 @@
     <input type="file" id="pdfFile" accept="application/pdf" style="display:none;">
     <button class="btn" id="detectBtn" disabled>🔍 Auto-detect bars</button>
     <button class="btn" id="tagModeBtn" disabled>✎ Tag mode</button>
+    <button class="btn" id="systemModeBtn" disabled>📏 Mark system</button>
     <button class="btn" id="advToggleBtn">⚙</button>
     <div class="divider"></div>
     <button class="btn" id="exportBtn">⬇ Export project</button>
@@ -164,10 +173,11 @@
       <div id="detectStatus" style="display:none;"></div>
       <div id="scoreScroll">
         <div id="uploadPrompt">
-          <strong>Click "Upload PDF score" above</strong><br>to load sheet music. Once loaded, use <strong>Auto-detect bars</strong> to find barlines, then <strong>Tag mode</strong> to fix them up — click empty space to add a marker, click a marker's number to rename it, or click its badge with the ⌫ key to delete it.
+          <strong>Click "Upload PDF score" above</strong><br>to load sheet music. Once loaded, use <strong>Auto-detect bars</strong> to find barlines, <strong>Mark system</strong> to draw a system's boundary by hand on pages with multiple systems (drag top-to-bottom; click an existing band to remove it), then <strong>Tag mode</strong> to fix up bars — click empty space to add a marker, click a marker's number to rename it, or click a marker to delete it.
         </div>
         <div id="canvasWrap" style="display:none;">
           <canvas id="pdfCanvas"></canvas>
+          <div id="systemDragPreview"></div>
         </div>
       </div>
     </div>
@@ -186,6 +196,7 @@
   <div id="videoWidget">
     <div class="vw-head" id="vwHead">
       <span>🎧 Video</span>
+      <button class="vw-toggle" id="vwPlayPauseBtn" title="Play/pause">▶</button>
       <button class="vw-toggle" id="vwToggleBtn">▾</button>
     </div>
     <div class="vw-body">
@@ -216,11 +227,13 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs
 const STORAGE_KEY = "score_studio_v1";
 let pdfDoc = null, numPages = 0, currentPage = 1;
 let markersByPage = {};   // pageNum -> [{id, xFrac, yTopFrac, yBotFrac, number}]
-let pageSystems = {};     // pageNum -> [{yTopFrac, yBotFrac}]
-let notes = [];           // {id, barId|null, page, barNumber, section, what, why, timestampSec}
+let pageSystems = {};     // pageNum -> [{yTopFrac, yBotFrac, manual?}]
+let notes = [];           // {id, startBarId|null, startPage, startBarNumber, endBarId|null, endPage, endBarNumber, section, what, why, startSec, endSec}
 let barCounter = 0;
 let selectedMarkerId = null;
 let tagMode = false;
+let systemMode = false;
+let pendingEndBarNoteId = null; // note.id currently waiting for an end-bar click on the score
 let pdfFingerprint = null; // {name, size}
 let query = "";
 
@@ -239,20 +252,33 @@ function nl2br(str){ return escapeHtml(str).replace(/\n/g,"<br>"); }
 function persist(){
   try{
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      markersByPage, notes, barCounter, pdfFingerprint, videoId
+      markersByPage, pageSystems, notes, barCounter, pdfFingerprint, videoId
     }));
   }catch(e){ /* storage blocked */ }
+}
+function migrateNote(n){
+  // older saves used barId/page/barNumber/timestampSec (single point, not a range)
+  if(n.startBarId===undefined) n.startBarId = n.barId!==undefined ? n.barId : null;
+  if(n.startPage===undefined) n.startPage = n.page!==undefined ? n.page : null;
+  if(n.startBarNumber===undefined) n.startBarNumber = n.barNumber!==undefined ? n.barNumber : null;
+  if(n.endBarId===undefined) n.endBarId = null;
+  if(n.endPage===undefined) n.endPage = null;
+  if(n.endBarNumber===undefined) n.endBarNumber = null;
+  if(n.startSec===undefined) n.startSec = n.timestampSec!==undefined ? n.timestampSec : null;
+  if(n.endSec===undefined) n.endSec = null;
+  return n;
 }
 function loadPersisted(){
   try{
     const raw = localStorage.getItem(STORAGE_KEY);
     if(!raw) return;
     const d = JSON.parse(raw);
-    notes = d.notes || [];
+    notes = (d.notes || []).map(migrateNote);
     barCounter = d.barCounter || 0;
     pdfFingerprint = d.pdfFingerprint || null;
-    // markers are only restored once a matching PDF is re-uploaded (see loadPdfFile)
+    // markers/system-bands are only restored once a matching PDF is re-uploaded (see loadPdfFile)
     window.__savedMarkersByPage = d.markersByPage || {};
+    window.__savedPageSystems = d.pageSystems || {};
     if(d.videoId){ videoId = d.videoId; }
   }catch(e){ /* ignore corrupt storage */ }
 }
@@ -300,14 +326,17 @@ function loadPdfFile(file){
       pdfFingerprint = fingerprint;
       if(matches && window.__savedMarkersByPage){
         markersByPage = window.__savedMarkersByPage;
+        pageSystems = window.__savedPageSystems || {};
       } else {
         markersByPage = {};
+        pageSystems = {};
         if(window.__savedMarkersByPage) barCounter = 0; // fresh score, renumber from scratch
       }
       document.getElementById("uploadPrompt").style.display = "none";
       document.getElementById("canvasWrap").style.display = "block";
       document.getElementById("detectBtn").disabled = false;
       document.getElementById("tagModeBtn").disabled = false;
+      document.getElementById("systemModeBtn").disabled = false;
       document.getElementById("prevPageBtn").disabled = false;
       document.getElementById("nextPageBtn").disabled = false;
       document.getElementById("topStatus").textContent = file.name + " · " + numPages + " page" + (numPages===1?"":"s");
@@ -354,21 +383,36 @@ window.addEventListener("resize", ()=>{ if(pdfDoc) renderPage(currentPage); });
 // =====================================================================
 // bar / staff auto-detection (pure function of a canvas — testable standalone)
 // =====================================================================
-function detectStaffLines(imgData, w, h, threshold){
+// Ink density (not a binary luminance cutoff) for one pixel: anti-aliased
+// PDF rendering means a "black" hairline is often several partially-gray
+// pixels wide, so a hard threshold systematically undercounts real lines.
+// Weighting by how dark each pixel actually is gives a far more decisive,
+// stable signal — measured on a real scanned score, a true barline reached
+// ~0.9 ink density vs ~0.05 background noise, while a binary count blurred
+// that gap down to ~0.25 vs ~0.15 and was unusable.
+function inkAt(data, i){
+  const lum = 0.299*data[i] + 0.587*data[i+1] + 0.114*data[i+2];
+  return Math.max(0, (230 - lum) / 230);
+}
+
+function detectStaffLines(imgData, w, h, relativeSensitivity){
   const data = imgData.data;
-  const rowDark = new Float32Array(h);
+  const rowInk = new Float32Array(h);
+  let maxInk = 0;
   for(let y=0; y<h; y++){
-    let dark = 0;
+    let sum = 0;
     const rowOff = y*w*4;
-    for(let x=0; x<w; x++){
-      const i = rowOff + x*4;
-      const lum = 0.299*data[i] + 0.587*data[i+1] + 0.114*data[i+2];
-      if(lum < 140) dark++;
-    }
-    rowDark[y] = dark / w;
+    for(let x=0; x<w; x++) sum += inkAt(data, rowOff + x*4);
+    rowInk[y] = sum / w;
+    if(rowInk[y] > maxInk) maxInk = rowInk[y];
   }
+  if(maxInk < 0.02) return []; // blank page / render not ready
+  // threshold relative to this page's own peak row ink-density, not an
+  // absolute fraction of page width — real scores vary hugely in how much
+  // of a row's width is actual staff line vs. margin/instrument-label space.
+  const threshold = maxInk * relativeSensitivity;
   const lineRows = [];
-  for(let y=0; y<h; y++) if(rowDark[y] > threshold) lineRows.push(y);
+  for(let y=0; y<h; y++) if(rowInk[y] > threshold) lineRows.push(y);
   // cluster adjacent rows into single line centers
   const lines = [];
   let i=0;
@@ -382,20 +426,38 @@ function detectStaffLines(imgData, w, h, threshold){
 }
 
 function groupIntoStaves(lines){
-  // find runs of 5 lines with near-equal small spacing
-  const staves = [];
-  let i=0;
-  while(i <= lines.length-5){
-    const g1=lines[i+1]-lines[i], g2=lines[i+2]-lines[i+1], g3=lines[i+3]-lines[i+2], g4=lines[i+4]-lines[i+3];
-    const avg=(g1+g2+g3+g4)/4;
-    const consistent = [g1,g2,g3,g4].every(g=> Math.abs(g-avg) <= Math.max(2, avg*0.4)) && avg>2 && avg<60;
-    if(consistent){
-      staves.push({ top: lines[i], bottom: lines[i+4], lineGap: avg });
-      i += 5;
-    } else {
-      i += 1;
-    }
+  // Cluster detected line-rows by gap size rather than requiring an exact
+  // run of 5: on real (non-synthetic) scores, notation clutter — beams,
+  // stems, lyrics — routinely causes 1-2 of a staff's 5 lines to be missed,
+  // and a strict "must find exactly 5 in a row" rule throws the whole staff
+  // away when that happens. Intra-staff gaps (between the 5 lines of one
+  // staff) are consistently much smaller than inter-staff gaps (the space
+  // between one staff and the next), so a single adaptive threshold cleanly
+  // separates them even when a line or two is missing.
+  if(lines.length < 2) return [];
+  const gaps = lines.slice(1).map((y,i)=> y - lines[i]);
+  const sortedGaps = [...gaps].sort((a,b)=>a-b);
+  const medianGap = sortedGaps[Math.floor(sortedGaps.length/2)];
+  const threshold = Math.max(6, medianGap * 2.3);
+
+  const clusters = [];
+  let cur = [lines[0]];
+  for(let i=1;i<lines.length;i++){
+    if(lines[i]-lines[i-1] <= threshold) cur.push(lines[i]);
+    else { clusters.push(cur); cur = [lines[i]]; }
   }
+  clusters.push(cur);
+
+  const staves = [];
+  clusters.forEach(cluster=>{
+    if(cluster.length < 3) return; // too few lines to trust as a real staff
+    const top = cluster[0], bottom = cluster[cluster.length-1];
+    const n = cluster.length;
+    const avgGap = n>1 ? (bottom-top)/(n-1) : 10;
+    // pad by half a line-gap so a staff missing its outer line (common under
+    // a beam or stem) still gets a reasonable vertical extent
+    staves.push({ top: top - avgGap*0.6, bottom: bottom + avgGap*0.6, lineGap: avgGap });
+  });
   return staves;
 }
 
@@ -421,32 +483,45 @@ function groupIntoSystems(staves){
   return systems;
 }
 
-function detectBarlinesInSystem(imgData, w, h, sysTop, sysBottom, threshold){
+function detectBarlinesInSystem(imgData, w, h, sysTop, sysBottom, relativeSensitivity){
   const data = imgData.data;
-  const yFrom = Math.max(0, sysTop), yTo = Math.min(h-1, sysBottom);
+  // sysTop/sysBottom may be non-integer (staff padding is fractional) — a
+  // typed array returns undefined for a non-integer index, which poisons
+  // every ink sum with NaN and silently zeroes out detection, so round first.
+  const yFrom = Math.max(0, Math.round(sysTop)), yTo = Math.min(h-1, Math.round(sysBottom));
   const rangeH = yTo - yFrom + 1;
   if(rangeH <= 0) return [];
-  const colDark = new Float32Array(w);
+  const colInk = new Float32Array(w);
+  let maxInk = 0;
   for(let x=0; x<w; x++){
-    let dark=0;
-    for(let y=yFrom; y<=yTo; y++){
-      const i = (y*w+x)*4;
-      const lum = 0.299*data[i] + 0.587*data[i+1] + 0.114*data[i+2];
-      if(lum < 150) dark++;
-    }
-    colDark[x] = dark/rangeH;
+    let sum=0;
+    for(let y=yFrom; y<=yTo; y++) sum += inkAt(data, (y*w+x)*4);
+    colInk[x] = sum/rangeH;
+    if(colInk[x] > maxInk) maxInk = colInk[x];
   }
+  if(maxInk < 0.02) return [];
+  // relative to this system's own peak column ink-density — a barline
+  // spanning many staves picks up more inter-staff whitespace than one
+  // confined to a single clean staff, so an absolute cutoff doesn't travel
+  // well between a 1-staff and an 11-staff system.
+  const threshold = maxInk * relativeSensitivity;
   const cols = [];
-  for(let x=0;x<w;x++) if(colDark[x] > threshold) cols.push(x);
-  // cluster into candidate centers, enforce minimum spacing
+  for(let x=0;x<w;x++) if(colInk[x] > threshold) cols.push(x);
+  // cluster into candidate centers, enforce minimum spacing and minimum
+  // stroke width — a note stem is typically 1-2px wide at this resolution,
+  // while a real barline stroke is consistently several px wide, so a
+  // width floor is an effective filter against stem false-positives.
   const candidates = [];
   let i=0;
   const minSpacing = Math.max(10, rangeH*0.05);
+  const minRunWidth = 2;
   while(i<cols.length){
     let j=i;
     while(j+1<cols.length && cols[j+1]-cols[j] <= 3) j++;
+    const runWidth = cols[j] - cols[i] + 1;
+    if(runWidth < minRunWidth){ i = j+1; continue; }
     let best=i;
-    for(let k=i;k<=j;k++) if(colDark[cols[k]] > colDark[cols[best]]) best=k;
+    for(let k=i;k<=j;k++) if(colInk[cols[k]] > colInk[cols[best]]) best=k;
     const x = cols[best];
     if(candidates.length===0 || x - candidates[candidates.length-1] >= minSpacing){
       candidates.push(x);
@@ -526,10 +601,41 @@ function updateDetectStatus(){
 // =====================================================================
 document.getElementById("tagModeBtn").addEventListener("click", ()=>{
   tagMode = !tagMode;
+  if(tagMode && systemMode){ systemMode = false; document.body.classList.remove("system-mode"); document.getElementById("systemModeBtn").classList.remove("active"); document.getElementById("systemModeBtn").textContent = "📏 Mark system"; }
   document.body.classList.toggle("tag-mode", tagMode);
   document.getElementById("tagModeBtn").classList.toggle("active", tagMode);
   document.getElementById("tagModeBtn").textContent = tagMode ? "✓ Tag mode on" : "✎ Tag mode";
 });
+
+document.getElementById("systemModeBtn").addEventListener("click", ()=>{
+  systemMode = !systemMode;
+  if(systemMode && tagMode){ tagMode = false; document.body.classList.remove("tag-mode"); document.getElementById("tagModeBtn").classList.remove("active"); document.getElementById("tagModeBtn").textContent = "✎ Tag mode"; }
+  document.body.classList.toggle("system-mode", systemMode);
+  document.getElementById("systemModeBtn").classList.toggle("active", systemMode);
+  document.getElementById("systemModeBtn").textContent = systemMode ? "✓ Marking systems" : "📏 Mark system";
+});
+
+function startPickEndBar(noteId){
+  pendingEndBarNoteId = noteId;
+  updatePendingBanner();
+}
+function cancelPickEndBar(){
+  pendingEndBarNoteId = null;
+  updatePendingBanner();
+}
+function updatePendingBanner(){
+  const el = document.getElementById("scoreStatus");
+  if(pendingEndBarNoteId){
+    el.innerHTML = 'Click a bar to set as the range end — <a href="#" id="cancelEndPick" style="color:var(--bad);">Cancel</a>';
+    document.getElementById("cancelEndPick").addEventListener("click", (e)=>{ e.preventDefault(); cancelPickEndBar(); });
+  } else {
+    el.textContent = "";
+  }
+}
+
+function barIsLinked(id){
+  return notes.some(n=> n.startBarId===id || n.endBarId===id);
+}
 
 document.getElementById("advToggleBtn").addEventListener("click", ()=>{
   document.getElementById("advPanel").classList.toggle("open");
@@ -547,16 +653,25 @@ function renderMarkerOverlay(){
   const canvas = document.getElementById("pdfCanvas");
   const dispW = canvas.clientWidth, dispH = canvas.clientHeight;
 
-  (pageSystems[currentPage]||[]).forEach(sys=>{
+  (pageSystems[currentPage]||[]).forEach((sys, sysIdx)=>{
     const band = document.createElement("div");
-    band.className = "system-band";
+    band.className = "system-band" + (sys.manual ? " manual" : "");
     band.style.top = (sys.yTopFrac*dispH) + "px";
     band.style.height = ((sys.yBotFrac-sys.yTopFrac)*dispH) + "px";
+    band.title = "Click to remove this system boundary";
+    band.addEventListener("click", (e)=>{
+      if(!systemMode) return;
+      e.stopPropagation();
+      if(!confirm("Remove this system boundary? (Bar markers within it are kept.)")) return;
+      pageSystems[currentPage].splice(sysIdx, 1);
+      persist();
+      renderMarkerOverlay();
+    });
     wrap.appendChild(band);
   });
 
   (markersByPage[currentPage]||[]).forEach(m=>{
-    const linked = notes.some(n=>n.barId===m.id);
+    const linked = barIsLinked(m.id);
     const line = document.createElement("div");
     line.className = "marker-line" + (linked?" linked":"") + (m.id===selectedMarkerId?" selected":"");
     line.style.left = (m.xFrac*dispW) + "px";
@@ -596,7 +711,7 @@ function renderMarkerOverlay(){
 }
 
 document.getElementById("canvasWrap").addEventListener("click", (e)=>{
-  if(!tagMode || !pdfDoc) return;
+  if(systemMode || !tagMode || !pdfDoc) return;
   const canvas = document.getElementById("pdfCanvas");
   const rect = canvas.getBoundingClientRect();
   const xFrac = (e.clientX - rect.left) / rect.width;
@@ -612,6 +727,44 @@ document.getElementById("canvasWrap").addEventListener("click", (e)=>{
   renderMarkerOverlay();
 });
 
+// drag-to-mark-system: mousedown starts a drag, mousemove previews it, mouseup commits it
+let systemDragStartFrac = null;
+document.getElementById("canvasWrap").addEventListener("mousedown", (e)=>{
+  if(!systemMode || !pdfDoc || e.target.closest(".system-band")) return;
+  const canvas = document.getElementById("pdfCanvas");
+  const rect = canvas.getBoundingClientRect();
+  systemDragStartFrac = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
+  const preview = document.getElementById("systemDragPreview");
+  preview.style.display = "block";
+  preview.style.top = (systemDragStartFrac*canvas.clientHeight) + "px";
+  preview.style.height = "0px";
+});
+document.addEventListener("mousemove", (e)=>{
+  if(systemDragStartFrac==null) return;
+  const canvas = document.getElementById("pdfCanvas");
+  const rect = canvas.getBoundingClientRect();
+  const curFrac = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
+  const top = Math.min(systemDragStartFrac, curFrac), bot = Math.max(systemDragStartFrac, curFrac);
+  const preview = document.getElementById("systemDragPreview");
+  preview.style.top = (top*canvas.clientHeight) + "px";
+  preview.style.height = ((bot-top)*canvas.clientHeight) + "px";
+});
+document.addEventListener("mouseup", (e)=>{
+  if(systemDragStartFrac==null) return;
+  const canvas = document.getElementById("pdfCanvas");
+  const rect = canvas.getBoundingClientRect();
+  const curFrac = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
+  const top = Math.min(systemDragStartFrac, curFrac), bot = Math.max(systemDragStartFrac, curFrac);
+  document.getElementById("systemDragPreview").style.display = "none";
+  systemDragStartFrac = null;
+  if(bot - top < 0.01) return; // too small to be a deliberate drag
+  if(!pageSystems[currentPage]) pageSystems[currentPage] = [];
+  pageSystems[currentPage].push({ yTopFrac: top, yBotFrac: bot, manual: true });
+  pageSystems[currentPage].sort((a,b)=> a.yTopFrac-b.yTopFrac);
+  persist();
+  renderMarkerOverlay();
+});
+
 function onMarkerClick(id){
   if(tagMode){
     if(!confirm("Delete this bar marker?")) return;
@@ -621,14 +774,28 @@ function onMarkerClick(id){
     renderMarkerOverlay();
     return;
   }
-  selectedMarkerId = id;
-  renderMarkerOverlay();
   const m = (markersByPage[currentPage]||[]).find(x=>x.id===id);
   if(!m) return;
-  const note = notes.find(n=>n.barId===id);
+
+  if(pendingEndBarNoteId){
+    const note = notes.find(n=>n.id===pendingEndBarNoteId);
+    pendingEndBarNoteId = null;
+    updatePendingBanner();
+    if(note){
+      note.endBarId = m.id; note.endPage = currentPage; note.endBarNumber = m.number;
+      persist();
+      renderNotes();
+      renderMarkerOverlay();
+    }
+    return;
+  }
+
+  selectedMarkerId = id;
+  renderMarkerOverlay();
+  const note = notes.find(n=> n.startBarId===id || n.endBarId===id);
   if(note){
     jumpToNote(note.id);
-    if(note.timestampSec!=null) playVideoAt(note.timestampSec);
+    if(note.startSec!=null) playVideoAt(note.startSec, note.endSec);
   } else {
     openAddNoteFor(m);
   }
@@ -649,13 +816,14 @@ document.getElementById("addNoteBtn").addEventListener("click", ()=>{
 function openAddNoteFor(marker){
   const note = {
     id: uid(),
-    barId: marker ? marker.id : null,
-    page: marker ? currentPage : null,
-    barNumber: marker ? marker.number : null,
+    startBarId: marker ? marker.id : null,
+    startPage: marker ? currentPage : null,
+    startBarNumber: marker ? marker.number : null,
+    endBarId: null, endPage: null, endBarNumber: null,
     section: "",
     what: "",
     why: "",
-    timestampSec: null
+    startSec: null, endSec: null
   };
   notes.unshift(note);
   persist();
@@ -693,9 +861,12 @@ function jumpToBar(page, barId){
 }
 
 function whereLabel(note){
-  if(note.barId){
+  if(note.startBarId){
     const sec = note.section ? note.section + " · " : "";
-    return sec + "p" + note.page + " · bar " + note.barNumber;
+    const barPart = (note.endBarId && note.endBarNumber!==note.startBarNumber)
+      ? "bar " + note.startBarNumber + "–" + note.endBarNumber
+      : "bar " + note.startBarNumber;
+    return sec + barPart;
   }
   return note.section || "Unlinked";
 }
@@ -721,9 +892,13 @@ function renderNotes(){
     const card = document.createElement("div");
     card.className = "note-card";
     card.dataset.id = n.id;
+    const hasEnd = n.endBarId!=null;
     card.innerHTML = `
       <div class="note-top">
-        <button class="where-badge${n.barId? '':' unlinked'}" data-action="where">${escapeHtml(whereLabel(n))}</button>
+        <button class="where-badge${n.startBarId? '':' unlinked'}" data-action="where">${escapeHtml(whereLabel(n))}</button>
+        ${n.startBarId ? (hasEnd
+          ? '<button class="range-btn" data-action="clear-end" title="Remove range end">✕ end bar</button>'
+          : '<button class="range-btn" data-action="set-end" title="Pick a second bar to make this a range">+ end bar</button>') : ''}
         <input type="text" class="section-field" data-field="section" placeholder="Section label (e.g. Intro, Verse, Solo)…" value="${escapeHtml(n.section)}">
         <button class="note-del" data-action="delete">✕ Delete</button>
       </div>
@@ -736,16 +911,26 @@ function renderNotes(){
         <div class="field-why" contenteditable="true" data-field="why">${nl2br(n.why)}</div>
       </div>
       <div class="note-listen">
-        <span class="field-label" style="margin:0;">Timestamp</span>
-        <input type="text" class="ts-input" data-field="timestamp" placeholder="mm:ss" value="${n.timestampSec!=null?secToClock(n.timestampSec):''}">
-        <button class="link-btn play" type="button" ${n.timestampSec==null?'disabled':''}>▶ Play</button>
+        <span class="field-label" style="margin:0;">From</span>
+        <input type="text" class="ts-input" data-field="start" placeholder="mm:ss" value="${n.startSec!=null?secToClock(n.startSec):''}">
+        <span class="field-label" style="margin:0;">To</span>
+        <input type="text" class="ts-input" data-field="end" placeholder="mm:ss (optional)" value="${n.endSec!=null?secToClock(n.endSec):''}">
+        <button class="link-btn play" type="button" ${n.startSec==null?'disabled':''}>▶ Play</button>
       </div>
     `;
     listEl.appendChild(card);
 
     card.querySelector('[data-action="delete"]').addEventListener("click", ()=> deleteNote(n.id));
     const whereBtn = card.querySelector('[data-action="where"]');
-    if(n.barId) whereBtn.addEventListener("click", ()=> jumpToBar(n.page, n.barId));
+    if(n.startBarId) whereBtn.addEventListener("click", ()=> jumpToBar(n.startPage, n.startBarId));
+
+    const setEndBtn = card.querySelector('[data-action="set-end"]');
+    if(setEndBtn) setEndBtn.addEventListener("click", ()=> startPickEndBar(n.id));
+    const clearEndBtn = card.querySelector('[data-action="clear-end"]');
+    if(clearEndBtn) clearEndBtn.addEventListener("click", ()=>{
+      n.endBarId = null; n.endPage = null; n.endBarNumber = null;
+      persist(); renderNotes(); renderMarkerOverlay();
+    });
 
     const sectionInput = card.querySelector('[data-field="section"]');
     sectionInput.addEventListener("change", ()=>{
@@ -763,24 +948,29 @@ function renderNotes(){
       });
     });
 
-    const tsInput = card.querySelector('[data-field="timestamp"]');
+    const startInput = card.querySelector('[data-field="start"]');
+    const endInput = card.querySelector('[data-field="end"]');
     const playBtn = card.querySelector(".link-btn.play");
-    tsInput.addEventListener("change", ()=>{
-      const raw = tsInput.value;
-      if(!raw.trim()){ n.timestampSec = null; }
+    function commitTimestamp(input, field){
+      const raw = input.value;
+      if(!raw.trim()){ n[field] = null; }
       else {
         const sec = clockToSec(raw);
-        if(sec==null){ tsInput.value = n.timestampSec!=null?secToClock(n.timestampSec):''; return; }
-        n.timestampSec = sec;
+        if(sec==null){ input.value = n[field]!=null?secToClock(n[field]):''; return; }
+        n[field] = sec;
       }
-      playBtn.disabled = n.timestampSec==null;
+      playBtn.disabled = n.startSec==null;
       persist();
       renderRail();
+    }
+    startInput.addEventListener("change", ()=> commitTimestamp(startInput, "startSec"));
+    endInput.addEventListener("change", ()=> commitTimestamp(endInput, "endSec"));
+    [startInput, endInput].forEach(inp=>{
+      inp.addEventListener("input", ()=> updateLiveMarker(clockToSec(inp.value)));
+      inp.addEventListener("focus", ()=> updateLiveMarker(clockToSec(inp.value)));
+      inp.addEventListener("blur", ()=> updateLiveMarker(null));
     });
-    tsInput.addEventListener("input", ()=> updateLiveMarker(clockToSec(tsInput.value)));
-    tsInput.addEventListener("focus", ()=> updateLiveMarker(clockToSec(tsInput.value)));
-    tsInput.addEventListener("blur", ()=> updateLiveMarker(null));
-    playBtn.addEventListener("click", ()=>{ if(n.timestampSec!=null) playVideoAt(n.timestampSec); });
+    playBtn.addEventListener("click", ()=>{ if(n.startSec!=null) playVideoAt(n.startSec, n.endSec); });
   });
 }
 
@@ -804,7 +994,7 @@ function onEditableKeydown(e){
 // export / import project
 // =====================================================================
 document.getElementById("exportBtn").addEventListener("click", ()=>{
-  const blob = new Blob([JSON.stringify({ markersByPage, notes, barCounter, pdfFingerprint, videoId }, null, 2)], {type:"application/json"});
+  const blob = new Blob([JSON.stringify({ markersByPage, pageSystems, notes, barCounter, pdfFingerprint, videoId }, null, 2)], {type:"application/json"});
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url; a.download = "score-analysis-project.json";
@@ -820,7 +1010,8 @@ document.getElementById("importFile").addEventListener("change", (e)=>{
     try{
       const d = JSON.parse(reader.result);
       markersByPage = d.markersByPage || {};
-      notes = d.notes || [];
+      pageSystems = d.pageSystems || {};
+      notes = (d.notes || []).map(migrateNote);
       barCounter = d.barCounter || 0;
       pdfFingerprint = d.pdfFingerprint || null;
       if(d.videoId){ videoId = d.videoId; loadVideo(videoId, true); }
@@ -899,11 +1090,14 @@ function createYtPlayer(){
   });
 }
 
-function playVideoAt(sec){
-  document.getElementById("vwNow").textContent = secToClock(sec);
+let activeEndSec = null;
+function playVideoAt(sec, endSec){
+  document.getElementById("vwNow").textContent = endSec!=null ? (secToClock(sec)+" – "+secToClock(endSec)) : secToClock(sec);
+  activeEndSec = endSec!=null ? endSec : null;
   if(!ytReady){ pendingSeek = sec; return; }
   ytPlayer.seekTo(sec, true);
   ytPlayer.playVideo();
+  updatePlayPauseIcon(true);
 }
 
 const vwTrack = document.getElementById("vwRailTrack");
@@ -912,14 +1106,25 @@ const vwPlayhead = document.getElementById("vwPlayhead");
 
 function renderRail(){
   document.getElementById("vwDuration").textContent = secToClock(durationSec);
-  vwTrack.querySelectorAll(".vw-tick").forEach(t=>t.remove());
+  vwTrack.querySelectorAll(".vw-tick,.vw-range").forEach(t=>t.remove());
   notes.forEach(n=>{
-    if(n.timestampSec==null) return;
+    if(n.startSec==null) return;
+    if(n.endSec!=null && n.endSec>n.startSec){
+      const range = document.createElement("div");
+      range.className = "vw-range";
+      const leftPct = Math.min(100, Math.max(0, n.startSec/durationSec*100));
+      const rightPct = Math.min(100, Math.max(0, n.endSec/durationSec*100));
+      range.style.left = leftPct + "%";
+      range.style.width = (rightPct-leftPct) + "%";
+      range.title = whereLabel(n) + " · " + secToClock(n.startSec) + "–" + secToClock(n.endSec);
+      range.addEventListener("click", (e)=>{ e.stopPropagation(); playVideoAt(n.startSec, n.endSec); jumpToNote(n.id); });
+      vwTrack.appendChild(range);
+    }
     const tick = document.createElement("div");
     tick.className = "vw-tick";
-    tick.style.left = Math.min(100, Math.max(0, n.timestampSec/durationSec*100)) + "%";
-    tick.title = whereLabel(n) + " · " + secToClock(n.timestampSec);
-    tick.addEventListener("click", (e)=>{ e.stopPropagation(); playVideoAt(n.timestampSec); jumpToNote(n.id); });
+    tick.style.left = Math.min(100, Math.max(0, n.startSec/durationSec*100)) + "%";
+    tick.title = whereLabel(n) + " · " + secToClock(n.startSec);
+    tick.addEventListener("click", (e)=>{ e.stopPropagation(); playVideoAt(n.startSec, n.endSec); jumpToNote(n.id); });
     vwTrack.appendChild(tick);
   });
 }
@@ -931,12 +1136,30 @@ vwTrack.addEventListener("click", (e)=>{
   const frac = Math.min(1, Math.max(0, (e.clientX-rect.left)/rect.width));
   playVideoAt(frac*durationSec);
 });
+
+function updatePlayPauseIcon(isPlaying){
+  document.getElementById("vwPlayPauseBtn").textContent = isPlaying ? "⏸" : "▶";
+}
+document.getElementById("vwPlayPauseBtn").addEventListener("click", (e)=>{
+  e.stopPropagation();
+  if(!ytReady) return;
+  const state = ytPlayer.getPlayerState ? ytPlayer.getPlayerState() : -1;
+  if(state===1){ ytPlayer.pauseVideo(); updatePlayPauseIcon(false); }
+  else { ytPlayer.playVideo(); updatePlayPauseIcon(true); }
+});
+
 setInterval(()=>{
   if(!ytReady || !ytPlayer.getCurrentTime) return;
   const t = ytPlayer.getCurrentTime();
   const pct = Math.min(100, Math.max(0, t/durationSec*100));
   vwPlayhead.style.left = pct + "%"; vwPlayhead.style.display = "block";
   vwProgress.style.width = pct + "%";
+  if(activeEndSec!=null && t>=activeEndSec){
+    ytPlayer.pauseVideo();
+    updatePlayPauseIcon(false);
+    activeEndSec = null;
+  }
+  if(ytPlayer.getPlayerState) updatePlayPauseIcon(ytPlayer.getPlayerState()===1);
 }, 500);
 
 // =====================================================================
