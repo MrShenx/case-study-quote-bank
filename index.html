@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bohemian Rhapsody — Interactive Quote Bank</title>
+<style>
+  :root{
+    --bg:#faf9f7;
+    --panel:#ffffff;
+    --ink:#1f2328;
+    --ink-soft:#5b6169;
+    --line:#e6e3dd;
+    --accent:#7b5cff;
+    --accent-soft:#efeaff;
+    --secB:#1f7a5c;
+    --secB-soft:#e6f5ee;
+    --secA:#a8621a;
+    --secA-soft:#fbeee0;
+    --warn:#8a5a00;
+    --warn-bg:#fff6e0;
+    --good:#1f7a3f;
+    --bad:#a8341a;
+    --radius:14px;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#15171a;--panel:#1e2125;--ink:#e9eaec;--ink-soft:#a2a8b0;--line:#2c3036;
+      --accent:#a58bff;--accent-soft:#2a2440;--secB:#5fd6ab;--secB-soft:#173229;
+      --secA:#f0a45c;--secA-soft:#382a17;--warn:#f0c56a;--warn-bg:#3a2f10;
+      --good:#6fd696;--bad:#f0897a;
+    }
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);}
+
+  /* Persistent player bar */
+  #playerBar{
+    position:sticky;top:0;z-index:100;
+    background:var(--panel);border-bottom:1px solid var(--line);
+    display:flex;flex-wrap:wrap;gap:16px;align-items:center;
+    padding:12px 20px;
+  }
+  #playerCol{
+    width:280px;flex-shrink:0;
+  }
+  #playerWrap{position:relative;width:100%;aspect-ratio:16/9;background:#000;border-radius:10px;overflow:hidden;}
+  #playerWrap iframe{position:absolute;inset:0;width:100%;height:100%;border:0;}
+  #nowPlaying{
+    flex:1;min-width:180px;
+  }
+  #nowPlaying .np-label{font-size:0.72rem;color:var(--ink-soft);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px;}
+  #nowPlaying .np-text{font-size:0.98rem;font-weight:650;}
+  #nowPlaying .np-sub{font-size:0.82rem;color:var(--ink-soft);margin-top:2px;}
+
+  header{padding:22px 24px 14px;max-width:1100px;margin:0 auto;}
+  h1{font-size:1.4rem;margin:0 0 4px;}
+  .sub{color:var(--ink-soft);font-size:0.9rem;margin:0 0 14px;}
+  .banner{background:var(--warn-bg);color:var(--warn);border-radius:var(--radius);padding:10px 16px;font-size:0.84rem;margin-bottom:12px;}
+  .howto{background:var(--accent-soft);color:var(--ink);border-radius:var(--radius);padding:10px 16px;font-size:0.84rem;line-height:1.5;margin-bottom:16px;}
+  .controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:6px;}
+  input[type=text]{padding:10px 14px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font-size:0.92rem;}
+  #search{flex:1;min-width:200px;}
+  .chip{padding:8px 16px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--ink-soft);font-size:0.85rem;cursor:pointer;user-select:none;}
+  .chip.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .util-bar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:10px;padding:10px 14px;border-radius:var(--radius);border:1px solid var(--line);background:var(--panel);}
+  .util-btn{padding:8px 16px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font-size:0.82rem;cursor:pointer;}
+  .util-btn.primary{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .util-status{font-size:0.8rem;color:var(--ink-soft);}
+  .util-status.saved{color:var(--good);}
+
+  main{max-width:1100px;margin:0 auto;padding:0 24px 60px;}
+  .count{color:var(--ink-soft);font-size:0.82rem;margin:14px 0 12px;}
+  .grid{display:grid;grid-template-columns:1fr;gap:14px;}
+  @media(min-width:760px){.grid{grid-template-columns:1fr 1fr;}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;display:flex;flex-direction:column;gap:8px;}
+  .card.now{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft);}
+  .card-top{display:flex;justify-content:flex-start;align-items:center;gap:8px;}
+  .id-badge{font-size:0.72rem;font-weight:700;letter-spacing:0.03em;padding:3px 9px;border-radius:999px;}
+  .id-badge.A{background:var(--secA-soft);color:var(--secA);}
+  .id-badge.B{background:var(--secB-soft);color:var(--secB);}
+  .bar-ref{font-size:0.76rem;color:var(--ink-soft);}
+  .technique{font-weight:650;font-size:1rem;}
+  .row{font-size:0.86rem;line-height:1.45;}
+  .row .label{color:var(--ink-soft);font-size:0.72rem;text-transform:uppercase;letter-spacing:0.04em;display:block;margin-bottom:2px;}
+  .exam{background:var(--accent-soft);border-radius:10px;padding:9px 12px;font-style:italic;font-size:0.85rem;line-height:1.45;}
+  .listen-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:2px;padding-top:10px;border-top:1px dashed var(--line);}
+  .ts-input{width:84px;padding:6px 10px;font-size:0.82rem;border-radius:8px;}
+  .listen-label{font-size:0.72rem;color:var(--ink-soft);text-transform:uppercase;letter-spacing:0.04em;}
+  .link-btn{font:inherit;font-size:0.8rem;text-decoration:none;padding:6px 12px;border-radius:999px;border:1px solid var(--line);color:var(--ink);white-space:nowrap;background:var(--panel);cursor:pointer;}
+  .link-btn.play{background:var(--secB-soft);color:var(--secB);border-color:transparent;font-weight:600;}
+  .link-btn.play:disabled{opacity:0.4;cursor:not-allowed;}
+  .placeholder-note{color:var(--ink-soft);font-size:0.85rem;text-align:center;padding:30px 10px;border:1px dashed var(--line);border-radius:var(--radius);margin-top:8px;}
+  footer{max-width:1100px;margin:0 auto;padding:0 24px 40px;color:var(--ink-soft);font-size:0.8rem;}
+  @media(max-width:640px){
+    #playerCol{width:160px;}
+  }
+</style>
+</head>
+<body>
+
+<div id="playerBar">
+  <div id="playerCol">
+    <div id="playerWrap"><div id="ytPlayer"></div></div>
+  </div>
+  <div id="nowPlaying">
+    <div class="np-label">Now playing</div>
+    <div class="np-text" id="npText">Nothing selected yet</div>
+    <div class="np-sub" id="npSub">Click "▶ Play from here" on any card below.</div>
+  </div>
+</div>
+
+<header>
+  <h1>Bohemian Rhapsody — Interactive Quote Bank</h1>
+  <p class="sub">Drilling tool for Stage 5 students preparing HSC-style Question&nbsp;4 extended responses. The player above stays on screen — click a card to jump straight to that moment.</p>
+  <div class="banner">Draft — transcribed from whiteboard notes (16 Aug 2026). "Effect" and "exam phrasing" columns are inferred interpretation; please check for musical/factual accuracy before classroom use. Sections C &amp; D are placeholders, ready to be added.</div>
+  <div class="howto">🎧 <strong>Setting timestamps:</strong> use the player above to find the right moment (or open it directly on <a id="ytDirectLink" href="#" target="_blank" rel="noopener">YouTube</a> to scrub, then copy the time back here), type it into a card as <code>mm:ss</code>, and it's remembered automatically in this browser. Use <strong>Export</strong> below to back it up or send it to Claude to fold into the master copy.</div>
+  <div class="controls">
+    <input type="text" id="search" placeholder="Search technique, example, or effect…">
+  </div>
+  <div class="controls" id="sectionChips" style="margin-top:8px;"></div>
+  <div class="util-bar">
+    <button class="util-btn" id="exportBtn">⬇ Export timestamps (.json)</button>
+    <button class="util-btn" id="importBtn">⬆ Import timestamps (.json)</button>
+    <input type="file" id="importFile" accept="application/json" style="display:none;">
+    <span class="util-status saved" id="utilStatus">Saved in this browser</span>
+  </div>
+</header>
+<main>
+  <div class="count" id="count"></div>
+  <div class="grid" id="grid"></div>
+  <div class="placeholder-note">Sections C &amp; D — not yet added. Ask Claude to update this repository once that analysis is ready.</div>
+</main>
+<footer>This is a standalone file — open it directly in a browser (double-click, or host it on your class site/LMS) rather than through a Claude Artifact link, since inline video playback needs to run outside that sandbox. Timestamps save to this browser's local storage; use Export/Import to move them between devices or send back to Claude.</footer>
+
+<script src="https://www.youtube.com/iframe_api"></script>
+<script>
+const YOUTUBE_ID = "fJ9rUzIMcZQ"; // Queen – Bohemian Rhapsody (Official Video, Remastered)
+document.getElementById("ytDirectLink").href = "https://www.youtube.com/watch?v=" + YOUTUBE_ID;
+
+const DATA = [
+  {id:"A1", section:"A", bar:"b.1", technique:"Harmonic ambiguity", example:"Opening chord reads as either Bᵇ⁶ or Gm⁷ — no V–I, no functional harmonic progression", effect:"Creates tonal uncertainty from the very first bar, unsettling the listener before the harmony is confirmed.", exam:"The composer opens with harmonic ambiguity, using a Bᵇ⁶/Gm⁷ sonority that avoids a functional V–I resolution, immediately unsettling the listener's sense of key."},
+  {id:"A2", section:"A", bar:"—", technique:"Line cliché", example:"Chromatic stepwise line moving against/within the harmony", effect:"Adds chromatic colour and a smooth, decorative connective thread between chords.", exam:"A chromatic line cliché links successive chords, adding harmonic colour and a sense of continuous motion."},
+  {id:"A3", section:"A", bar:"b.10–11", technique:"Chromatic motive → harmony", example:"Cᵇ – Bᵇ – A – Bᵇ chromatic movement in the harmony", effect:"Reinforces the section's harmonic ambiguity and decorates the tonic with chromatic neighbour motion.", exam:"The chromatic motive (Cᵇ–Bᵇ–A–Bᵇ) in bars 10–11 further destabilises the tonic, sustaining the ambiguity established in bar 1."},
+  {id:"A4", section:"A", bar:"b.3", technique:"Mixed metre", example:"Shift into 5/4", effect:"Disrupts the regular quadruple metre, creating rhythmic instability that mirrors the exploratory, questioning character of the section.", exam:"A shift to 5/4 in bar 3 creates metric instability, reflecting the unsettled character of the introduction."},
+  {id:"A5", section:"A", bar:"section close", technique:"Perfect cadence", example:"V–I cadence closes the section", effect:"Resolves the earlier harmonic ambiguity and firmly establishes Bᵇ Major as tonic — a clear moment of arrival.", exam:"A perfect cadence concludes the section, resolving the prior harmonic ambiguity and firmly establishing Bᵇ Major as the tonic."},
+  {id:"A6", section:"A", bar:"—", technique:"Texture: lead + backing, close harmony, homophony, narrow range", example:"Multi-tracked vocal harmony, chordal/homophonic texture, melody in a narrow range", effect:"Creates an intimate, vocal-centred ballad texture characteristic of Queen's layered harmony style.", exam:"The homophonic texture, built from close vocal harmony within a narrow range, creates an intimate ballad quality."},
+  {id:"A7", section:"A", bar:"—", technique:"Chordal movement in parallel motion", example:"Chords shift together in parallel beneath the vocal harmony", effect:"Reinforces the homophonic, block-chord texture and unifies the vocal harmony with the accompaniment.", exam:"Parallel chordal movement beneath the vocal lines reinforces the homophonic texture."},
+  {id:"A8", section:"A", bar:"—", technique:"Word painting", example:"\"Sweeping sound\" (dynamic/textural swell)", effect:"Musically illustrates the emotional weight of the lyric it accompanies.", exam:"A sweeping dynamic swell word-paints [lyric], intensifying the emotional impact of the text."},
+
+  {id:"B1", section:"B", bar:"—", technique:"Melodic ostinato + sequence", example:"Repeated piano melodic pattern, restated at different pitch levels", effect:"Builds momentum and drive into the rock section.", exam:"A piano melodic ostinato, developed through sequence, builds momentum into the rock section."},
+  {id:"B2", section:"B", bar:"—", technique:"Chord progression", example:"I–vi–ii–V in Bᵇ Major, root-position triads", effect:"Clear, functional, cyclical progression — a deliberate contrast to Section A's harmonic ambiguity, giving Section B drive and clarity.", exam:"The functional I–vi–ii–V progression in root position contrasts directly with the harmonic ambiguity of Section A, giving this section clarity and forward drive."},
+  {id:"B3", section:"B", bar:"4+4 bar", technique:"Phrase structure", example:"4-bar + 4-bar phrases (even/uneven), joined by a line cliché", effect:"Balances structural regularity with some phrase asymmetry; the line cliché links the two phrases smoothly.", exam:"The 4+4 bar phrase structure, connected by a line cliché, balances regularity with subtle asymmetry."},
+  {id:"B4", section:"B", bar:"—", technique:"Drum: rock beat + rhythmic ostinato", example:"Steady rock drum pattern, repeated rhythmic figure", effect:"Establishes a strong, driving pulse typical of the rock idiom, contrasting the sparser ballad accompaniment.", exam:"The rock beat and rhythmic ostinato in the drums establish a driving pulse, contrasting the sparser texture of Section A."},
+  {id:"B5", section:"B", bar:"—", technique:"Chromatic passing note", example:"Chromatic note connects adjacent chords in the progression", effect:"Smooths the harmonic transition between chords.", exam:"A chromatic passing note connects the chords of the progression, smoothing the harmonic motion."},
+  {id:"B6", section:"B", bar:"—", technique:"Modulation", example:"Transposed up a P4 / modulates to Eᵇ Major", effect:"Shifts tonal colour and raises intensity heading into the guitar solo.", exam:"The music modulates to Eᵇ Major, transposed up a perfect 4th, lifting the tonal colour and intensity for the guitar solo."},
+  {id:"B7", section:"B", bar:"—", technique:"Word painting", example:"Bell tree — \"shivers\"", effect:"The bell tree's shimmering, ringing timbre literally depicts the sensation of \"shivers.\"", exam:"The bell tree's shimmering timbre word-paints 'shivers,' giving the listener a literal sonic depiction of the lyric."},
+  {id:"B8", section:"B", bar:"—", technique:"Guitar solo — tone/character", example:"Electronic/distorted electric guitar, Eᵇ Major, described as penetrating and virtuosic", effect:"Showcases instrumental virtuosity and raises the intensity of the section (Brian May's iconic solo).", exam:"The distorted, penetrating tone of the virtuosic guitar solo raises the intensity of the section."},
+  {id:"B9", section:"B", bar:"—", technique:"Guitar solo — rhythm", example:"Semiquaver triplets and demisemiquaver figures", effect:"Fast note values increase rhythmic density and reinforce the virtuosic character.", exam:"Rapid semiquaver triplets and demisemiquaver figures increase rhythmic density, reinforcing the virtuosity of the solo."},
+  {id:"B10", section:"B", bar:"—", technique:"Guitar solo — melodic contour", example:"Scalic passages across a large range", effect:"Wide range and stepwise scalic runs demonstrate technical virtuosity.", exam:"Scalic passages spanning a wide range demonstrate the guitarist's technical virtuosity."},
+  {id:"B11", section:"B", bar:"—", technique:"Guitar solo — articulation", example:"Vibrato, glissando, bend", effect:"Idiomatic electric guitar techniques that add expressive nuance and rock authenticity.", exam:"Expressive articulation — vibrato, glissando and string bends — adds idiomatic rock authenticity to the solo."},
+  {id:"B12", section:"B", bar:"—", technique:"Guitar solo — rhythm/texture", example:"Polyrhythm", effect:"Layered, conflicting rhythmic groupings add complexity and rhythmic interest.", exam:"Polyrhythmic layering adds rhythmic complexity and interest to the solo texture."}
+];
+
+// ---------- timestamps (saved to localStorage in THIS browser) ----------
+const STORAGE_KEY = "brhapsody_timestamps_v1";
+let timestamps = {};
+try{
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if(raw) timestamps = JSON.parse(raw) || {};
+}catch(e){ /* private browsing / storage blocked — falls back to in-memory only */ }
+
+function persistTimestamps(){
+  const statusEl = document.getElementById("utilStatus");
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(timestamps));
+    statusEl.textContent = "Saved in this browser";
+    statusEl.className = "util-status saved";
+  }catch(e){
+    statusEl.textContent = "Couldn't save locally (private browsing?) — use Export to back up.";
+    statusEl.className = "util-status";
+  }
+}
+
+function secToClock(total){
+  total = Math.max(0, Math.round(total));
+  const h = Math.floor(total/3600), m = Math.floor((total%3600)/60), s = total%60;
+  const mm = h>0 ? String(m).padStart(2,'0') : String(m);
+  const ss = String(s).padStart(2,'0');
+  return h>0 ? (h+":"+mm+":"+ss) : (mm+":"+ss);
+}
+function clockToSec(str){
+  if(!str || !str.trim()) return null;
+  const parts = str.trim().split(":").map(p=>parseInt(p,10));
+  if(parts.some(p=>isNaN(p))) return null;
+  let sec = 0;
+  for(const p of parts) sec = sec*60 + p;
+  return sec;
+}
+
+// ---------- YouTube IFrame Player ----------
+let ytPlayer = null;
+let ytReady = false;
+let pending = null; // {id, sec} queued if a card is clicked before the player is ready
+
+function onYouTubeIframeAPIReady(){
+  ytPlayer = new YT.Player('ytPlayer', {
+    videoId: YOUTUBE_ID,
+    playerVars: { rel: 0 },
+    events: {
+      onReady: function(){
+        ytReady = true;
+        if(pending){ playAt(pending.id, pending.sec); pending = null; }
+      }
+    }
+  });
+}
+
+function playAt(id, sec){
+  const d = DATA.find(x=>x.id===id);
+  document.getElementById("npText").textContent = (d ? d.technique : id);
+  document.getElementById("npSub").textContent = id + " · " + secToClock(sec);
+  document.querySelectorAll(".card").forEach(c=> c.classList.toggle("now", c.dataset.id===id));
+  if(!ytReady){ pending = {id, sec}; return; }
+  ytPlayer.seekTo(sec, true);
+  ytPlayer.playVideo();
+}
+
+// ---------- filtering / rendering ----------
+const sections = ["All","A","B"];
+let activeSection = "All";
+let query = "";
+
+const chipRow = document.getElementById("sectionChips");
+sections.forEach(s=>{
+  const chip = document.createElement("div");
+  chip.className = "chip" + (s===activeSection ? " active":"");
+  chip.textContent = s==="All" ? "All sections" : "Section " + s;
+  chip.onclick = ()=>{ activeSection = s; render(); };
+  chip.dataset.s = s;
+  chipRow.appendChild(chip);
+});
+
+document.getElementById("search").addEventListener("input", e=>{
+  query = e.target.value.trim().toLowerCase();
+  render();
+});
+
+function render(){
+  [...chipRow.children].forEach(c=> c.classList.toggle("active", c.dataset.s===activeSection));
+  const grid = document.getElementById("grid");
+  grid.innerHTML = "";
+  const filtered = DATA.filter(d=>{
+    if(activeSection!=="All" && d.section!==activeSection) return false;
+    if(!query) return true;
+    const hay = (d.technique+" "+d.example+" "+d.effect+" "+d.exam+" "+d.id).toLowerCase();
+    return hay.includes(query);
+  });
+  document.getElementById("count").textContent = filtered.length + " example" + (filtered.length===1?"":"s");
+  filtered.forEach(d=>{
+    const card = document.createElement("div");
+    card.className = "card";
+    card.dataset.id = d.id;
+    const sec = timestamps[d.id];
+    card.innerHTML = `
+      <div class="card-top">
+        <span class="id-badge ${d.section}">${d.id} · Section ${d.section}</span>
+        <span class="bar-ref">${d.bar}</span>
+      </div>
+      <div class="technique">${d.technique}</div>
+      <div class="row"><span class="label">Example</span>${d.example}</div>
+      <div class="row"><span class="label">Effect</span>${d.effect}</div>
+      <div class="exam">${d.exam}</div>
+      <div class="listen-row">
+        <span class="listen-label">Timestamp</span>
+        <input type="text" class="ts-input" data-id="${d.id}" placeholder="mm:ss" value="${sec!=null ? secToClock(sec) : ''}">
+        <button class="link-btn play" type="button" data-id="${d.id}" ${sec==null ? 'disabled':''}>▶ Play from here</button>
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+  grid.querySelectorAll(".ts-input").forEach(inp=>{
+    inp.addEventListener("change", onTimestampChange);
+  });
+  grid.querySelectorAll(".link-btn.play").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      const id = btn.dataset.id;
+      const sec = timestamps[id];
+      if(sec==null) return;
+      playAt(id, sec);
+    });
+  });
+}
+
+function onTimestampChange(e){
+  const id = e.target.dataset.id;
+  const raw = e.target.value;
+  if(!raw.trim()){
+    delete timestamps[id];
+  } else {
+    const sec = clockToSec(raw);
+    if(sec==null){
+      e.target.value = timestamps[id]!=null ? secToClock(timestamps[id]) : '';
+      return;
+    }
+    timestamps[id] = sec;
+  }
+  persistTimestamps();
+  render();
+}
+
+// ---------- export / import ----------
+document.getElementById("exportBtn").addEventListener("click", ()=>{
+  const blob = new Blob([JSON.stringify(timestamps, null, 2)], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "bohemian-rhapsody-timestamps.json";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+});
+document.getElementById("importBtn").addEventListener("click", ()=>{
+  document.getElementById("importFile").click();
+});
+document.getElementById("importFile").addEventListener("change", (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try{
+      const data = JSON.parse(reader.result);
+      if(data && typeof data === "object"){
+        timestamps = data;
+        persistTimestamps();
+        render();
+      }
+    }catch(err){
+      alert("Couldn't read that file — make sure it's a timestamps .json exported from this page.");
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = "";
+});
+
+render();
+</script>
+</body>
+</html>
