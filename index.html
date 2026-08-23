@@ -3,207 +3,263 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Bohemian Rhapsody — Interactive Quote Bank</title>
+<title>Score Analysis Studio</title>
 <style>
   :root{
-    --bg:#faf9f7;
-    --panel:#ffffff;
-    --ink:#1f2328;
-    --ink-soft:#5b6169;
-    --line:#e6e3dd;
-    --accent:#7b5cff;
-    --accent-soft:#efeaff;
-    --secB:#1f7a5c;
-    --secB-soft:#e6f5ee;
-    --secA:#a8621a;
-    --secA-soft:#fbeee0;
-    --warn:#8a5a00;
-    --warn-bg:#fff6e0;
-    --good:#1f7a3f;
-    --bad:#a8341a;
-    --radius:14px;
+    --bg:#faf9f7; --panel:#ffffff; --ink:#1f2328; --ink-soft:#5b6169; --line:#e6e3dd;
+    --accent:#7b5cff; --accent-soft:#efeaff; --good:#1f7a3f; --good-soft:#e6f5ee;
+    --bad:#a8341a; --bad-soft:#fbe8e3; --warn:#8a5a00; --warn-bg:#fff6e0;
+    --radius:12px;
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   }
   @media (prefers-color-scheme: dark){
     :root{
       --bg:#15171a;--panel:#1e2125;--ink:#e9eaec;--ink-soft:#a2a8b0;--line:#2c3036;
-      --accent:#a58bff;--accent-soft:#2a2440;--secB:#5fd6ab;--secB-soft:#173229;
-      --secA:#f0a45c;--secA-soft:#382a17;--warn:#f0c56a;--warn-bg:#3a2f10;
-      --good:#6fd696;--bad:#f0897a;
+      --accent:#a58bff;--accent-soft:#2a2440;--good:#6fd696;--good-soft:#173229;
+      --bad:#f0897a;--bad-soft:#3a1f18;--warn:#f0c56a;--warn-bg:#3a2f10;
     }
   }
   *{box-sizing:border-box;}
-  body{margin:0;background:var(--bg);color:var(--ink);}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);overflow:hidden;}
+  button,input,textarea{font:inherit;color:inherit;}
+  #app{display:flex;flex-direction:column;height:100%;}
 
-  /* Persistent player bar */
-  #playerBar{
-    position:sticky;top:0;z-index:100;
-    background:var(--panel);border-bottom:1px solid var(--line);
-    display:flex;flex-wrap:wrap;gap:16px;align-items:center;
-    padding:12px 20px;
+  /* ---------- top bar ---------- */
+  #topbar{
+    padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel);
+    display:flex;flex-wrap:wrap;align-items:center;gap:10px;
   }
-  #playerCol{
-    width:280px;flex-shrink:0;
+  #topbar h1{font-size:1.02rem;margin:0;white-space:nowrap;}
+  .btn{padding:7px 14px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font-size:0.8rem;cursor:pointer;white-space:nowrap;}
+  .btn.primary{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .btn.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .btn:disabled{opacity:0.4;cursor:not-allowed;}
+  .spacer{flex:1;}
+  .divider{width:1px;align-self:stretch;background:var(--line);}
+  #topbar .status{font-size:0.76rem;color:var(--ink-soft);}
+
+  /* ---------- main split ---------- */
+  #main{flex:1;display:flex;min-height:0;}
+  #scorePanel{width:50%;display:flex;flex-direction:column;border-right:1px solid var(--line);min-width:0;}
+  #notesPanel{width:50%;display:flex;flex-direction:column;min-width:0;}
+
+  #scoreToolbar{padding:8px 14px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:var(--panel);}
+  #scoreToolbar .pagenav{display:flex;align-items:center;gap:6px;font-size:0.82rem;}
+  #scoreScroll{flex:1;overflow:auto;padding:20px;display:flex;justify-content:center;align-items:flex-start;background:repeating-linear-gradient(45deg, transparent, transparent 12px, rgba(128,128,128,0.03) 12px, rgba(128,128,128,0.03) 24px);}
+  #uploadPrompt{margin:auto;text-align:center;color:var(--ink-soft);padding:40px;border:2px dashed var(--line);border-radius:var(--radius);cursor:pointer;max-width:360px;}
+  #uploadPrompt strong{color:var(--ink);}
+  #canvasWrap{position:relative;background:#fff;box-shadow:0 2px 14px rgba(0,0,0,0.18);}
+  #pdfCanvas{display:block;}
+  body.tag-mode #canvasWrap{cursor:crosshair;}
+  .marker-line{position:absolute;width:2px;margin-left:-1px;background:var(--accent);opacity:0.75;cursor:pointer;z-index:5;}
+  .marker-line:hover{opacity:1;width:3px;margin-left:-1.5px;}
+  .marker-line.linked{background:var(--good);}
+  .marker-line.selected{background:var(--bad);width:3px;}
+  .marker-badge{
+    position:absolute;transform:translate(-50%,-100%);top:0;
+    background:var(--accent);color:#fff;font-size:10.5px;font-weight:700;line-height:1;
+    padding:2px 6px;border-radius:8px;cursor:pointer;z-index:6;white-space:nowrap;user-select:none;
   }
-  #playerWrap{position:relative;width:100%;aspect-ratio:16/9;background:#000;border-radius:10px;overflow:hidden;}
-  #playerWrap iframe{position:absolute;inset:0;width:100%;height:100%;border:0;}
-  #nowPlaying{
-    flex:1;min-width:180px;
-  }
-  #nowPlaying .np-label{font-size:0.72rem;color:var(--ink-soft);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px;}
-  #nowPlaying .np-text{font-size:0.98rem;font-weight:650;}
-  #nowPlaying .np-sub{font-size:0.82rem;color:var(--ink-soft);margin-top:2px;}
+  .marker-badge.linked{background:var(--good);}
+  .marker-badge.selected{background:var(--bad);}
+  .marker-badge[contenteditable="true"]{cursor:text;outline:2px solid #fff;}
+  .system-band{position:absolute;left:0;right:0;background:var(--accent);opacity:0.05;pointer-events:none;z-index:1;}
 
-  header{padding:22px 24px 14px;max-width:1100px;margin:0 auto;}
-  h1{font-size:1.4rem;margin:0 0 4px;}
-  .sub{color:var(--ink-soft);font-size:0.9rem;margin:0 0 14px;}
-  .banner{background:var(--warn-bg);color:var(--warn);border-radius:var(--radius);padding:10px 16px;font-size:0.84rem;margin-bottom:12px;}
-  .howto{background:var(--accent-soft);color:var(--ink);border-radius:var(--radius);padding:10px 16px;font-size:0.84rem;line-height:1.5;margin-bottom:16px;}
-  .controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:6px;}
-  input[type=text]{padding:10px 14px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font-size:0.92rem;}
-  #search{flex:1;min-width:200px;}
-  .chip{padding:8px 16px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--ink-soft);font-size:0.85rem;cursor:pointer;user-select:none;}
-  .chip.active{background:var(--accent);color:#fff;border-color:var(--accent);}
-  .util-bar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:10px;padding:10px 14px;border-radius:var(--radius);border:1px solid var(--line);background:var(--panel);}
-  .util-btn{padding:8px 16px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font-size:0.82rem;cursor:pointer;}
-  .util-btn.primary{background:var(--accent);color:#fff;border-color:var(--accent);}
-  .util-status{font-size:0.8rem;color:var(--ink-soft);}
-  .util-status.saved{color:var(--good);}
+  #detectStatus{padding:6px 14px;font-size:0.76rem;color:var(--ink-soft);border-bottom:1px dashed var(--line);}
+  #advPanel{padding:8px 14px;border-bottom:1px solid var(--line);background:var(--accent-soft);display:none;font-size:0.78rem;}
+  #advPanel.open{display:flex;flex-wrap:wrap;gap:16px;align-items:center;}
+  #advPanel label{display:flex;flex-direction:column;gap:2px;color:var(--ink-soft);}
+  #advPanel input[type=range]{width:120px;}
 
-  /* Time rail */
-  #railWrap{width:100%;flex-basis:100%;order:3;}
-  #railTrack{position:relative;height:30px;margin-top:2px;background:var(--accent-soft);border-radius:8px;cursor:pointer;}
-  .rail-progress{position:absolute;top:0;left:0;height:100%;background:var(--accent);opacity:0.28;border-radius:8px 0 0 8px;pointer-events:none;}
-  .rail-tick{position:absolute;top:3px;bottom:3px;width:3px;border-radius:2px;background:var(--secB);cursor:pointer;transition:width 0.1s;}
-  .rail-tick:hover{width:6px;margin-left:-1.5px;}
-  .rail-tick.sectionA{background:var(--secA);}
-  .rail-tick.sectionB{background:var(--secB);}
-  .rail-tick.active{background:var(--bad);width:5px;}
-  .rail-playhead{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ink);opacity:0.6;pointer-events:none;}
-  .rail-live{position:absolute;top:-9px;width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:9px solid var(--accent);transform:translateX(-6px);pointer-events:none;display:none;}
-  .rail-labels{display:flex;justify-content:space-between;font-size:0.72rem;color:var(--ink-soft);margin-top:3px;}
-
-  main{max-width:1100px;margin:0 auto;padding:0 24px 60px;}
-  .count{color:var(--ink-soft);font-size:0.82rem;margin:14px 0 12px;}
-  .grid{display:grid;grid-template-columns:1fr;gap:14px;}
-  @media(min-width:760px){.grid{grid-template-columns:1fr 1fr;}}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;display:flex;flex-direction:column;gap:8px;}
-  .card.now{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft);}
-  .card-top{display:flex;justify-content:flex-start;align-items:center;gap:8px;}
-  .id-badge{font-size:0.72rem;font-weight:700;letter-spacing:0.03em;padding:3px 9px;border-radius:999px;}
-  .id-badge.A{background:var(--secA-soft);color:var(--secA);}
-  .id-badge.B{background:var(--secB-soft);color:var(--secB);}
-  .bar-ref{font-size:0.76rem;color:var(--ink-soft);}
-  .technique{font-weight:650;font-size:1rem;}
-  .row{font-size:0.86rem;line-height:1.45;}
-  .row .label{color:var(--ink-soft);font-size:0.72rem;text-transform:uppercase;letter-spacing:0.04em;display:block;margin-bottom:2px;}
-  .exam{background:var(--accent-soft);border-radius:10px;padding:9px 12px;font-style:italic;font-size:0.85rem;line-height:1.45;}
-  .listen-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:2px;padding-top:10px;border-top:1px dashed var(--line);}
-  .ts-input{width:84px;padding:6px 10px;font-size:0.82rem;border-radius:8px;}
-  .listen-label{font-size:0.72rem;color:var(--ink-soft);text-transform:uppercase;letter-spacing:0.04em;}
-  .link-btn{font:inherit;font-size:0.8rem;text-decoration:none;padding:6px 12px;border-radius:999px;border:1px solid var(--line);color:var(--ink);white-space:nowrap;background:var(--panel);cursor:pointer;}
-  .link-btn.play{background:var(--secB-soft);color:var(--secB);border-color:transparent;font-weight:600;}
+  /* ---------- notes panel ---------- */
+  #notesToolbar{padding:8px 14px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--panel);}
+  #notesToolbar input[type=text]{flex:1;min-width:120px;padding:8px 12px;border-radius:999px;border:1px solid var(--line);background:var(--panel);}
+  #notesScroll{flex:1;overflow:auto;padding:14px;padding-bottom:230px;}
+  #notesEmpty{color:var(--ink-soft);font-size:0.85rem;text-align:center;padding:40px 20px;border:1px dashed var(--line);border-radius:var(--radius);}
+  .note-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin-bottom:12px;display:flex;flex-direction:column;gap:8px;}
+  .note-card.flash{animation:flashHi 1.1s ease;}
+  @keyframes flashHi{0%{box-shadow:0 0 0 3px var(--accent);}100%{box-shadow:0 0 0 0px transparent;}}
+  .note-top{display:flex;flex-wrap:wrap;align-items:center;gap:8px;}
+  .where-badge{font-size:0.72rem;font-weight:700;padding:3px 10px;border-radius:999px;background:var(--accent-soft);color:var(--accent);cursor:pointer;border:none;}
+  .where-badge.unlinked{background:var(--warn-bg);color:var(--warn);cursor:default;}
+  .section-field{font-size:0.8rem;color:var(--ink);flex:1;min-width:80px;border:none;background:transparent;font-weight:600;}
+  .section-field::placeholder{color:var(--ink-soft);font-weight:400;}
+  .note-del{margin-left:auto;font-size:0.72rem;color:var(--bad);background:none;border:none;cursor:pointer;padding:2px 6px;}
+  .field-label{font-size:0.68rem;color:var(--ink-soft);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:2px;}
+  .field-what,.field-why{font-size:0.87rem;line-height:1.5;padding:6px 8px;border-radius:8px;}
+  .field-why{background:var(--accent-soft);}
+  [contenteditable="true"].field-what,[contenteditable="true"].field-why,[contenteditable="true"].section-field{outline:1px dashed var(--line);cursor:text;white-space:pre-wrap;}
+  [contenteditable="true"].field-what:focus,[contenteditable="true"].field-why:focus,[contenteditable="true"].section-field:focus{outline:2px solid var(--accent);}
+  .note-listen{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding-top:8px;border-top:1px dashed var(--line);}
+  .ts-input{width:82px;padding:5px 9px;font-size:0.8rem;border-radius:8px;border:1px solid var(--line);background:var(--panel);}
+  .link-btn{font-size:0.78rem;padding:5px 11px;border-radius:999px;border:1px solid var(--line);background:var(--panel);cursor:pointer;}
+  .link-btn.play{background:var(--good-soft);color:var(--good);border-color:transparent;font-weight:600;}
   .link-btn.play:disabled{opacity:0.4;cursor:not-allowed;}
-  .placeholder-note{color:var(--ink-soft);font-size:0.85rem;text-align:center;padding:30px 10px;border:1px dashed var(--line);border-radius:var(--radius);margin-top:8px;}
-  footer{max-width:1100px;margin:0 auto;padding:0 24px 40px;color:var(--ink-soft);font-size:0.8rem;}
-  @media(max-width:640px){
-    #playerCol{width:160px;}
+
+  /* ---------- floating video widget ---------- */
+  #videoWidget{position:fixed;bottom:16px;right:16px;width:250px;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,0.22);z-index:300;overflow:hidden;}
+  #videoWidget .vw-head{display:flex;align-items:center;gap:6px;padding:7px 10px;background:var(--accent-soft);cursor:pointer;}
+  #videoWidget .vw-head span{font-size:0.76rem;font-weight:700;flex:1;}
+  #videoWidget .vw-toggle{background:none;border:none;font-size:0.8rem;cursor:pointer;color:var(--ink);}
+  #videoWidget .vw-body{padding:8px;display:flex;flex-direction:column;gap:6px;}
+  #videoWidget.collapsed .vw-body{display:none;}
+  #videoWidget .vw-urlrow{display:flex;gap:4px;}
+  #videoWidget .vw-urlrow input{flex:1;min-width:0;padding:5px 8px;border-radius:6px;border:1px solid var(--line);font-size:0.72rem;}
+  #videoWidget .vw-urlrow button{padding:5px 8px;border-radius:6px;border:1px solid var(--line);background:var(--panel);font-size:0.72rem;cursor:pointer;}
+  #vwPlayerWrap{position:relative;width:100%;aspect-ratio:16/9;background:#000;border-radius:6px;overflow:hidden;}
+  #vwPlayerWrap iframe{position:absolute;inset:0;width:100%;height:100%;border:0;}
+  #vwNow{font-size:0.72rem;color:var(--ink-soft);}
+  #vwRailTrack{position:relative;height:16px;background:var(--accent-soft);border-radius:6px;cursor:pointer;}
+  .vw-progress{position:absolute;top:0;left:0;height:100%;background:var(--accent);opacity:0.3;border-radius:6px 0 0 6px;pointer-events:none;}
+  .vw-tick{position:absolute;top:2px;bottom:2px;width:2px;background:var(--good);cursor:pointer;}
+  .vw-playhead{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--ink);opacity:0.7;pointer-events:none;}
+  .vw-labels{display:flex;justify-content:space-between;font-size:0.62rem;color:var(--ink-soft);}
+
+  @media(max-width:860px){
+    #main{flex-direction:column;overflow:auto;}
+    #scorePanel,#notesPanel{width:100%;border-right:none;border-bottom:1px solid var(--line);}
+    #scoreScroll{max-height:60vh;}
   }
 </style>
 </head>
 <body>
+<div id="app">
 
-<div id="playerBar">
-  <div id="playerCol">
-    <div id="playerWrap"><div id="ytPlayer"></div></div>
+  <div id="topbar">
+    <h1>🎼 Score Analysis Studio</h1>
+    <button class="btn primary" id="uploadBtn">⬆ Upload PDF score</button>
+    <input type="file" id="pdfFile" accept="application/pdf" style="display:none;">
+    <button class="btn" id="detectBtn" disabled>🔍 Auto-detect bars</button>
+    <button class="btn" id="tagModeBtn" disabled>✎ Tag mode</button>
+    <button class="btn" id="advToggleBtn">⚙</button>
+    <div class="divider"></div>
+    <button class="btn" id="exportBtn">⬇ Export project</button>
+    <button class="btn" id="importBtn">⬆ Import project</button>
+    <input type="file" id="importFile" accept="application/json" style="display:none;">
+    <div class="spacer"></div>
+    <span class="status" id="topStatus">No score loaded</span>
   </div>
-  <div id="nowPlaying">
-    <div class="np-label">Now playing</div>
-    <div class="np-text" id="npText">Nothing selected yet</div>
-    <div class="np-sub" id="npSub">Click "▶ Play from here" on any card below.</div>
+
+  <div id="advPanel">
+    <label>Staff-line sensitivity <span id="staffSensVal">40%</span>
+      <input type="range" id="staffSens" min="20" max="70" value="40">
+    </label>
+    <label>Barline sensitivity <span id="barSensVal">82%</span>
+      <input type="range" id="barSens" min="60" max="98" value="82">
+    </label>
+    <span style="color:var(--ink-soft);max-width:340px;">Auto-detection is a heuristic — it looks for long horizontal lines (staves) and long vertical lines that span them (barlines). Dense scans, ornate fonts, or low contrast will need manual cleanup in Tag mode.</span>
   </div>
-  <div id="railWrap">
-    <div id="railTrack">
-      <div class="rail-progress" id="railProgress"></div>
-      <div class="rail-playhead" id="railPlayhead" style="display:none;"></div>
-      <div class="rail-live" id="railLive"></div>
+
+  <div id="main">
+    <div id="scorePanel">
+      <div id="scoreToolbar">
+        <div class="pagenav">
+          <button class="btn" id="prevPageBtn" disabled>‹</button>
+          <span id="pageLabel">– / –</span>
+          <button class="btn" id="nextPageBtn" disabled>›</button>
+        </div>
+        <div class="spacer"></div>
+        <span class="status" id="scoreStatus"></span>
+      </div>
+      <div id="detectStatus" style="display:none;"></div>
+      <div id="scoreScroll">
+        <div id="uploadPrompt">
+          <strong>Click "Upload PDF score" above</strong><br>to load sheet music. Once loaded, use <strong>Auto-detect bars</strong> to find barlines, then <strong>Tag mode</strong> to fix them up — click empty space to add a marker, click a marker's number to rename it, or click its badge with the ⌫ key to delete it.
+        </div>
+        <div id="canvasWrap" style="display:none;">
+          <canvas id="pdfCanvas"></canvas>
+        </div>
+      </div>
     </div>
-    <div class="rail-labels"><span>0:00</span><span id="railDuration">–:––</span></div>
+
+    <div id="notesPanel">
+      <div id="notesToolbar">
+        <input type="text" id="noteSearch" placeholder="Search Where / What / Why…">
+        <button class="btn primary" id="addNoteBtn">+ Add note</button>
+      </div>
+      <div id="notesScroll">
+        <div id="notesEmpty">No notes yet. Click a bar on the score, then "+ Add note" — or add one unlinked and connect it later.</div>
+      </div>
+    </div>
   </div>
+
+  <div id="videoWidget">
+    <div class="vw-head" id="vwHead">
+      <span>🎧 Video</span>
+      <button class="vw-toggle" id="vwToggleBtn">▾</button>
+    </div>
+    <div class="vw-body">
+      <div class="vw-urlrow">
+        <input type="text" id="vwUrlInput" placeholder="Paste YouTube link…">
+        <button id="vwLoadBtn">Load</button>
+      </div>
+      <div id="vwPlayerWrap"><div id="vwPlayer"></div></div>
+      <div id="vwNow">Nothing selected yet</div>
+      <div id="vwRailTrack">
+        <div class="vw-progress" id="vwProgress"></div>
+        <div class="vw-playhead" id="vwPlayhead" style="display:none;"></div>
+      </div>
+      <div class="vw-labels"><span>0:00</span><span id="vwDuration">–:––</span></div>
+    </div>
+  </div>
+
 </div>
 
-<header>
-  <h1>Bohemian Rhapsody — Interactive Quote Bank</h1>
-  <p class="sub">Drilling tool for Stage 5 students preparing HSC-style Question&nbsp;4 extended responses. The player above stays on screen — click a card to jump straight to that moment.</p>
-  <div class="banner">Draft — transcribed from whiteboard notes (16 Aug 2026). "Effect" and "exam phrasing" columns are inferred interpretation; please check for musical/factual accuracy before classroom use. Sections C &amp; D are placeholders, ready to be added.</div>
-  <div class="howto">🎧 <strong>Setting timestamps:</strong> use the player above to find the right moment (or open it directly on <a id="ytDirectLink" href="#" target="_blank" rel="noopener">YouTube</a> to scrub, then copy the time back here), type it into a card as <code>mm:ss</code>, and it's remembered automatically in this browser. Use <strong>Export</strong> below to back it up or send it to Claude to fold into the master copy.</div>
-  <div class="controls">
-    <input type="text" id="search" placeholder="Search technique, example, or effect…">
-  </div>
-  <div class="controls" id="sectionChips" style="margin-top:8px;"></div>
-  <div class="util-bar">
-    <button class="util-btn" id="exportBtn">⬇ Export timestamps (.json)</button>
-    <button class="util-btn" id="importBtn">⬆ Import timestamps (.json)</button>
-    <input type="file" id="importFile" accept="application/json" style="display:none;">
-    <span class="util-status saved" id="utilStatus">Saved in this browser</span>
-  </div>
-</header>
-<main>
-  <div class="count" id="count"></div>
-  <div class="grid" id="grid"></div>
-  <div class="placeholder-note">Sections C &amp; D — not yet added. Ask Claude to update this repository once that analysis is ready.</div>
-</main>
-<footer>This is a standalone file — open it directly in a browser (double-click, or host it on your class site/LMS) rather than through a Claude Artifact link, since inline video playback needs to run outside that sandbox. Timestamps save to this browser's local storage; use Export/Import to move them between devices or send back to Claude.</footer>
-
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://www.youtube.com/iframe_api"></script>
 <script>
-const YOUTUBE_ID = "fJ9rUzIMcZQ"; // Queen – Bohemian Rhapsody (Official Video, Remastered)
-document.getElementById("ytDirectLink").href = "https://www.youtube.com/watch?v=" + YOUTUBE_ID;
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
-const DATA = [
-  {id:"A1", section:"A", bar:"b.1", technique:"Harmonic ambiguity", example:"Opening chord reads as either Bᵇ⁶ or Gm⁷ — no V–I, no functional harmonic progression", effect:"Creates tonal uncertainty from the very first bar, unsettling the listener before the harmony is confirmed.", exam:"The composer opens with harmonic ambiguity, using a Bᵇ⁶/Gm⁷ sonority that avoids a functional V–I resolution, immediately unsettling the listener's sense of key."},
-  {id:"A2", section:"A", bar:"—", technique:"Line cliché", example:"Chromatic stepwise line moving against/within the harmony", effect:"Adds chromatic colour and a smooth, decorative connective thread between chords.", exam:"A chromatic line cliché links successive chords, adding harmonic colour and a sense of continuous motion."},
-  {id:"A3", section:"A", bar:"b.10–11", technique:"Chromatic motive → harmony", example:"Cᵇ – Bᵇ – A – Bᵇ chromatic movement in the harmony", effect:"Reinforces the section's harmonic ambiguity and decorates the tonic with chromatic neighbour motion.", exam:"The chromatic motive (Cᵇ–Bᵇ–A–Bᵇ) in bars 10–11 further destabilises the tonic, sustaining the ambiguity established in bar 1."},
-  {id:"A4", section:"A", bar:"b.3", technique:"Mixed metre", example:"Shift into 5/4", effect:"Disrupts the regular quadruple metre, creating rhythmic instability that mirrors the exploratory, questioning character of the section.", exam:"A shift to 5/4 in bar 3 creates metric instability, reflecting the unsettled character of the introduction."},
-  {id:"A5", section:"A", bar:"section close", technique:"Perfect cadence", example:"V–I cadence closes the section", effect:"Resolves the earlier harmonic ambiguity and firmly establishes Bᵇ Major as tonic — a clear moment of arrival.", exam:"A perfect cadence concludes the section, resolving the prior harmonic ambiguity and firmly establishing Bᵇ Major as the tonic."},
-  {id:"A6", section:"A", bar:"—", technique:"Texture: lead + backing, close harmony, homophony, narrow range", example:"Multi-tracked vocal harmony, chordal/homophonic texture, melody in a narrow range", effect:"Creates an intimate, vocal-centred ballad texture characteristic of Queen's layered harmony style.", exam:"The homophonic texture, built from close vocal harmony within a narrow range, creates an intimate ballad quality."},
-  {id:"A7", section:"A", bar:"—", technique:"Chordal movement in parallel motion", example:"Chords shift together in parallel beneath the vocal harmony", effect:"Reinforces the homophonic, block-chord texture and unifies the vocal harmony with the accompaniment.", exam:"Parallel chordal movement beneath the vocal lines reinforces the homophonic texture."},
-  {id:"A8", section:"A", bar:"—", technique:"Word painting", example:"\"Sweeping sound\" (dynamic/textural swell)", effect:"Musically illustrates the emotional weight of the lyric it accompanies.", exam:"A sweeping dynamic swell word-paints [lyric], intensifying the emotional impact of the text."},
+// =====================================================================
+// state
+// =====================================================================
+const STORAGE_KEY = "score_studio_v1";
+let pdfDoc = null, numPages = 0, currentPage = 1;
+let markersByPage = {};   // pageNum -> [{id, xFrac, yTopFrac, yBotFrac, number}]
+let pageSystems = {};     // pageNum -> [{yTopFrac, yBotFrac}]
+let notes = [];           // {id, barId|null, page, barNumber, section, what, why, timestampSec}
+let barCounter = 0;
+let selectedMarkerId = null;
+let tagMode = false;
+let pdfFingerprint = null; // {name, size}
+let query = "";
 
-  {id:"B1", section:"B", bar:"—", technique:"Melodic ostinato + sequence", example:"Repeated piano melodic pattern, restated at different pitch levels", effect:"Builds momentum and drive into the rock section.", exam:"A piano melodic ostinato, developed through sequence, builds momentum into the rock section."},
-  {id:"B2", section:"B", bar:"—", technique:"Chord progression", example:"I–vi–ii–V in Bᵇ Major, root-position triads", effect:"Clear, functional, cyclical progression — a deliberate contrast to Section A's harmonic ambiguity, giving Section B drive and clarity.", exam:"The functional I–vi–ii–V progression in root position contrasts directly with the harmonic ambiguity of Section A, giving this section clarity and forward drive."},
-  {id:"B3", section:"B", bar:"4+4 bar", technique:"Phrase structure", example:"4-bar + 4-bar phrases (even/uneven), joined by a line cliché", effect:"Balances structural regularity with some phrase asymmetry; the line cliché links the two phrases smoothly.", exam:"The 4+4 bar phrase structure, connected by a line cliché, balances regularity with subtle asymmetry."},
-  {id:"B4", section:"B", bar:"—", technique:"Drum: rock beat + rhythmic ostinato", example:"Steady rock drum pattern, repeated rhythmic figure", effect:"Establishes a strong, driving pulse typical of the rock idiom, contrasting the sparser ballad accompaniment.", exam:"The rock beat and rhythmic ostinato in the drums establish a driving pulse, contrasting the sparser texture of Section A."},
-  {id:"B5", section:"B", bar:"—", technique:"Chromatic passing note", example:"Chromatic note connects adjacent chords in the progression", effect:"Smooths the harmonic transition between chords.", exam:"A chromatic passing note connects the chords of the progression, smoothing the harmonic motion."},
-  {id:"B6", section:"B", bar:"—", technique:"Modulation", example:"Transposed up a P4 / modulates to Eᵇ Major", effect:"Shifts tonal colour and raises intensity heading into the guitar solo.", exam:"The music modulates to Eᵇ Major, transposed up a perfect 4th, lifting the tonal colour and intensity for the guitar solo."},
-  {id:"B7", section:"B", bar:"—", technique:"Word painting", example:"Bell tree — \"shivers\"", effect:"The bell tree's shimmering, ringing timbre literally depicts the sensation of \"shivers.\"", exam:"The bell tree's shimmering timbre word-paints 'shivers,' giving the listener a literal sonic depiction of the lyric."},
-  {id:"B8", section:"B", bar:"—", technique:"Guitar solo — tone/character", example:"Electronic/distorted electric guitar, Eᵇ Major, described as penetrating and virtuosic", effect:"Showcases instrumental virtuosity and raises the intensity of the section (Brian May's iconic solo).", exam:"The distorted, penetrating tone of the virtuosic guitar solo raises the intensity of the section."},
-  {id:"B9", section:"B", bar:"—", technique:"Guitar solo — rhythm", example:"Semiquaver triplets and demisemiquaver figures", effect:"Fast note values increase rhythmic density and reinforce the virtuosic character.", exam:"Rapid semiquaver triplets and demisemiquaver figures increase rhythmic density, reinforcing the virtuosity of the solo."},
-  {id:"B10", section:"B", bar:"—", technique:"Guitar solo — melodic contour", example:"Scalic passages across a large range", effect:"Wide range and stepwise scalic runs demonstrate technical virtuosity.", exam:"Scalic passages spanning a wide range demonstrate the guitarist's technical virtuosity."},
-  {id:"B11", section:"B", bar:"—", technique:"Guitar solo — articulation", example:"Vibrato, glissando, bend", effect:"Idiomatic electric guitar techniques that add expressive nuance and rock authenticity.", exam:"Expressive articulation — vibrato, glissando and string bends — adds idiomatic rock authenticity to the solo."},
-  {id:"B12", section:"B", bar:"—", technique:"Guitar solo — rhythm/texture", example:"Polyrhythm", effect:"Layered, conflicting rhythmic groupings add complexity and rhythmic interest.", exam:"Polyrhythmic layering adds rhythmic complexity and interest to the solo texture."}
-];
+function uid(){ return Math.random().toString(36).slice(2,10); }
 
-// ---------- timestamps (saved to localStorage in THIS browser) ----------
-const STORAGE_KEY = "brhapsody_timestamps_v1";
-let timestamps = {};
-try{
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if(raw) timestamps = JSON.parse(raw) || {};
-}catch(e){ /* private browsing / storage blocked — falls back to in-memory only */ }
+function escapeHtml(str){
+  return String(str)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+}
+function nl2br(str){ return escapeHtml(str).replace(/\n/g,"<br>"); }
 
-function persistTimestamps(){
-  const statusEl = document.getElementById("utilStatus");
+// =====================================================================
+// persistence
+// =====================================================================
+function persist(){
   try{
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(timestamps));
-    statusEl.textContent = "Saved in this browser";
-    statusEl.className = "util-status saved";
-  }catch(e){
-    statusEl.textContent = "Couldn't save locally (private browsing?) — use Export to back up.";
-    statusEl.className = "util-status";
-  }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      markersByPage, notes, barCounter, pdfFingerprint, videoId
+    }));
+  }catch(e){ /* storage blocked */ }
+}
+function loadPersisted(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return;
+    const d = JSON.parse(raw);
+    notes = d.notes || [];
+    barCounter = d.barCounter || 0;
+    pdfFingerprint = d.pdfFingerprint || null;
+    // markers are only restored once a matching PDF is re-uploaded (see loadPdfFile)
+    window.__savedMarkersByPage = d.markersByPage || {};
+    if(d.videoId){ videoId = d.videoId; }
+  }catch(e){ /* ignore corrupt storage */ }
 }
 
+// =====================================================================
+// secToClock / clockToSec
+// =====================================================================
 function secToClock(total){
   total = Math.max(0, Math.round(total));
   const h = Math.floor(total/3600), m = Math.floor((total%3600)/60), s = total%60;
@@ -220,212 +276,676 @@ function clockToSec(str){
   return sec;
 }
 
-// ---------- YouTube IFrame Player ----------
-let ytPlayer = null;
-let ytReady = false;
-let pending = null; // {id, sec} queued if a card is clicked before the player is ready
-let durationSec = 355; // fallback until the player reports the real duration
+// =====================================================================
+// PDF loading + rendering
+// =====================================================================
+document.getElementById("uploadBtn").addEventListener("click", ()=> document.getElementById("pdfFile").click());
+document.getElementById("pdfFile").addEventListener("change", (e)=>{
+  const file = e.target.files[0];
+  if(file) loadPdfFile(file);
+  e.target.value = "";
+});
 
-function onYouTubeIframeAPIReady(){
-  ytPlayer = new YT.Player('ytPlayer', {
-    videoId: YOUTUBE_ID,
-    playerVars: { rel: 0 },
-    events: {
-      onReady: function(){
-        ytReady = true;
-        if(ytPlayer.getDuration && ytPlayer.getDuration() > 0) durationSec = ytPlayer.getDuration();
-        renderRail();
-        if(pending){ playAt(pending.id, pending.sec); pending = null; }
+function loadPdfFile(file){
+  document.getElementById("topStatus").textContent = "Loading " + file.name + "…";
+  const fingerprint = { name: file.name, size: file.size };
+  const reader = new FileReader();
+  reader.onload = () => {
+    const typedArray = new Uint8Array(reader.result);
+    pdfjsLib.getDocument({ data: typedArray }).promise.then(pdf=>{
+      pdfDoc = pdf;
+      numPages = pdf.numPages;
+      currentPage = 1;
+      const matches = pdfFingerprint && pdfFingerprint.name===fingerprint.name && pdfFingerprint.size===fingerprint.size;
+      pdfFingerprint = fingerprint;
+      if(matches && window.__savedMarkersByPage){
+        markersByPage = window.__savedMarkersByPage;
+      } else {
+        markersByPage = {};
+        if(window.__savedMarkersByPage) barCounter = 0; // fresh score, renumber from scratch
       }
-    }
-  });
+      document.getElementById("uploadPrompt").style.display = "none";
+      document.getElementById("canvasWrap").style.display = "block";
+      document.getElementById("detectBtn").disabled = false;
+      document.getElementById("tagModeBtn").disabled = false;
+      document.getElementById("prevPageBtn").disabled = false;
+      document.getElementById("nextPageBtn").disabled = false;
+      document.getElementById("topStatus").textContent = file.name + " · " + numPages + " page" + (numPages===1?"":"s");
+      persist();
+      renderPage(currentPage);
+    }).catch(err=>{
+      document.getElementById("topStatus").textContent = "Couldn't read that PDF (" + err.message + ")";
+    });
+  };
+  reader.readAsArrayBuffer(file);
 }
 
-function playAt(id, sec){
-  const d = DATA.find(x=>x.id===id);
-  document.getElementById("npText").textContent = (d ? d.technique : id);
-  document.getElementById("npSub").textContent = id + " · " + secToClock(sec);
-  document.querySelectorAll(".card").forEach(c=> c.classList.toggle("now", c.dataset.id===id));
-  document.querySelectorAll(".rail-tick").forEach(t=> t.classList.toggle("active", t.dataset.id===id));
-  if(!ytReady){ pending = {id, sec}; return; }
-  ytPlayer.seekTo(sec, true);
-  ytPlayer.playVideo();
-}
-
-// ---------- time rail ----------
-const railTrack = document.getElementById("railTrack");
-const railProgress = document.getElementById("railProgress");
-const railPlayhead = document.getElementById("railPlayhead");
-const railLive = document.getElementById("railLive");
-document.getElementById("railDuration").textContent = secToClock(durationSec);
-
-function renderRail(){
-  document.getElementById("railDuration").textContent = secToClock(durationSec);
-  railTrack.querySelectorAll(".rail-tick").forEach(t=>t.remove());
-  DATA.forEach(d=>{
-    const sec = timestamps[d.id];
-    if(sec==null) return;
-    const tick = document.createElement("div");
-    tick.className = "rail-tick section" + d.section;
-    tick.dataset.id = d.id;
-    tick.style.left = Math.min(100, Math.max(0, sec/durationSec*100)) + "%";
-    tick.title = d.id + " · " + secToClock(sec) + " — " + d.technique;
-    tick.addEventListener("click", (e)=>{ e.stopPropagation(); playAt(d.id, sec); });
-    railTrack.appendChild(tick);
-  });
-}
-
-function updateLiveMarker(sec){
-  if(sec==null || isNaN(sec)){
-    railLive.style.display = "none";
-    return;
-  }
-  railLive.style.left = Math.min(100, Math.max(0, sec/durationSec*100)) + "%";
-  railLive.style.display = "block";
-}
-
-railTrack.addEventListener("click", (e)=>{
-  const rect = railTrack.getBoundingClientRect();
-  const frac = Math.min(1, Math.max(0, (e.clientX - rect.left)/rect.width));
-  const sec = frac * durationSec;
-  document.getElementById("npText").textContent = "Scrubbing";
-  document.getElementById("npSub").textContent = secToClock(sec);
-  if(ytReady){ ytPlayer.seekTo(sec, true); ytPlayer.playVideo(); }
-});
-
-setInterval(()=>{
-  if(!ytReady || !ytPlayer.getCurrentTime) return;
-  const t = ytPlayer.getCurrentTime();
-  railPlayhead.style.left = Math.min(100, Math.max(0, t/durationSec*100)) + "%";
-  railPlayhead.style.display = "block";
-  railProgress.style.width = Math.min(100, Math.max(0, t/durationSec*100)) + "%";
-}, 500);
-
-// ---------- filtering / rendering ----------
-const sections = ["All","A","B"];
-let activeSection = "All";
-let query = "";
-
-const chipRow = document.getElementById("sectionChips");
-sections.forEach(s=>{
-  const chip = document.createElement("div");
-  chip.className = "chip" + (s===activeSection ? " active":"");
-  chip.textContent = s==="All" ? "All sections" : "Section " + s;
-  chip.onclick = ()=>{ activeSection = s; render(); };
-  chip.dataset.s = s;
-  chipRow.appendChild(chip);
-});
-
-document.getElementById("search").addEventListener("input", e=>{
-  query = e.target.value.trim().toLowerCase();
-  render();
-});
-
-function render(){
-  [...chipRow.children].forEach(c=> c.classList.toggle("active", c.dataset.s===activeSection));
-  const grid = document.getElementById("grid");
-  grid.innerHTML = "";
-  const filtered = DATA.filter(d=>{
-    if(activeSection!=="All" && d.section!==activeSection) return false;
-    if(!query) return true;
-    const hay = (d.technique+" "+d.example+" "+d.effect+" "+d.exam+" "+d.id).toLowerCase();
-    return hay.includes(query);
-  });
-  document.getElementById("count").textContent = filtered.length + " example" + (filtered.length===1?"":"s");
-  filtered.forEach(d=>{
-    const card = document.createElement("div");
-    card.className = "card";
-    card.dataset.id = d.id;
-    const sec = timestamps[d.id];
-    card.innerHTML = `
-      <div class="card-top">
-        <span class="id-badge ${d.section}">${d.id} · Section ${d.section}</span>
-        <span class="bar-ref">${d.bar}</span>
-      </div>
-      <div class="technique">${d.technique}</div>
-      <div class="row"><span class="label">Example</span>${d.example}</div>
-      <div class="row"><span class="label">Effect</span>${d.effect}</div>
-      <div class="exam">${d.exam}</div>
-      <div class="listen-row">
-        <span class="listen-label">Timestamp</span>
-        <input type="text" class="ts-input" data-id="${d.id}" placeholder="mm:ss" value="${sec!=null ? secToClock(sec) : ''}">
-        <button class="link-btn play" type="button" data-id="${d.id}" ${sec==null ? 'disabled':''}>▶ Play from here</button>
-      </div>
-    `;
-    grid.appendChild(card);
-  });
-  grid.querySelectorAll(".ts-input").forEach(inp=>{
-    inp.addEventListener("change", onTimestampChange);
-    inp.addEventListener("input", (e)=> updateLiveMarker(clockToSec(e.target.value)));
-    inp.addEventListener("focus", (e)=> updateLiveMarker(clockToSec(e.target.value)));
-    inp.addEventListener("blur", ()=> updateLiveMarker(null));
-  });
-  grid.querySelectorAll(".link-btn.play").forEach(btn=>{
-    btn.addEventListener("click", ()=>{
-      const id = btn.dataset.id;
-      const sec = timestamps[id];
-      if(sec==null) return;
-      playAt(id, sec);
+function renderPage(pageNum){
+  pdfDoc.getPage(pageNum).then(page=>{
+    const scroll = document.getElementById("scoreScroll");
+    const targetWidth = Math.min(scroll.clientWidth - 40, 900);
+    const baseViewport = page.getViewport({ scale: 1 });
+    const cssScale = targetWidth / baseViewport.width;
+    const dpr = window.devicePixelRatio || 1;
+    const renderViewport = page.getViewport({ scale: cssScale * dpr });
+    const canvas = document.getElementById("pdfCanvas");
+    canvas.width = renderViewport.width;
+    canvas.height = renderViewport.height;
+    canvas.style.width = (cssScale * baseViewport.width) + "px";
+    canvas.style.height = (cssScale * baseViewport.height) + "px";
+    document.getElementById("canvasWrap").style.width = canvas.style.width;
+    document.getElementById("canvasWrap").style.height = canvas.style.height;
+    const ctx = canvas.getContext("2d");
+    page.render({ canvasContext: ctx, viewport: renderViewport }).promise.then(()=>{
+      document.getElementById("pageLabel").textContent = pageNum + " / " + numPages;
+      document.getElementById("prevPageBtn").disabled = pageNum<=1;
+      document.getElementById("nextPageBtn").disabled = pageNum>=numPages;
+      renderMarkerOverlay();
+      updateDetectStatus();
     });
   });
 }
 
-function onTimestampChange(e){
-  const id = e.target.dataset.id;
-  const raw = e.target.value;
-  if(!raw.trim()){
-    delete timestamps[id];
-  } else {
-    const sec = clockToSec(raw);
-    if(sec==null){
-      e.target.value = timestamps[id]!=null ? secToClock(timestamps[id]) : '';
-      return;
+document.getElementById("prevPageBtn").addEventListener("click", ()=>{ if(currentPage>1){ currentPage--; renderPage(currentPage); }});
+document.getElementById("nextPageBtn").addEventListener("click", ()=>{ if(currentPage<numPages){ currentPage++; renderPage(currentPage); }});
+
+window.addEventListener("resize", ()=>{ if(pdfDoc) renderPage(currentPage); });
+
+// =====================================================================
+// bar / staff auto-detection (pure function of a canvas — testable standalone)
+// =====================================================================
+function detectStaffLines(imgData, w, h, threshold){
+  const data = imgData.data;
+  const rowDark = new Float32Array(h);
+  for(let y=0; y<h; y++){
+    let dark = 0;
+    const rowOff = y*w*4;
+    for(let x=0; x<w; x++){
+      const i = rowOff + x*4;
+      const lum = 0.299*data[i] + 0.587*data[i+1] + 0.114*data[i+2];
+      if(lum < 140) dark++;
     }
-    timestamps[id] = sec;
+    rowDark[y] = dark / w;
   }
-  persistTimestamps();
-  render();
-  renderRail();
+  const lineRows = [];
+  for(let y=0; y<h; y++) if(rowDark[y] > threshold) lineRows.push(y);
+  // cluster adjacent rows into single line centers
+  const lines = [];
+  let i=0;
+  while(i<lineRows.length){
+    let j=i;
+    while(j+1<lineRows.length && lineRows[j+1]-lineRows[j] <= 3) j++;
+    lines.push(Math.round((lineRows[i]+lineRows[j])/2));
+    i = j+1;
+  }
+  return lines;
 }
 
-// ---------- export / import ----------
+function groupIntoStaves(lines){
+  // find runs of 5 lines with near-equal small spacing
+  const staves = [];
+  let i=0;
+  while(i <= lines.length-5){
+    const g1=lines[i+1]-lines[i], g2=lines[i+2]-lines[i+1], g3=lines[i+3]-lines[i+2], g4=lines[i+4]-lines[i+3];
+    const avg=(g1+g2+g3+g4)/4;
+    const consistent = [g1,g2,g3,g4].every(g=> Math.abs(g-avg) <= Math.max(2, avg*0.4)) && avg>2 && avg<60;
+    if(consistent){
+      staves.push({ top: lines[i], bottom: lines[i+4], lineGap: avg });
+      i += 5;
+    } else {
+      i += 1;
+    }
+  }
+  return staves;
+}
+
+function groupIntoSystems(staves){
+  if(staves.length===0) return [];
+  if(staves.length===1) return [{ top: staves[0].top, bottom: staves[0].bottom }];
+  const gaps = [];
+  for(let k=1;k<staves.length;k++) gaps.push(staves[k].top - staves[k-1].bottom);
+  const sorted = [...gaps].sort((a,b)=>a-b);
+  const median = sorted[Math.floor(sorted.length/2)];
+  const threshold = median * 2.2 + 4;
+  const systems = [];
+  let sysTop = staves[0].top, sysBottom = staves[0].bottom;
+  for(let k=1;k<staves.length;k++){
+    if(gaps[k-1] <= threshold){
+      sysBottom = staves[k].bottom;
+    } else {
+      systems.push({ top: sysTop, bottom: sysBottom });
+      sysTop = staves[k].top; sysBottom = staves[k].bottom;
+    }
+  }
+  systems.push({ top: sysTop, bottom: sysBottom });
+  return systems;
+}
+
+function detectBarlinesInSystem(imgData, w, h, sysTop, sysBottom, threshold){
+  const data = imgData.data;
+  const yFrom = Math.max(0, sysTop), yTo = Math.min(h-1, sysBottom);
+  const rangeH = yTo - yFrom + 1;
+  if(rangeH <= 0) return [];
+  const colDark = new Float32Array(w);
+  for(let x=0; x<w; x++){
+    let dark=0;
+    for(let y=yFrom; y<=yTo; y++){
+      const i = (y*w+x)*4;
+      const lum = 0.299*data[i] + 0.587*data[i+1] + 0.114*data[i+2];
+      if(lum < 150) dark++;
+    }
+    colDark[x] = dark/rangeH;
+  }
+  const cols = [];
+  for(let x=0;x<w;x++) if(colDark[x] > threshold) cols.push(x);
+  // cluster into candidate centers, enforce minimum spacing
+  const candidates = [];
+  let i=0;
+  const minSpacing = Math.max(10, rangeH*0.05);
+  while(i<cols.length){
+    let j=i;
+    while(j+1<cols.length && cols[j+1]-cols[j] <= 3) j++;
+    let best=i;
+    for(let k=i;k<=j;k++) if(colDark[cols[k]] > colDark[cols[best]]) best=k;
+    const x = cols[best];
+    if(candidates.length===0 || x - candidates[candidates.length-1] >= minSpacing){
+      candidates.push(x);
+    }
+    i = j+1;
+  }
+  return candidates;
+}
+
+function detectBarsOnCanvas(canvas, opts){
+  opts = opts || {};
+  const staffThreshold = (opts.staffThreshold!=null ? opts.staffThreshold : 40)/100;
+  const barThreshold = (opts.barThreshold!=null ? opts.barThreshold : 82)/100;
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width, h = canvas.height;
+  const imgData = ctx.getImageData(0,0,w,h);
+  const lines = detectStaffLines(imgData, w, h, staffThreshold);
+  const staves = groupIntoStaves(lines);
+  const systems = groupIntoSystems(staves);
+  const results = systems.map(sys=>{
+    const xs = detectBarlinesInSystem(imgData, w, h, sys.top, sys.bottom, barThreshold);
+    return { yTop: sys.top, yBottom: sys.bottom, barX: xs };
+  });
+  return { width:w, height:h, systems: results };
+}
+
+// =====================================================================
+// wiring detection into the app (page-fraction coordinates)
+// =====================================================================
+document.getElementById("detectBtn").addEventListener("click", runDetectionOnCurrentPage);
+
+function runDetectionOnCurrentPage(){
+  if(!pdfDoc) return;
+  const canvas = document.getElementById("pdfCanvas");
+  const staffThreshold = parseInt(document.getElementById("staffSens").value,10);
+  const barThreshold = parseInt(document.getElementById("barSens").value,10);
+  document.getElementById("detectStatus").style.display = "block";
+  document.getElementById("detectStatus").textContent = "Detecting…";
+  setTimeout(()=>{
+    const result = detectBarsOnCanvas(canvas, { staffThreshold, barThreshold });
+    const w = result.width, h = result.height;
+    if(!markersByPage[currentPage]) markersByPage[currentPage] = [];
+    if(!pageSystems[currentPage]) pageSystems[currentPage] = [];
+    pageSystems[currentPage] = result.systems.map(s=>({ yTopFrac: s.yTop/h, yBotFrac: s.yBottom/h }));
+
+    let added = 0;
+    result.systems.forEach(sys=>{
+      const yTopFrac = sys.yTop/h, yBotFrac = sys.yBottom/h;
+      sys.barX.forEach(x=>{
+        const xFrac = x/w;
+        const existing = markersByPage[currentPage].find(m=> Math.abs(m.xFrac - xFrac) < 0.008 && !(m.yBotFrac < yTopFrac || m.yTopFrac > yBotFrac));
+        if(existing) return;
+        barCounter++;
+        markersByPage[currentPage].push({ id: uid(), xFrac, yTopFrac, yBotFrac, number: barCounter });
+        added++;
+      });
+    });
+    markersByPage[currentPage].sort((a,b)=> a.yTopFrac - b.yTopFrac || a.xFrac - b.xFrac);
+    const totalBars = result.systems.reduce((n,s)=>n+s.barX.length,0);
+    document.getElementById("detectStatus").textContent =
+      result.systems.length + " staff system" + (result.systems.length===1?"":"s") + " found, " +
+      totalBars + " barline" + (totalBars===1?"":"s") + " detected (" + added + " new). Switch to Tag mode to fix anything missed or wrong.";
+    persist();
+    renderMarkerOverlay();
+  }, 20);
+}
+
+function updateDetectStatus(){
+  const markers = markersByPage[currentPage] || [];
+  if(markers.length===0){
+    document.getElementById("detectStatus").style.display = "none";
+  }
+}
+
+// =====================================================================
+// marker overlay rendering + interaction
+// =====================================================================
+document.getElementById("tagModeBtn").addEventListener("click", ()=>{
+  tagMode = !tagMode;
+  document.body.classList.toggle("tag-mode", tagMode);
+  document.getElementById("tagModeBtn").classList.toggle("active", tagMode);
+  document.getElementById("tagModeBtn").textContent = tagMode ? "✓ Tag mode on" : "✎ Tag mode";
+});
+
+document.getElementById("advToggleBtn").addEventListener("click", ()=>{
+  document.getElementById("advPanel").classList.toggle("open");
+});
+document.getElementById("staffSens").addEventListener("input", (e)=>{
+  document.getElementById("staffSensVal").textContent = e.target.value + "%";
+});
+document.getElementById("barSens").addEventListener("input", (e)=>{
+  document.getElementById("barSensVal").textContent = e.target.value + "%";
+});
+
+function renderMarkerOverlay(){
+  const wrap = document.getElementById("canvasWrap");
+  wrap.querySelectorAll(".marker-line,.marker-badge,.system-band").forEach(el=>el.remove());
+  const canvas = document.getElementById("pdfCanvas");
+  const dispW = canvas.clientWidth, dispH = canvas.clientHeight;
+
+  (pageSystems[currentPage]||[]).forEach(sys=>{
+    const band = document.createElement("div");
+    band.className = "system-band";
+    band.style.top = (sys.yTopFrac*dispH) + "px";
+    band.style.height = ((sys.yBotFrac-sys.yTopFrac)*dispH) + "px";
+    wrap.appendChild(band);
+  });
+
+  (markersByPage[currentPage]||[]).forEach(m=>{
+    const linked = notes.some(n=>n.barId===m.id);
+    const line = document.createElement("div");
+    line.className = "marker-line" + (linked?" linked":"") + (m.id===selectedMarkerId?" selected":"");
+    line.style.left = (m.xFrac*dispW) + "px";
+    line.style.top = (m.yTopFrac*dispH) + "px";
+    line.style.height = ((m.yBotFrac-m.yTopFrac)*dispH) + "px";
+    line.dataset.id = m.id;
+    line.title = "Bar " + m.number + (tagMode ? " — click to delete" : " — click to jump to its note");
+    line.addEventListener("click", (e)=>{ e.stopPropagation(); onMarkerClick(m.id); });
+    wrap.appendChild(line);
+
+    const badge = document.createElement("div");
+    badge.className = "marker-badge" + (linked?" linked":"") + (m.id===selectedMarkerId?" selected":"");
+    badge.style.left = (m.xFrac*dispW) + "px";
+    badge.style.top = (m.yTopFrac*dispH) + "px";
+    badge.textContent = m.number;
+    badge.dataset.id = m.id;
+    badge.addEventListener("click", (e)=>{ e.stopPropagation(); onMarkerClick(m.id); });
+    badge.addEventListener("dblclick", (e)=>{
+      e.stopPropagation();
+      badge.contentEditable = "true";
+      badge.focus();
+      document.execCommand("selectAll", false, null);
+    });
+    badge.addEventListener("blur", ()=>{
+      if(badge.isContentEditable){
+        badge.contentEditable = "false";
+        const n = parseInt(badge.textContent.trim(),10);
+        if(!isNaN(n)){ m.number = n; persist(); renderNotes(); }
+        else badge.textContent = m.number;
+      }
+    });
+    badge.addEventListener("keydown", (e)=>{
+      if(e.key==="Enter"){ e.preventDefault(); badge.blur(); }
+    });
+    wrap.appendChild(badge);
+  });
+}
+
+document.getElementById("canvasWrap").addEventListener("click", (e)=>{
+  if(!tagMode || !pdfDoc) return;
+  const canvas = document.getElementById("pdfCanvas");
+  const rect = canvas.getBoundingClientRect();
+  const xFrac = (e.clientX - rect.left) / rect.width;
+  const yFrac = (e.clientY - rect.top) / rect.height;
+  let sys = (pageSystems[currentPage]||[]).find(s=> yFrac >= s.yTopFrac-0.01 && yFrac <= s.yBotFrac+0.01);
+  if(!sys) sys = { yTopFrac: 0, yBotFrac: 1 };
+  barCounter++;
+  const marker = { id: uid(), xFrac, yTopFrac: sys.yTopFrac, yBotFrac: sys.yBotFrac, number: barCounter };
+  if(!markersByPage[currentPage]) markersByPage[currentPage] = [];
+  markersByPage[currentPage].push(marker);
+  markersByPage[currentPage].sort((a,b)=> a.yTopFrac-b.yTopFrac || a.xFrac-b.xFrac);
+  persist();
+  renderMarkerOverlay();
+});
+
+function onMarkerClick(id){
+  if(tagMode){
+    if(!confirm("Delete this bar marker?")) return;
+    markersByPage[currentPage] = (markersByPage[currentPage]||[]).filter(m=>m.id!==id);
+    if(selectedMarkerId===id) selectedMarkerId=null;
+    persist();
+    renderMarkerOverlay();
+    return;
+  }
+  selectedMarkerId = id;
+  renderMarkerOverlay();
+  const m = (markersByPage[currentPage]||[]).find(x=>x.id===id);
+  if(!m) return;
+  const note = notes.find(n=>n.barId===id);
+  if(note){
+    jumpToNote(note.id);
+    if(note.timestampSec!=null) playVideoAt(note.timestampSec);
+  } else {
+    openAddNoteFor(m);
+  }
+}
+
+// =====================================================================
+// notes CRUD
+// =====================================================================
+document.getElementById("noteSearch").addEventListener("input", (e)=>{
+  query = e.target.value.trim().toLowerCase();
+  renderNotes();
+});
+document.getElementById("addNoteBtn").addEventListener("click", ()=>{
+  const m = selectedMarkerId ? (markersByPage[currentPage]||[]).find(x=>x.id===selectedMarkerId) : null;
+  openAddNoteFor(m);
+});
+
+function openAddNoteFor(marker){
+  const note = {
+    id: uid(),
+    barId: marker ? marker.id : null,
+    page: marker ? currentPage : null,
+    barNumber: marker ? marker.number : null,
+    section: "",
+    what: "",
+    why: "",
+    timestampSec: null
+  };
+  notes.unshift(note);
+  persist();
+  renderNotes();
+  renderMarkerOverlay();
+  requestAnimationFrame(()=>{
+    const el = document.querySelector('.note-card[data-id="'+note.id+'"] .section-field');
+    if(el) el.focus();
+  });
+}
+
+function deleteNote(id){
+  if(!confirm("Delete this note?")) return;
+  notes = notes.filter(n=>n.id!==id);
+  persist();
+  renderNotes();
+  renderMarkerOverlay();
+}
+
+function jumpToNote(id){
+  const el = document.querySelector('.note-card[data-id="'+id+'"]');
+  if(!el) return;
+  el.scrollIntoView({ behavior:"smooth", block:"center" });
+  el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash");
+}
+
+function jumpToBar(page, barId){
+  if(page && page!==currentPage){ currentPage = page; renderPage(page); }
+  selectedMarkerId = barId;
+  setTimeout(()=>{
+    renderMarkerOverlay();
+    const line = document.querySelector('.marker-line[data-id="'+barId+'"]');
+    if(line) line.scrollIntoView({ behavior:"smooth", block:"center", inline:"center" });
+  }, page && page!==currentPage ? 250 : 0);
+}
+
+function whereLabel(note){
+  if(note.barId){
+    const sec = note.section ? note.section + " · " : "";
+    return sec + "p" + note.page + " · bar " + note.barNumber;
+  }
+  return note.section || "Unlinked";
+}
+
+function renderNotes(){
+  const listEl = document.getElementById("notesScroll");
+  const filtered = notes.filter(n=>{
+    if(!query) return true;
+    const hay = (n.section+" "+n.what+" "+n.why+" "+whereLabel(n)).toLowerCase();
+    return hay.includes(query);
+  });
+  listEl.innerHTML = "";
+  if(filtered.length===0){
+    const empty = document.createElement("div");
+    empty.id = "notesEmpty";
+    empty.textContent = notes.length===0
+      ? 'No notes yet. Click a bar on the score, then "+ Add note" — or add one unlinked and connect it later.'
+      : "No notes match your search.";
+    listEl.appendChild(empty);
+    return;
+  }
+  filtered.forEach(n=>{
+    const card = document.createElement("div");
+    card.className = "note-card";
+    card.dataset.id = n.id;
+    card.innerHTML = `
+      <div class="note-top">
+        <button class="where-badge${n.barId? '':' unlinked'}" data-action="where">${escapeHtml(whereLabel(n))}</button>
+        <input type="text" class="section-field" data-field="section" placeholder="Section label (e.g. Intro, Verse, Solo)…" value="${escapeHtml(n.section)}">
+        <button class="note-del" data-action="delete">✕ Delete</button>
+      </div>
+      <div>
+        <span class="field-label">What (compositional / theoretical / notational)</span>
+        <div class="field-what" contenteditable="true" data-field="what">${nl2br(n.what)}</div>
+      </div>
+      <div>
+        <span class="field-label">Why (effect)</span>
+        <div class="field-why" contenteditable="true" data-field="why">${nl2br(n.why)}</div>
+      </div>
+      <div class="note-listen">
+        <span class="field-label" style="margin:0;">Timestamp</span>
+        <input type="text" class="ts-input" data-field="timestamp" placeholder="mm:ss" value="${n.timestampSec!=null?secToClock(n.timestampSec):''}">
+        <button class="link-btn play" type="button" ${n.timestampSec==null?'disabled':''}>▶ Play</button>
+      </div>
+    `;
+    listEl.appendChild(card);
+
+    card.querySelector('[data-action="delete"]').addEventListener("click", ()=> deleteNote(n.id));
+    const whereBtn = card.querySelector('[data-action="where"]');
+    if(n.barId) whereBtn.addEventListener("click", ()=> jumpToBar(n.page, n.barId));
+
+    const sectionInput = card.querySelector('[data-field="section"]');
+    sectionInput.addEventListener("change", ()=>{
+      n.section = sectionInput.value.trim();
+      persist();
+      whereBtn.textContent = whereLabel(n);
+    });
+
+    ["what","why"].forEach(field=>{
+      const el = card.querySelector('[data-field="'+field+'"]');
+      el.addEventListener("keydown", onEditableKeydown);
+      el.addEventListener("blur", ()=>{
+        n[field] = el.innerText.replace(/\n{3,}/g,"\n\n").trim();
+        persist();
+      });
+    });
+
+    const tsInput = card.querySelector('[data-field="timestamp"]');
+    const playBtn = card.querySelector(".link-btn.play");
+    tsInput.addEventListener("change", ()=>{
+      const raw = tsInput.value;
+      if(!raw.trim()){ n.timestampSec = null; }
+      else {
+        const sec = clockToSec(raw);
+        if(sec==null){ tsInput.value = n.timestampSec!=null?secToClock(n.timestampSec):''; return; }
+        n.timestampSec = sec;
+      }
+      playBtn.disabled = n.timestampSec==null;
+      persist();
+      renderRail();
+    });
+    tsInput.addEventListener("input", ()=> updateLiveMarker(clockToSec(tsInput.value)));
+    tsInput.addEventListener("focus", ()=> updateLiveMarker(clockToSec(tsInput.value)));
+    tsInput.addEventListener("blur", ()=> updateLiveMarker(null));
+    playBtn.addEventListener("click", ()=>{ if(n.timestampSec!=null) playVideoAt(n.timestampSec); });
+  });
+}
+
+function onEditableKeydown(e){
+  if(e.key !== "Enter") return;
+  e.preventDefault();
+  const sel = window.getSelection();
+  if(!sel.rangeCount) return;
+  const range = sel.getRangeAt(0);
+  range.deleteContents();
+  const br = document.createElement("br");
+  range.insertNode(br);
+  range.setStartAfter(br);
+  range.setEndAfter(br);
+  range.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
+// =====================================================================
+// export / import project
+// =====================================================================
 document.getElementById("exportBtn").addEventListener("click", ()=>{
-  const blob = new Blob([JSON.stringify(timestamps, null, 2)], {type:"application/json"});
+  const blob = new Blob([JSON.stringify({ markersByPage, notes, barCounter, pdfFingerprint, videoId }, null, 2)], {type:"application/json"});
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = url;
-  a.download = "bohemian-rhapsody-timestamps.json";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+  a.href = url; a.download = "score-analysis-project.json";
+  document.body.appendChild(a); a.click(); a.remove();
   URL.revokeObjectURL(url);
 });
-document.getElementById("importBtn").addEventListener("click", ()=>{
-  document.getElementById("importFile").click();
-});
+document.getElementById("importBtn").addEventListener("click", ()=> document.getElementById("importFile").click());
 document.getElementById("importFile").addEventListener("change", (e)=>{
   const file = e.target.files[0];
   if(!file) return;
   const reader = new FileReader();
   reader.onload = () => {
     try{
-      const data = JSON.parse(reader.result);
-      if(data && typeof data === "object"){
-        timestamps = data;
-        persistTimestamps();
-        render();
-        renderRail();
-      }
+      const d = JSON.parse(reader.result);
+      markersByPage = d.markersByPage || {};
+      notes = d.notes || [];
+      barCounter = d.barCounter || 0;
+      pdfFingerprint = d.pdfFingerprint || null;
+      if(d.videoId){ videoId = d.videoId; loadVideo(videoId, true); }
+      persist();
+      renderMarkerOverlay();
+      renderNotes();
+      renderRail();
     }catch(err){
-      alert("Couldn't read that file — make sure it's a timestamps .json exported from this page.");
+      alert("Couldn't read that file — make sure it's a project .json exported from this page.");
     }
   };
   reader.readAsText(file);
   e.target.value = "";
 });
 
-render();
+// =====================================================================
+// floating video widget + YouTube player
+// =====================================================================
+let videoId = null, ytPlayer = null, ytReady = false, durationSec = 300, pendingSeek = null;
+
+document.getElementById("vwHead").addEventListener("click", (e)=>{
+  if(e.target.id === "vwToggleBtn") return;
+  document.getElementById("videoWidget").classList.toggle("collapsed");
+});
+document.getElementById("vwToggleBtn").addEventListener("click", ()=>{
+  const w = document.getElementById("videoWidget");
+  w.classList.toggle("collapsed");
+  document.getElementById("vwToggleBtn").textContent = w.classList.contains("collapsed") ? "▸" : "▾";
+});
+
+function parseYouTubeId(input){
+  input = input.trim();
+  if(/^[\w-]{11}$/.test(input)) return input;
+  try{
+    const url = new URL(input);
+    if(url.hostname.includes("youtu.be")) return url.pathname.slice(1).split("/")[0];
+    if(url.searchParams.get("v")) return url.searchParams.get("v");
+    const m = url.pathname.match(/\/embed\/([\w-]{11})/);
+    if(m) return m[1];
+  }catch(e){ /* not a URL */ }
+  return null;
+}
+
+document.getElementById("vwLoadBtn").addEventListener("click", ()=>{
+  const id = parseYouTubeId(document.getElementById("vwUrlInput").value);
+  if(!id){ alert("Couldn't parse a YouTube video ID from that link."); return; }
+  loadVideo(id);
+});
+
+function loadVideo(id, silent){
+  videoId = id;
+  document.getElementById("vwUrlInput").value = "";
+  persist();
+  if(ytPlayer && ytReady){
+    ytPlayer.loadVideoById(id);
+  } else if(window.YT && window.YT.Player){
+    createYtPlayer();
+  }
+}
+
+function onYouTubeIframeAPIReady(){
+  if(videoId) createYtPlayer();
+}
+function createYtPlayer(){
+  ytPlayer = new YT.Player('vwPlayer', {
+    videoId: videoId,
+    playerVars: { rel: 0 },
+    events: {
+      onReady: function(){
+        ytReady = true;
+        if(ytPlayer.getDuration && ytPlayer.getDuration()>0) durationSec = ytPlayer.getDuration();
+        renderRail();
+        if(pendingSeek!=null){ playVideoAt(pendingSeek); pendingSeek=null; }
+      }
+    }
+  });
+}
+
+function playVideoAt(sec){
+  document.getElementById("vwNow").textContent = secToClock(sec);
+  if(!ytReady){ pendingSeek = sec; return; }
+  ytPlayer.seekTo(sec, true);
+  ytPlayer.playVideo();
+}
+
+const vwTrack = document.getElementById("vwRailTrack");
+const vwProgress = document.getElementById("vwProgress");
+const vwPlayhead = document.getElementById("vwPlayhead");
+
+function renderRail(){
+  document.getElementById("vwDuration").textContent = secToClock(durationSec);
+  vwTrack.querySelectorAll(".vw-tick").forEach(t=>t.remove());
+  notes.forEach(n=>{
+    if(n.timestampSec==null) return;
+    const tick = document.createElement("div");
+    tick.className = "vw-tick";
+    tick.style.left = Math.min(100, Math.max(0, n.timestampSec/durationSec*100)) + "%";
+    tick.title = whereLabel(n) + " · " + secToClock(n.timestampSec);
+    tick.addEventListener("click", (e)=>{ e.stopPropagation(); playVideoAt(n.timestampSec); jumpToNote(n.id); });
+    vwTrack.appendChild(tick);
+  });
+}
+function updateLiveMarker(sec){
+  // reuses tick display area implicitly via title; kept minimal for the compact widget
+}
+vwTrack.addEventListener("click", (e)=>{
+  const rect = vwTrack.getBoundingClientRect();
+  const frac = Math.min(1, Math.max(0, (e.clientX-rect.left)/rect.width));
+  playVideoAt(frac*durationSec);
+});
+setInterval(()=>{
+  if(!ytReady || !ytPlayer.getCurrentTime) return;
+  const t = ytPlayer.getCurrentTime();
+  const pct = Math.min(100, Math.max(0, t/durationSec*100));
+  vwPlayhead.style.left = pct + "%"; vwPlayhead.style.display = "block";
+  vwProgress.style.width = pct + "%";
+}, 500);
+
+// =====================================================================
+// init
+// =====================================================================
+loadPersisted();
+renderNotes();
 renderRail();
+if(videoId){ document.getElementById("vwUrlInput").placeholder = "Loaded: " + videoId; }
 </script>
 </body>
 </html>
