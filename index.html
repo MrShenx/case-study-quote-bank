@@ -22,7 +22,32 @@
   *{box-sizing:border-box;}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);overflow:hidden;}
   button,input,textarea{font:inherit;color:inherit;}
-  #app{display:flex;flex-direction:column;height:100%;}
+  #studioView{display:none;flex-direction:column;height:100%;}
+  .project-name-label{font-weight:700;font-size:0.85rem;color:var(--ink-soft);white-space:nowrap;}
+
+  /* ---------- home view ---------- */
+  #homeView{display:none;flex-direction:column;height:100%;}
+  #homeTopbar{padding:16px 20px;border-bottom:1px solid var(--line);background:var(--panel);display:flex;align-items:center;gap:12px;}
+  #homeTopbar h1{font-size:1.1rem;margin:0;flex:1;}
+  #homeGrid{flex:1;overflow:auto;padding:24px;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;align-content:start;}
+  #homeEmpty{grid-column:1/-1;text-align:center;color:var(--ink-soft);padding:60px 20px;border:1px dashed var(--line);border-radius:var(--radius);}
+  .project-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px;cursor:pointer;display:flex;flex-direction:column;gap:6px;transition:border-color 0.15s,box-shadow 0.15s;}
+  .project-card:hover{border-color:var(--accent);box-shadow:0 4px 16px rgba(0,0,0,0.08);}
+  .project-card-top{display:flex;align-items:center;gap:6px;}
+  .project-name{font-weight:700;font-size:0.95rem;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .project-name-input{font-weight:700;font-size:0.95rem;flex:1;min-width:0;border:1px solid var(--accent);border-radius:6px;padding:2px 6px;background:var(--panel);color:var(--ink);}
+  .project-icon-btn{background:none;border:none;color:var(--ink-soft);cursor:pointer;font-size:0.8rem;padding:3px 7px;border-radius:6px;flex-shrink:0;}
+  .project-icon-btn:hover{background:var(--accent-soft);color:var(--accent);}
+  .project-icon-btn.del:hover{background:var(--bad-soft);color:var(--bad);}
+  .project-icon-btn.del.confirm-armed{background:var(--bad);color:#fff;}
+  .project-meta{font-size:0.78rem;color:var(--ink-soft);}
+
+  /* ---------- modal ---------- */
+  .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;z-index:1000;}
+  .modal-box{background:var(--panel);border-radius:var(--radius);padding:20px;width:320px;max-width:calc(100vw - 40px);box-shadow:0 10px 40px rgba(0,0,0,0.35);}
+  .modal-box h2{margin:0 0 12px;font-size:1rem;}
+  .modal-box input[type=text]{width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);margin-bottom:14px;box-sizing:border-box;}
+  .modal-actions{display:flex;justify-content:flex-end;gap:8px;}
 
   /* ---------- top bar ---------- */
   #topbar{
@@ -46,8 +71,12 @@
   #scoreToolbar{padding:8px 14px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:var(--panel);}
   #scoreToolbar .pagenav{display:flex;align-items:center;gap:6px;font-size:0.82rem;}
   #scoreScroll{flex:1;overflow:auto;padding:20px;display:flex;justify-content:center;align-items:flex-start;background:repeating-linear-gradient(45deg, transparent, transparent 12px, rgba(128,128,128,0.03) 12px, rgba(128,128,128,0.03) 24px);}
-  #uploadPrompt{margin:auto;text-align:center;color:var(--ink-soft);padding:40px;border:2px dashed var(--line);border-radius:var(--radius);cursor:pointer;max-width:360px;}
+  #uploadPrompt{margin:auto;text-align:center;color:var(--ink-soft);padding:40px;border:2px dashed var(--line);border-radius:var(--radius);cursor:pointer;max-width:360px;transition:border-color 0.15s,background 0.15s;}
   #uploadPrompt strong{color:var(--ink);}
+  #scoreScroll.drag-over{background-color:var(--accent-soft);}
+  #scoreScroll.drag-over #uploadPrompt{border-color:var(--accent);color:var(--accent);}
+  #scoreScroll.drag-over #uploadPrompt strong{color:var(--accent);}
+  #scoreScroll.drag-over #canvasWrap{outline:3px dashed var(--accent);outline-offset:6px;}
   #canvasWrap{position:relative;background:#fff;box-shadow:0 2px 14px rgba(0,0,0,0.18);}
   #pdfCanvas{display:block;}
   body.tag-mode #canvasWrap{cursor:crosshair;}
@@ -91,7 +120,8 @@
   .range-btn:hover{border-color:var(--accent);color:var(--accent);}
   .section-field{font-size:0.8rem;color:var(--ink);flex:1;min-width:80px;border:none;background:transparent;font-weight:600;}
   .section-field::placeholder{color:var(--ink-soft);font-weight:400;}
-  .note-del{margin-left:auto;font-size:0.72rem;color:var(--bad);background:none;border:none;cursor:pointer;padding:2px 6px;}
+  .note-del{margin-left:auto;font-size:0.72rem;color:var(--bad);background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:6px;}
+  .note-del.confirm-armed{background:var(--bad);color:#fff;}
   .field-label{font-size:0.68rem;color:var(--ink-soft);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:2px;}
   .field-what,.field-why{font-size:0.87rem;line-height:1.5;padding:6px 8px;border-radius:8px;}
   .field-why{background:var(--accent-soft);}
@@ -131,10 +161,31 @@
 </style>
 </head>
 <body>
-<div id="app">
+
+<div id="homeView">
+  <div id="homeTopbar">
+    <h1>🎼 Score Analysis Studio — Projects</h1>
+    <button class="btn primary" id="newProjectBtn">+ New project</button>
+  </div>
+  <div id="homeGrid"></div>
+</div>
+
+<div id="newProjectModal" class="modal-overlay" style="display:none;">
+  <div class="modal-box">
+    <h2>New project</h2>
+    <input type="text" id="newProjectNameInput" placeholder="e.g. Bohemian Rhapsody">
+    <div class="modal-actions">
+      <button class="btn" id="newProjectCancelBtn">Cancel</button>
+      <button class="btn primary" id="newProjectCreateBtn">Create</button>
+    </div>
+  </div>
+</div>
+
+<div id="studioView">
 
   <div id="topbar">
-    <h1>🎼 Score Analysis Studio</h1>
+    <button class="btn" id="homeBtn">🏠 Home</button>
+    <span class="project-name-label" id="projectNameLabel"></span>
     <button class="btn primary" id="uploadBtn">⬆ Upload PDF score</button>
     <input type="file" id="pdfFile" accept="application/pdf" style="display:none;">
     <button class="btn" id="detectBtn" disabled>🔍 Auto-detect bars</button>
@@ -173,7 +224,7 @@
       <div id="detectStatus" style="display:none;"></div>
       <div id="scoreScroll">
         <div id="uploadPrompt">
-          <strong>Click "Upload PDF score" above</strong><br>to load sheet music. Once loaded, use <strong>Auto-detect bars</strong> to find barlines, <strong>Mark system</strong> to draw a system's boundary by hand on pages with multiple systems (drag top-to-bottom; click an existing band to remove it), then <strong>Tag mode</strong> to fix up bars — click empty space to add a marker, click a marker's number to rename it, or click a marker to delete it.
+          <strong>Click "Upload PDF score" above, or drag a PDF in here</strong><br>to load sheet music. Once loaded, use <strong>Auto-detect bars</strong> to find barlines, <strong>Mark system</strong> to draw a system's boundary by hand on pages with multiple systems (drag top-to-bottom; click an existing band to remove it), then <strong>Tag mode</strong> to fix up bars — click empty space to add a marker, click a marker's number to rename it, or click a marker to delete it.
         </div>
         <div id="canvasWrap" style="display:none;">
           <canvas id="pdfCanvas"></canvas>
@@ -224,7 +275,6 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs
 // =====================================================================
 // state
 // =====================================================================
-const STORAGE_KEY = "score_studio_v1";
 let pdfDoc = null, numPages = 0, currentPage = 1;
 let markersByPage = {};   // pageNum -> [{id, xFrac, yTopFrac, yBotFrac, number}]
 let pageSystems = {};     // pageNum -> [{yTopFrac, yBotFrac, manual?}]
@@ -234,8 +284,11 @@ let selectedMarkerId = null;
 let tagMode = false;
 let systemMode = false;
 let pendingEndBarNoteId = null; // note.id currently waiting for an end-bar click on the score
-let pdfFingerprint = null; // {name, size}
 let query = "";
+
+let currentProjectId = null;
+let currentProjectMeta = null;   // {name, createdAt}
+let currentProjectPdfName = null;
 
 function uid(){ return Math.random().toString(36).slice(2,10); }
 
@@ -246,16 +299,90 @@ function escapeHtml(str){
 }
 function nl2br(str){ return escapeHtml(str).replace(/\n/g,"<br>"); }
 
-// =====================================================================
-// persistence
-// =====================================================================
-function persist(){
-  try{
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      markersByPage, pageSystems, notes, barCounter, pdfFingerprint, videoId
-    }));
-  }catch(e){ /* storage blocked */ }
+// A dialog-free "click again to confirm" pattern for destructive-but-typed-
+// content actions (project delete, note delete). Native confirm()/prompt()
+// dialogs can be permanently silenced by the user ("prevent this page from
+// creating additional dialogs"), which then makes deletion silently do
+// nothing with no visible error — this sidesteps that class of bug entirely.
+function armDeleteConfirm(btn, onConfirmed){
+  let timeout = null;
+  const original = btn.textContent;
+  btn.addEventListener("click", (e)=>{
+    e.stopPropagation();
+    if(!btn.classList.contains("confirm-armed")){
+      btn.classList.add("confirm-armed");
+      btn.textContent = "Click again";
+      timeout = setTimeout(()=>{ btn.classList.remove("confirm-armed"); btn.textContent = original; }, 3000);
+    } else {
+      clearTimeout(timeout);
+      onConfirmed();
+    }
+  });
 }
+
+// =====================================================================
+// IndexedDB — each project's markers/notes/settings live in META_STORE
+// (small, saved on every edit); the PDF binary lives separately in
+// PDF_STORE so re-saving markers/notes doesn't rewrite a multi-MB blob
+// every time.
+// =====================================================================
+const DB_NAME = "scoreStudioDB";
+const DB_VERSION = 1;
+const META_STORE = "projects";
+const PDF_STORE = "projectPdfs";
+let __dbPromise = null;
+
+function openDB(){
+  if(__dbPromise) return __dbPromise;
+  __dbPromise = new Promise((resolve, reject)=>{
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = (e)=>{
+      const db = e.target.result;
+      if(!db.objectStoreNames.contains(META_STORE)) db.createObjectStore(META_STORE, { keyPath: "id" });
+      if(!db.objectStoreNames.contains(PDF_STORE)) db.createObjectStore(PDF_STORE, { keyPath: "id" });
+    };
+    req.onsuccess = ()=> resolve(req.result);
+    req.onerror = ()=> reject(req.error);
+  });
+  return __dbPromise;
+}
+async function dbPut(store, record){
+  const db = await openDB();
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction(store, "readwrite");
+    tx.objectStore(store).put(record);
+    tx.oncomplete = ()=>resolve();
+    tx.onerror = ()=>reject(tx.error);
+  });
+}
+async function dbGet(store, id){
+  const db = await openDB();
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction(store, "readonly");
+    const req = tx.objectStore(store).get(id);
+    req.onsuccess = ()=>resolve(req.result);
+    req.onerror = ()=>reject(req.error);
+  });
+}
+async function dbGetAll(store){
+  const db = await openDB();
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction(store, "readonly");
+    const req = tx.objectStore(store).getAll();
+    req.onsuccess = ()=>resolve(req.result);
+    req.onerror = ()=>reject(req.error);
+  });
+}
+async function dbDelete(store, id){
+  const db = await openDB();
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction(store, "readwrite");
+    tx.objectStore(store).delete(id);
+    tx.oncomplete = ()=>resolve();
+    tx.onerror = ()=>reject(tx.error);
+  });
+}
+
 function migrateNote(n){
   // older saves used barId/page/barNumber/timestampSec (single point, not a range)
   if(n.startBarId===undefined) n.startBarId = n.barId!==undefined ? n.barId : null;
@@ -268,19 +395,224 @@ function migrateNote(n){
   if(n.endSec===undefined) n.endSec = null;
   return n;
 }
-function loadPersisted(){
+
+// fire-and-forget save of the current project's markers/notes/settings —
+// call sites throughout the app call this synchronously without awaiting,
+// same as the old localStorage-backed version did.
+function persist(){
+  if(!currentProjectId || !currentProjectMeta) return;
+  dbPut(META_STORE, {
+    id: currentProjectId,
+    name: currentProjectMeta.name,
+    createdAt: currentProjectMeta.createdAt,
+    updatedAt: Date.now(),
+    pdfName: currentProjectPdfName,
+    markersByPage, pageSystems, notes, barCounter, videoId
+  });
+}
+function persistPdfBlob(blob){
+  if(!currentProjectId) return;
+  dbPut(PDF_STORE, { id: currentProjectId, blob });
+}
+
+// =====================================================================
+// project management (Home view)
+// =====================================================================
+async function listProjects(){
+  const all = await dbGetAll(META_STORE);
+  return all.sort((a,b)=> (b.updatedAt||0) - (a.updatedAt||0));
+}
+async function createProject(name){
+  const id = uid();
+  const now = Date.now();
+  await dbPut(META_STORE, {
+    id, name, createdAt: now, updatedAt: now, pdfName: null,
+    markersByPage: {}, pageSystems: {}, notes: [], barCounter: 0, videoId: null
+  });
+  return id;
+}
+async function renameProject(id, name){
+  const rec = await dbGet(META_STORE, id);
+  if(!rec) return;
+  rec.name = name; rec.updatedAt = Date.now();
+  await dbPut(META_STORE, rec);
+}
+async function deleteProjectCompletely(id){
+  await dbDelete(META_STORE, id);
+  await dbDelete(PDF_STORE, id);
+}
+
+async function migrateOldSingleProjectData(){
   try{
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem("score_studio_v1");
     if(!raw) return;
+    const existing = await listProjects();
+    if(existing.length>0){ localStorage.removeItem("score_studio_v1"); return; }
     const d = JSON.parse(raw);
-    notes = (d.notes || []).map(migrateNote);
-    barCounter = d.barCounter || 0;
-    pdfFingerprint = d.pdfFingerprint || null;
-    // markers/system-bands are only restored once a matching PDF is re-uploaded (see loadPdfFile)
-    window.__savedMarkersByPage = d.markersByPage || {};
-    window.__savedPageSystems = d.pageSystems || {};
-    if(d.videoId){ videoId = d.videoId; }
-  }catch(e){ /* ignore corrupt storage */ }
+    const id = uid();
+    const now = Date.now();
+    await dbPut(META_STORE, {
+      id, name: "My first project", createdAt: now, updatedAt: now,
+      pdfName: d.pdfFingerprint ? d.pdfFingerprint.name : null,
+      markersByPage: d.markersByPage||{}, pageSystems: d.pageSystems||{},
+      notes: (d.notes||[]).map(migrateNote), barCounter: d.barCounter||0, videoId: d.videoId||null
+    });
+    // the PDF binary itself was never stored by the old single-project version,
+    // so it isn't carried over — markers/notes are, and the score just needs
+    // to be dropped in again once to reattach it.
+    localStorage.removeItem("score_studio_v1");
+  }catch(e){ /* ignore corrupt old data */ }
+}
+
+function showHome(){
+  currentProjectId = null;
+  currentProjectMeta = null;
+  document.getElementById("homeView").style.display = "flex";
+  document.getElementById("studioView").style.display = "none";
+  renderHomeGrid();
+}
+
+async function renderHomeGrid(){
+  const grid = document.getElementById("homeGrid");
+  const projects = await listProjects();
+  grid.innerHTML = "";
+  if(projects.length===0){
+    grid.innerHTML = '<div id="homeEmpty">No projects yet — click "+ New project" to start one.</div>';
+    return;
+  }
+  projects.forEach(p=>{
+    const card = document.createElement("div");
+    card.className = "project-card";
+    const noteCount = (p.notes||[]).length;
+    const barCount = Object.values(p.markersByPage||{}).reduce((n,arr)=>n+arr.length,0);
+    card.innerHTML = `
+      <div class="project-card-top">
+        <span class="project-name">${escapeHtml(p.name)}</span>
+        <button class="project-icon-btn" data-action="rename" title="Rename">✎</button>
+        <button class="project-icon-btn del" data-action="delete" title="Delete project">✕</button>
+      </div>
+      <div class="project-meta">${p.pdfName ? escapeHtml(p.pdfName) : 'No PDF yet'}</div>
+      <div class="project-meta">${noteCount} note${noteCount===1?'':'s'} · ${barCount} bar${barCount===1?'':'s'} tagged</div>
+      <div class="project-meta">Updated ${new Date(p.updatedAt||p.createdAt).toLocaleDateString()}</div>
+    `;
+    card.addEventListener("click", ()=> showStudio(p.id));
+
+    const renameBtn = card.querySelector('[data-action="rename"]');
+    renameBtn.addEventListener("click", (e)=>{
+      e.stopPropagation();
+      const nameEl = card.querySelector(".project-name");
+      const input = document.createElement("input");
+      input.type = "text"; input.className = "project-name-input"; input.value = p.name;
+      nameEl.replaceWith(input);
+      input.focus(); input.select();
+      const commit = async ()=>{
+        const newName = input.value.trim() || p.name;
+        await renameProject(p.id, newName);
+        renderHomeGrid();
+      };
+      input.addEventListener("blur", commit);
+      input.addEventListener("keydown", (ev)=>{
+        if(ev.key==="Enter") input.blur();
+        if(ev.key==="Escape"){ input.removeEventListener("blur", commit); renderHomeGrid(); }
+      });
+      input.addEventListener("click", (ev)=> ev.stopPropagation());
+    });
+
+    const delBtn = card.querySelector('[data-action="delete"]');
+    armDeleteConfirm(delBtn, async ()=>{
+      await deleteProjectCompletely(p.id);
+      renderHomeGrid();
+    });
+
+    grid.appendChild(card);
+  });
+}
+
+document.getElementById("homeBtn").addEventListener("click", showHome);
+
+function openNewProjectModal(){
+  document.getElementById("newProjectNameInput").value = "";
+  document.getElementById("newProjectModal").style.display = "flex";
+  document.getElementById("newProjectNameInput").focus();
+}
+function closeNewProjectModal(){
+  document.getElementById("newProjectModal").style.display = "none";
+}
+document.getElementById("newProjectBtn").addEventListener("click", openNewProjectModal);
+document.getElementById("newProjectCancelBtn").addEventListener("click", closeNewProjectModal);
+document.getElementById("newProjectModal").addEventListener("click", (e)=>{
+  if(e.target.id === "newProjectModal") closeNewProjectModal();
+});
+document.getElementById("newProjectCreateBtn").addEventListener("click", async ()=>{
+  const name = document.getElementById("newProjectNameInput").value.trim() || "Untitled score";
+  closeNewProjectModal();
+  const id = await createProject(name);
+  showStudio(id);
+});
+document.getElementById("newProjectNameInput").addEventListener("keydown", (e)=>{
+  if(e.key==="Enter") document.getElementById("newProjectCreateBtn").click();
+  if(e.key==="Escape") closeNewProjectModal();
+});
+
+async function showStudio(id){
+  document.getElementById("homeView").style.display = "none";
+  document.getElementById("studioView").style.display = "flex";
+  await openProject(id);
+}
+
+function resetVideoPlayer(){
+  if(ytPlayer && ytPlayer.destroy){ try{ ytPlayer.destroy(); }catch(e){ /* already gone */ } }
+  ytPlayer = null; ytReady = false; pendingSeek = null; activeEndSec = null;
+  document.getElementById("vwPlayerWrap").innerHTML = '<div id="vwPlayer"></div>';
+  document.getElementById("vwNow").textContent = "Nothing selected yet";
+  vwPlayhead.style.display = "none";
+  vwProgress.style.width = "0%";
+}
+
+async function openProject(id){
+  const rec = await dbGet(META_STORE, id);
+  if(!rec){ showHome(); return; }
+
+  currentProjectId = id;
+  currentProjectMeta = { name: rec.name, createdAt: rec.createdAt };
+  currentProjectPdfName = rec.pdfName || null;
+  notes = (rec.notes||[]).map(migrateNote);
+  markersByPage = rec.markersByPage || {};
+  pageSystems = rec.pageSystems || {};
+  barCounter = rec.barCounter || 0;
+  videoId = rec.videoId || null;
+
+  pdfDoc = null; numPages = 0; currentPage = 1; selectedMarkerId = null;
+  tagMode = false; systemMode = false; pendingEndBarNoteId = null;
+  document.body.classList.remove("tag-mode","system-mode");
+  document.getElementById("tagModeBtn").textContent = "✎ Tag mode";
+  document.getElementById("tagModeBtn").classList.remove("active");
+  document.getElementById("systemModeBtn").textContent = "📏 Mark system";
+  document.getElementById("systemModeBtn").classList.remove("active");
+  document.getElementById("projectNameLabel").textContent = rec.name;
+  document.getElementById("uploadPrompt").style.display = "block";
+  document.getElementById("canvasWrap").style.display = "none";
+  document.getElementById("detectBtn").disabled = true;
+  document.getElementById("tagModeBtn").disabled = true;
+  document.getElementById("systemModeBtn").disabled = true;
+  document.getElementById("prevPageBtn").disabled = true;
+  document.getElementById("nextPageBtn").disabled = true;
+  document.getElementById("pageLabel").textContent = "– / –";
+  document.getElementById("topStatus").textContent = "No score loaded";
+  document.getElementById("detectStatus").style.display = "none";
+  document.getElementById("vwUrlInput").value = "";
+  updatePendingBanner();
+  renderNotes();
+
+  resetVideoPlayer();
+  durationSec = 300;
+  renderRail();
+  if(videoId && window.YT && window.YT.Player) createYtPlayer();
+
+  const pdfRec = await dbGet(PDF_STORE, id);
+  if(pdfRec && pdfRec.blob){
+    loadPdfBlob(pdfRec.blob, rec.pdfName || "score.pdf", true, false);
+  }
 }
 
 // =====================================================================
@@ -306,15 +638,56 @@ function clockToSec(str){
 // PDF loading + rendering
 // =====================================================================
 document.getElementById("uploadBtn").addEventListener("click", ()=> document.getElementById("pdfFile").click());
+document.getElementById("uploadPrompt").addEventListener("click", ()=> document.getElementById("pdfFile").click());
 document.getElementById("pdfFile").addEventListener("change", (e)=>{
   const file = e.target.files[0];
   if(file) loadPdfFile(file);
   e.target.value = "";
 });
 
+// drag-and-drop a PDF anywhere over the score panel (works before or after a score is already loaded)
+const scoreScrollEl = document.getElementById("scoreScroll");
+let dragDepth = 0;
+scoreScrollEl.addEventListener("dragenter", (e)=>{
+  e.preventDefault();
+  dragDepth++;
+  scoreScrollEl.classList.add("drag-over");
+});
+scoreScrollEl.addEventListener("dragover", (e)=>{
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "copy";
+});
+scoreScrollEl.addEventListener("dragleave", (e)=>{
+  dragDepth = Math.max(0, dragDepth-1);
+  if(dragDepth===0) scoreScrollEl.classList.remove("drag-over");
+});
+scoreScrollEl.addEventListener("drop", (e)=>{
+  e.preventDefault();
+  dragDepth = 0;
+  scoreScrollEl.classList.remove("drag-over");
+  const file = e.dataTransfer.files && e.dataTransfer.files[0];
+  if(!file) return;
+  if(file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")){
+    alert("That doesn't look like a PDF — drop a .pdf file of your score.");
+    return;
+  }
+  loadPdfFile(file);
+});
+
 function loadPdfFile(file){
+  if(!currentProjectId) return;
   document.getElementById("topStatus").textContent = "Loading " + file.name + "…";
-  const fingerprint = { name: file.name, size: file.size };
+  const isReplacing = !!pdfDoc;
+  loadPdfBlob(file, file.name, false, isReplacing);
+}
+
+// blobOrFile: a File (fresh upload/drop) or a Blob (restored from IndexedDB).
+// fromStorage: true when re-opening a project that already has a PDF saved —
+// skips re-persisting it and preserves existing markers/notes.
+// isReplacing: true when the user uploads a new PDF over an already-open
+// score in this project — the old bar markers no longer mean anything
+// against different content, so they're cleared (notes are kept).
+function loadPdfBlob(blobOrFile, name, fromStorage, isReplacing){
   const reader = new FileReader();
   reader.onload = () => {
     const typedArray = new Uint8Array(reader.result);
@@ -322,15 +695,9 @@ function loadPdfFile(file){
       pdfDoc = pdf;
       numPages = pdf.numPages;
       currentPage = 1;
-      const matches = pdfFingerprint && pdfFingerprint.name===fingerprint.name && pdfFingerprint.size===fingerprint.size;
-      pdfFingerprint = fingerprint;
-      if(matches && window.__savedMarkersByPage){
-        markersByPage = window.__savedMarkersByPage;
-        pageSystems = window.__savedPageSystems || {};
-      } else {
+      if(!fromStorage && isReplacing){
         markersByPage = {};
         pageSystems = {};
-        if(window.__savedMarkersByPage) barCounter = 0; // fresh score, renumber from scratch
       }
       document.getElementById("uploadPrompt").style.display = "none";
       document.getElementById("canvasWrap").style.display = "block";
@@ -339,14 +706,18 @@ function loadPdfFile(file){
       document.getElementById("systemModeBtn").disabled = false;
       document.getElementById("prevPageBtn").disabled = false;
       document.getElementById("nextPageBtn").disabled = false;
-      document.getElementById("topStatus").textContent = file.name + " · " + numPages + " page" + (numPages===1?"":"s");
-      persist();
+      document.getElementById("topStatus").textContent = name + " · " + numPages + " page" + (numPages===1?"":"s");
+      if(!fromStorage){
+        currentProjectPdfName = name;
+        persistPdfBlob(blobOrFile);
+        persist();
+      }
       renderPage(currentPage);
     }).catch(err=>{
       document.getElementById("topStatus").textContent = "Couldn't read that PDF (" + err.message + ")";
     });
   };
-  reader.readAsArrayBuffer(file);
+  reader.readAsArrayBuffer(blobOrFile);
 }
 
 function renderPage(pageNum){
@@ -662,7 +1033,6 @@ function renderMarkerOverlay(){
     band.addEventListener("click", (e)=>{
       if(!systemMode) return;
       e.stopPropagation();
-      if(!confirm("Remove this system boundary? (Bar markers within it are kept.)")) return;
       pageSystems[currentPage].splice(sysIdx, 1);
       persist();
       renderMarkerOverlay();
@@ -767,7 +1137,6 @@ document.addEventListener("mouseup", (e)=>{
 
 function onMarkerClick(id){
   if(tagMode){
-    if(!confirm("Delete this bar marker?")) return;
     markersByPage[currentPage] = (markersByPage[currentPage]||[]).filter(m=>m.id!==id);
     if(selectedMarkerId===id) selectedMarkerId=null;
     persist();
@@ -836,7 +1205,6 @@ function openAddNoteFor(marker){
 }
 
 function deleteNote(id){
-  if(!confirm("Delete this note?")) return;
   notes = notes.filter(n=>n.id!==id);
   persist();
   renderNotes();
@@ -920,7 +1288,7 @@ function renderNotes(){
     `;
     listEl.appendChild(card);
 
-    card.querySelector('[data-action="delete"]').addEventListener("click", ()=> deleteNote(n.id));
+    armDeleteConfirm(card.querySelector('[data-action="delete"]'), ()=> deleteNote(n.id));
     const whereBtn = card.querySelector('[data-action="where"]');
     if(n.startBarId) whereBtn.addEventListener("click", ()=> jumpToBar(n.startPage, n.startBarId));
 
@@ -994,17 +1362,17 @@ function onEditableKeydown(e){
 // export / import project
 // =====================================================================
 document.getElementById("exportBtn").addEventListener("click", ()=>{
-  const blob = new Blob([JSON.stringify({ markersByPage, pageSystems, notes, barCounter, pdfFingerprint, videoId }, null, 2)], {type:"application/json"});
+  const blob = new Blob([JSON.stringify({ markersByPage, pageSystems, notes, barCounter, pdfName: currentProjectPdfName, videoId }, null, 2)], {type:"application/json"});
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = url; a.download = "score-analysis-project.json";
+  a.href = url; a.download = (currentProjectMeta ? currentProjectMeta.name.replace(/[^\w-]+/g,"-") : "score-analysis") + "-project.json";
   document.body.appendChild(a); a.click(); a.remove();
   URL.revokeObjectURL(url);
 });
 document.getElementById("importBtn").addEventListener("click", ()=> document.getElementById("importFile").click());
 document.getElementById("importFile").addEventListener("change", (e)=>{
   const file = e.target.files[0];
-  if(!file) return;
+  if(!file || !currentProjectId) return;
   const reader = new FileReader();
   reader.onload = () => {
     try{
@@ -1013,7 +1381,6 @@ document.getElementById("importFile").addEventListener("change", (e)=>{
       pageSystems = d.pageSystems || {};
       notes = (d.notes || []).map(migrateNote);
       barCounter = d.barCounter || 0;
-      pdfFingerprint = d.pdfFingerprint || null;
       if(d.videoId){ videoId = d.videoId; loadVideo(videoId, true); }
       persist();
       renderMarkerOverlay();
@@ -1165,10 +1532,10 @@ setInterval(()=>{
 // =====================================================================
 // init
 // =====================================================================
-loadPersisted();
-renderNotes();
-renderRail();
-if(videoId){ document.getElementById("vwUrlInput").placeholder = "Loaded: " + videoId; }
+(async function init(){
+  await migrateOldSingleProjectData();
+  showHome();
+})();
 </script>
 </body>
 </html>
