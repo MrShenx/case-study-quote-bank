@@ -945,18 +945,19 @@ function runDetectionOnCurrentPage(){
         const xFrac = x/w;
         const existing = markersByPage[currentPage].find(m=> Math.abs(m.xFrac - xFrac) < 0.008 && !(m.yBotFrac < yTopFrac || m.yTopFrac > yBotFrac));
         if(existing) return;
-        barCounter++;
-        markersByPage[currentPage].push({ id: uid(), xFrac, yTopFrac, yBotFrac, number: barCounter });
+        markersByPage[currentPage].push({ id: uid(), xFrac, yTopFrac, yBotFrac, number: 0, manual: false });
         added++;
       });
     });
     markersByPage[currentPage].sort((a,b)=> a.yTopFrac - b.yTopFrac || a.xFrac - b.xFrac);
+    renumberAllBars();
     const totalBars = result.systems.reduce((n,s)=>n+s.barX.length,0);
     document.getElementById("detectStatus").textContent =
       result.systems.length + " staff system" + (result.systems.length===1?"":"s") + " found, " +
       totalBars + " barline" + (totalBars===1?"":"s") + " detected (" + added + " new). Switch to Tag mode to fix anything missed or wrong.";
     persist();
     renderMarkerOverlay();
+    renderNotes();
   }, 20);
 }
 
@@ -1006,6 +1007,47 @@ function updatePendingBanner(){
 
 function barIsLinked(id){
   return notes.some(n=> n.startBarId===id || n.endBarId===id);
+}
+
+function findMarkerById(id){
+  for(const page in markersByPage){
+    const m = (markersByPage[page]||[]).find(x=>x.id===id);
+    if(m) return m;
+  }
+  return null;
+}
+
+// Renumber every non-manual bar marker project-wide, in reading order (page,
+// then top-to-bottom, then left-to-right), as a contiguous 1..N sequence.
+// Without this, numbers only ever climbed (via barCounter) and never came
+// back — deleting bar 2 left a permanent gap instead of the next bar you add
+// reclaiming "2". Markers the user has manually renamed (double-click a
+// badge) are left untouched, and auto-numbering just continues after them.
+function renumberAllBars(){
+  const pageNums = Object.keys(markersByPage).map(Number).sort((a,b)=>a-b);
+  let counter = 1;
+  pageNums.forEach(p=>{
+    const list = markersByPage[p] || [];
+    list.sort((a,b)=> a.yTopFrac-b.yTopFrac || a.xFrac-b.xFrac);
+    list.forEach(m=>{
+      if(m.manual){
+        counter = Math.max(counter, m.number+1);
+      } else {
+        m.number = counter;
+        counter++;
+      }
+    });
+  });
+  notes.forEach(n=>{
+    if(n.startBarId){
+      const m = findMarkerById(n.startBarId);
+      if(m) n.startBarNumber = m.number;
+    }
+    if(n.endBarId){
+      const m = findMarkerById(n.endBarId);
+      if(m) n.endBarNumber = m.number;
+    }
+  });
 }
 
 document.getElementById("advToggleBtn").addEventListener("click", ()=>{
@@ -1069,8 +1111,16 @@ function renderMarkerOverlay(){
       if(badge.isContentEditable){
         badge.contentEditable = "false";
         const n = parseInt(badge.textContent.trim(),10);
-        if(!isNaN(n)){ m.number = n; persist(); renderNotes(); }
-        else badge.textContent = m.number;
+        if(!isNaN(n) && n!==m.number){
+          m.number = n;
+          m.manual = true; // hand-typed — renumbering leaves this one alone from now on
+          renumberAllBars();
+          persist();
+          renderMarkerOverlay();
+          renderNotes();
+        } else {
+          badge.textContent = m.number;
+        }
       }
     });
     badge.addEventListener("keydown", (e)=>{
@@ -1088,13 +1138,14 @@ document.getElementById("canvasWrap").addEventListener("click", (e)=>{
   const yFrac = (e.clientY - rect.top) / rect.height;
   let sys = (pageSystems[currentPage]||[]).find(s=> yFrac >= s.yTopFrac-0.01 && yFrac <= s.yBotFrac+0.01);
   if(!sys) sys = { yTopFrac: 0, yBotFrac: 1 };
-  barCounter++;
-  const marker = { id: uid(), xFrac, yTopFrac: sys.yTopFrac, yBotFrac: sys.yBotFrac, number: barCounter };
+  const marker = { id: uid(), xFrac, yTopFrac: sys.yTopFrac, yBotFrac: sys.yBotFrac, number: 0, manual: false };
   if(!markersByPage[currentPage]) markersByPage[currentPage] = [];
   markersByPage[currentPage].push(marker);
   markersByPage[currentPage].sort((a,b)=> a.yTopFrac-b.yTopFrac || a.xFrac-b.xFrac);
+  renumberAllBars();
   persist();
   renderMarkerOverlay();
+  renderNotes();
 });
 
 // drag-to-mark-system: mousedown starts a drag, mousemove previews it, mouseup commits it
@@ -1139,8 +1190,10 @@ function onMarkerClick(id){
   if(tagMode){
     markersByPage[currentPage] = (markersByPage[currentPage]||[]).filter(m=>m.id!==id);
     if(selectedMarkerId===id) selectedMarkerId=null;
+    renumberAllBars();
     persist();
     renderMarkerOverlay();
+    renderNotes();
     return;
   }
   const m = (markersByPage[currentPage]||[]).find(x=>x.id===id);
