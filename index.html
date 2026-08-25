@@ -113,11 +113,31 @@
   .note-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin-bottom:12px;display:flex;flex-direction:column;gap:8px;}
   .note-card.flash{animation:flashHi 1.1s ease;}
   @keyframes flashHi{0%{box-shadow:0 0 0 3px var(--accent);}100%{box-shadow:0 0 0 0px transparent;}}
+  .note-card.dragging{opacity:0.4;}
   .note-top{display:flex;flex-wrap:wrap;align-items:center;gap:8px;}
+  .drag-handle{cursor:grab;color:var(--ink-soft);font-size:0.9rem;line-height:1;padding:2px 4px;user-select:none;touch-action:none;}
+  .drag-handle:active{cursor:grabbing;}
+
+  /* ---------- sub-heading groups ---------- */
+  .group-section{margin-bottom:26px;}
+  .group-header{display:flex;align-items:center;gap:8px;margin-bottom:10px;padding-bottom:7px;border-bottom:2px solid var(--accent);}
+  .group-name{font-weight:800;font-size:1.08rem;color:var(--accent);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:0.01em;}
+  .group-name-input{font-weight:800;font-size:1.08rem;flex:1;min-width:0;border:1px solid var(--accent);border-radius:6px;padding:2px 6px;background:var(--panel);color:var(--accent);}
+  .group-count{font-size:0.72rem;font-weight:700;color:var(--accent);background:var(--accent-soft);padding:2px 9px;border-radius:999px;}
+  .group-header.ungrouped{border-bottom-color:var(--line);}
+  .group-header.ungrouped .group-name{color:var(--ink-soft);font-weight:700;font-size:0.78rem;text-transform:uppercase;letter-spacing:0.07em;}
+  .group-header.ungrouped .group-count{color:var(--ink-soft);background:var(--line);}
+  .group-body{min-height:14px;border-radius:var(--radius);transition:background 0.1s,outline 0.1s;}
+  .group-body.drop-target{background:var(--accent-soft);outline:2px dashed var(--accent);outline-offset:4px;}
+  .group-body-empty{font-size:0.78rem;color:var(--ink-soft);text-align:center;padding:14px;border:1px dashed var(--line);border-radius:var(--radius);}
   .where-badge{font-size:0.72rem;font-weight:700;padding:3px 10px;border-radius:999px;background:var(--accent-soft);color:var(--accent);cursor:pointer;border:none;}
   .where-badge.unlinked{background:var(--warn-bg);color:var(--warn);cursor:default;}
-  .range-btn{font-size:0.7rem;padding:3px 9px;border-radius:999px;border:1px dashed var(--line);background:var(--panel);color:var(--ink-soft);cursor:pointer;}
-  .range-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .where-badge:disabled{opacity:1;}
+  .bar-num-row{display:flex;align-items:center;gap:4px;}
+  .bar-num-sep{color:var(--ink-soft);font-size:0.8rem;}
+  .bar-num-input{width:44px;padding:4px 6px;font-size:0.78rem;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink);text-align:center;}
+  .bar-num-input:disabled{opacity:0.4;cursor:not-allowed;}
+  .bar-num-input.invalid{border-color:var(--bad);background:var(--bad-soft);}
   .section-field{font-size:0.8rem;color:var(--ink);flex:1;min-width:80px;border:none;background:transparent;font-weight:600;}
   .section-field::placeholder{color:var(--ink-soft);font-weight:400;}
   .note-del{margin-left:auto;font-size:0.72rem;color:var(--bad);background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:6px;}
@@ -138,14 +158,19 @@
   #videoWidget .vw-head{display:flex;align-items:center;gap:6px;padding:7px 10px;background:var(--accent-soft);cursor:pointer;}
   #videoWidget .vw-head span{font-size:0.76rem;font-weight:700;flex:1;}
   #videoWidget .vw-toggle{background:none;border:none;font-size:0.8rem;cursor:pointer;color:var(--ink);}
-  #videoWidget .vw-body{padding:8px;display:flex;flex-direction:column;gap:6px;}
+  #videoWidget .vw-body{padding:8px;padding-bottom:0;display:flex;flex-direction:column;gap:6px;}
   #videoWidget.collapsed .vw-body{display:none;}
   #videoWidget .vw-urlrow{display:flex;gap:4px;}
   #videoWidget .vw-urlrow input{flex:1;min-width:0;padding:5px 8px;border-radius:6px;border:1px solid var(--line);font-size:0.72rem;}
   #videoWidget .vw-urlrow button{padding:5px 8px;border-radius:6px;border:1px solid var(--line);background:var(--panel);font-size:0.72rem;cursor:pointer;}
   #vwPlayerWrap{position:relative;width:100%;aspect-ratio:16/9;background:#000;border-radius:6px;overflow:hidden;}
   #vwPlayerWrap iframe{position:absolute;inset:0;width:100%;height:100%;border:0;}
-  #vwNow{font-size:0.72rem;color:var(--ink-soft);}
+  /* stays visible even when the widget is collapsed, so the time bar and
+     current time are always readable without expanding the player back out */
+  .vw-mini{padding:8px;display:flex;flex-direction:column;gap:6px;}
+  #vwNow{font-size:0.82rem;font-weight:700;color:var(--ink);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;text-align:center;letter-spacing:0.01em;}
+  #vwNow .vw-now-sep{color:var(--ink-soft);font-weight:400;margin:0 4px;font-size:0.74rem;}
+  .now-btn{background:var(--accent-soft);color:var(--accent);border-color:transparent;font-weight:600;padding:5px 9px;}
   #vwRailTrack{position:relative;height:16px;background:var(--accent-soft);border-radius:6px;cursor:pointer;}
   .vw-progress{position:absolute;top:0;left:0;height:100%;background:var(--accent);opacity:0.3;border-radius:6px 0 0 6px;pointer-events:none;}
   .vw-tick{position:absolute;top:2px;bottom:2px;width:2px;background:var(--good);cursor:pointer;}
@@ -177,6 +202,17 @@
     <div class="modal-actions">
       <button class="btn" id="newProjectCancelBtn">Cancel</button>
       <button class="btn primary" id="newProjectCreateBtn">Create</button>
+    </div>
+  </div>
+</div>
+
+<div id="newHeadingModal" class="modal-overlay" style="display:none;">
+  <div class="modal-box">
+    <h2>New heading</h2>
+    <input type="text" id="newHeadingNameInput" placeholder="e.g. Harmonic ambiguity">
+    <div class="modal-actions">
+      <button class="btn" id="newHeadingCancelBtn">Cancel</button>
+      <button class="btn primary" id="newHeadingCreateBtn">Create</button>
     </div>
   </div>
 </div>
@@ -218,6 +254,12 @@
           <span id="pageLabel">– / –</span>
           <button class="btn" id="nextPageBtn" disabled>›</button>
         </div>
+        <div class="pagenav">
+          <button class="btn" id="zoomOutBtn" disabled>−</button>
+          <span id="zoomLabel">100%</span>
+          <button class="btn" id="zoomInBtn" disabled>+</button>
+          <button class="btn" id="zoomResetBtn" disabled title="Reset to fit width">Fit</button>
+        </div>
         <div class="spacer"></div>
         <span class="status" id="scoreStatus"></span>
       </div>
@@ -236,6 +278,7 @@
     <div id="notesPanel">
       <div id="notesToolbar">
         <input type="text" id="noteSearch" placeholder="Search Where / What / Why…">
+        <button class="btn" id="addHeadingBtn">+ Add heading</button>
         <button class="btn primary" id="addNoteBtn">+ Add note</button>
       </div>
       <div id="notesScroll">
@@ -256,6 +299,8 @@
         <button id="vwLoadBtn">Load</button>
       </div>
       <div id="vwPlayerWrap"><div id="vwPlayer"></div></div>
+    </div>
+    <div class="vw-mini">
       <div id="vwNow">Nothing selected yet</div>
       <div id="vwRailTrack">
         <div class="vw-progress" id="vwProgress"></div>
@@ -276,14 +321,17 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs
 // state
 // =====================================================================
 let pdfDoc = null, numPages = 0, currentPage = 1;
+let zoomLevel = 1.0; // multiplier on top of the normal fit-to-panel width — 1.0 = 100% = fit width
+const ZOOM_MIN = 0.5, ZOOM_MAX = 2.5, ZOOM_STEP = 0.15;
 let markersByPage = {};   // pageNum -> [{id, xFrac, yTopFrac, yBotFrac, number}]
 let pageSystems = {};     // pageNum -> [{yTopFrac, yBotFrac, manual?}]
-let notes = [];           // {id, startBarId|null, startPage, startBarNumber, endBarId|null, endPage, endBarNumber, section, what, why, startSec, endSec}
+let notes = [];           // {id, groupId|null, startBarId|null, startPage, startBarNumber, endBarId|null, endPage, endBarNumber, section, what, why, startSec, endSec}
+let groups = [];          // {id, name} — student-created sub-headings notes can be dragged into
 let barCounter = 0;
+let dragNoteId = null;    // note.id currently being dragged, or null
 let selectedMarkerId = null;
 let tagMode = false;
 let systemMode = false;
-let pendingEndBarNoteId = null; // note.id currently waiting for an end-bar click on the score
 let query = "";
 
 let currentProjectId = null;
@@ -332,6 +380,15 @@ const META_STORE = "projects";
 const PDF_STORE = "projectPdfs";
 let __dbPromise = null;
 
+// IMPORTANT for future edits: IndexedDB persists per browser-origin,
+// completely independent of this file's contents — redeploying a new
+// version of this page (pushing a new index.html) never touches it on its
+// own. The only way this function could ever destroy existing students'
+// saved projects is if it deleted or recreated an object store here. Never
+// do that — only ever ADD stores/indexes inside onupgradeneeded, guarded by
+// the `if(!db.objectStoreNames.contains(...))` checks below, exactly as
+// this already does. Bumping DB_VERSION to add something new is safe;
+// deleting a store to "reset" the schema is not.
 function openDB(){
   if(__dbPromise) return __dbPromise;
   __dbPromise = new Promise((resolve, reject)=>{
@@ -393,7 +450,33 @@ function migrateNote(n){
   if(n.endBarNumber===undefined) n.endBarNumber = null;
   if(n.startSec===undefined) n.startSec = n.timestampSec!==undefined ? n.timestampSec : null;
   if(n.endSec===undefined) n.endSec = null;
+  if(n.groupId===undefined) n.groupId = null;
   return n;
+}
+
+// Fills in safe defaults for any field a record might be missing — because
+// it predates that field being added, or because a future version of this
+// app adds/renames something. Every place that reads a project record from
+// IndexedDB runs it through here first, so an old saved project can never
+// crash the app or get silently dropped just because the code shipped after
+// it was saved expects a slightly different shape. Extend this whenever a
+// new field is added to a project record.
+function normalizeProjectRecord(rec){
+  if(!rec) return rec;
+  rec.name = rec.name || "Untitled score";
+  rec.createdAt = rec.createdAt || Date.now();
+  rec.updatedAt = rec.updatedAt || rec.createdAt;
+  rec.pdfName = rec.pdfName || null;
+  rec.markersByPage = rec.markersByPage || {};
+  rec.pageSystems = rec.pageSystems || {};
+  rec.notes = (rec.notes || []).map(migrateNote);
+  rec.groups = rec.groups || [];
+  rec.barCounter = rec.barCounter || 0;
+  rec.videoId = rec.videoId || null;
+  Object.values(rec.markersByPage).forEach(list=>{
+    (list||[]).forEach(m=>{ if(m.manual===undefined) m.manual = false; });
+  });
+  return rec;
 }
 
 // fire-and-forget save of the current project's markers/notes/settings —
@@ -407,7 +490,7 @@ function persist(){
     createdAt: currentProjectMeta.createdAt,
     updatedAt: Date.now(),
     pdfName: currentProjectPdfName,
-    markersByPage, pageSystems, notes, barCounter, videoId
+    markersByPage, pageSystems, notes, groups, barCounter, videoId
   });
 }
 function persistPdfBlob(blob){
@@ -420,14 +503,14 @@ function persistPdfBlob(blob){
 // =====================================================================
 async function listProjects(){
   const all = await dbGetAll(META_STORE);
-  return all.sort((a,b)=> (b.updatedAt||0) - (a.updatedAt||0));
+  return all.map(normalizeProjectRecord).sort((a,b)=> (b.updatedAt||0) - (a.updatedAt||0));
 }
 async function createProject(name){
   const id = uid();
   const now = Date.now();
   await dbPut(META_STORE, {
     id, name, createdAt: now, updatedAt: now, pdfName: null,
-    markersByPage: {}, pageSystems: {}, notes: [], barCounter: 0, videoId: null
+    markersByPage: {}, pageSystems: {}, notes: [], groups: [], barCounter: 0, videoId: null
   });
   return id;
 }
@@ -570,20 +653,23 @@ function resetVideoPlayer(){
 }
 
 async function openProject(id){
-  const rec = await dbGet(META_STORE, id);
+  let rec = await dbGet(META_STORE, id);
   if(!rec){ showHome(); return; }
+  rec = normalizeProjectRecord(rec);
 
   currentProjectId = id;
   currentProjectMeta = { name: rec.name, createdAt: rec.createdAt };
-  currentProjectPdfName = rec.pdfName || null;
-  notes = (rec.notes||[]).map(migrateNote);
-  markersByPage = rec.markersByPage || {};
-  pageSystems = rec.pageSystems || {};
-  barCounter = rec.barCounter || 0;
-  videoId = rec.videoId || null;
+  currentProjectPdfName = rec.pdfName;
+  notes = rec.notes;
+  groups = rec.groups;
+  markersByPage = rec.markersByPage;
+  pageSystems = rec.pageSystems;
+  barCounter = rec.barCounter;
+  videoId = rec.videoId;
 
+  pendingRenderPageNum = null; // abandon any queued render from the project we're leaving
   pdfDoc = null; numPages = 0; currentPage = 1; selectedMarkerId = null;
-  tagMode = false; systemMode = false; pendingEndBarNoteId = null;
+  tagMode = false; systemMode = false; dragNoteId = null;
   document.body.classList.remove("tag-mode","system-mode");
   document.getElementById("tagModeBtn").textContent = "✎ Tag mode";
   document.getElementById("tagModeBtn").classList.remove("active");
@@ -597,11 +683,15 @@ async function openProject(id){
   document.getElementById("systemModeBtn").disabled = true;
   document.getElementById("prevPageBtn").disabled = true;
   document.getElementById("nextPageBtn").disabled = true;
+  document.getElementById("zoomOutBtn").disabled = true;
+  document.getElementById("zoomInBtn").disabled = true;
+  document.getElementById("zoomResetBtn").disabled = true;
+  zoomLevel = 1.0;
+  updateZoomLabel();
   document.getElementById("pageLabel").textContent = "– / –";
   document.getElementById("topStatus").textContent = "No score loaded";
   document.getElementById("detectStatus").style.display = "none";
   document.getElementById("vwUrlInput").value = "";
-  updatePendingBanner();
   renderNotes();
 
   resetVideoPlayer();
@@ -706,6 +796,9 @@ function loadPdfBlob(blobOrFile, name, fromStorage, isReplacing){
       document.getElementById("systemModeBtn").disabled = false;
       document.getElementById("prevPageBtn").disabled = false;
       document.getElementById("nextPageBtn").disabled = false;
+      document.getElementById("zoomResetBtn").disabled = false;
+      zoomLevel = 1.0;
+      updateZoomLabel();
       document.getElementById("topStatus").textContent = name + " · " + numPages + " page" + (numPages===1?"":"s");
       if(!fromStorage){
         currentProjectPdfName = name;
@@ -720,14 +813,37 @@ function loadPdfBlob(blobOrFile, name, fromStorage, isReplacing){
   reader.readAsArrayBuffer(blobOrFile);
 }
 
+// Rapid page/zoom clicks used to throw "Cannot use the same canvas during
+// multiple render() operations" because a previous render was still running
+// when the next one started. Cancelling the in-flight task and immediately
+// starting a new one looked like the fix, but PDF.js can permanently hang a
+// render that starts right after a same-page task was cancelled — confirmed
+// by tracing it: the call goes through, then its promise never settles, not
+// even after several extra seconds. So instead: never cancel. If a render is
+// already running, just remember the latest requested page and let the
+// current one finish naturally; when it's done, render whatever the latest
+// requested page turned out to be (skipping every intermediate one).
+let renderInProgress = false;
+let pendingRenderPageNum = null;
 function renderPage(pageNum){
+  if(renderInProgress){
+    pendingRenderPageNum = pageNum;
+    return;
+  }
+  renderInProgress = true;
+  const renderingForProject = currentProjectId; // guard against a slow render outliving a project switch
   pdfDoc.getPage(pageNum).then(page=>{
+    if(currentProjectId !== renderingForProject) return;
     const scroll = document.getElementById("scoreScroll");
-    const targetWidth = Math.min(scroll.clientWidth - 40, 900);
+    const targetWidth = Math.min(scroll.clientWidth - 40, 900) * zoomLevel;
     const baseViewport = page.getViewport({ scale: 1 });
     const cssScale = targetWidth / baseViewport.width;
     const dpr = window.devicePixelRatio || 1;
-    const renderViewport = page.getViewport({ scale: cssScale * dpr });
+    // cap the actual bitmap size regardless of zoom×dpr — beyond this, more
+    // pixels just cost memory/detection speed without being visibly sharper
+    const uncappedScale = cssScale * dpr;
+    const renderScale = Math.min(uncappedScale, 3500 / baseViewport.width);
+    const renderViewport = page.getViewport({ scale: renderScale });
     const canvas = document.getElementById("pdfCanvas");
     canvas.width = renderViewport.width;
     canvas.height = renderViewport.height;
@@ -736,18 +852,51 @@ function renderPage(pageNum){
     document.getElementById("canvasWrap").style.width = canvas.style.width;
     document.getElementById("canvasWrap").style.height = canvas.style.height;
     const ctx = canvas.getContext("2d");
-    page.render({ canvasContext: ctx, viewport: renderViewport }).promise.then(()=>{
+    return page.render({ canvasContext: ctx, viewport: renderViewport }).promise.then(()=>{
       document.getElementById("pageLabel").textContent = pageNum + " / " + numPages;
       document.getElementById("prevPageBtn").disabled = pageNum<=1;
       document.getElementById("nextPageBtn").disabled = pageNum>=numPages;
       renderMarkerOverlay();
       updateDetectStatus();
     });
+  }).catch(err=>{
+    console.error("PDF render failed:", err);
+  }).finally(()=>{
+    renderInProgress = false;
+    if(pendingRenderPageNum !== null){
+      const next = pendingRenderPageNum;
+      pendingRenderPageNum = null;
+      renderPage(next);
+    }
   });
 }
 
 document.getElementById("prevPageBtn").addEventListener("click", ()=>{ if(currentPage>1){ currentPage--; renderPage(currentPage); }});
 document.getElementById("nextPageBtn").addEventListener("click", ()=>{ if(currentPage<numPages){ currentPage++; renderPage(currentPage); }});
+
+// Zoom just changes the render size that fractional bar-marker/system-band
+// coordinates get multiplied against (see renderMarkerOverlay) — so markers
+// always land in the right place at any zoom level without any special-casing.
+function updateZoomLabel(){
+  document.getElementById("zoomLabel").textContent = Math.round(zoomLevel*100) + "%";
+  document.getElementById("zoomOutBtn").disabled = !pdfDoc || zoomLevel<=ZOOM_MIN;
+  document.getElementById("zoomInBtn").disabled = !pdfDoc || zoomLevel>=ZOOM_MAX;
+}
+document.getElementById("zoomInBtn").addEventListener("click", ()=>{
+  zoomLevel = Math.min(ZOOM_MAX, zoomLevel + ZOOM_STEP);
+  updateZoomLabel();
+  if(pdfDoc) renderPage(currentPage);
+});
+document.getElementById("zoomOutBtn").addEventListener("click", ()=>{
+  zoomLevel = Math.max(ZOOM_MIN, zoomLevel - ZOOM_STEP);
+  updateZoomLabel();
+  if(pdfDoc) renderPage(currentPage);
+});
+document.getElementById("zoomResetBtn").addEventListener("click", ()=>{
+  zoomLevel = 1.0;
+  updateZoomLabel();
+  if(pdfDoc) renderPage(currentPage);
+});
 
 window.addEventListener("resize", ()=>{ if(pdfDoc) renderPage(currentPage); });
 
@@ -987,24 +1136,6 @@ document.getElementById("systemModeBtn").addEventListener("click", ()=>{
   document.getElementById("systemModeBtn").textContent = systemMode ? "✓ Marking systems" : "📏 Mark system";
 });
 
-function startPickEndBar(noteId){
-  pendingEndBarNoteId = noteId;
-  updatePendingBanner();
-}
-function cancelPickEndBar(){
-  pendingEndBarNoteId = null;
-  updatePendingBanner();
-}
-function updatePendingBanner(){
-  const el = document.getElementById("scoreStatus");
-  if(pendingEndBarNoteId){
-    el.innerHTML = 'Click a bar to set as the range end — <a href="#" id="cancelEndPick" style="color:var(--bad);">Cancel</a>';
-    document.getElementById("cancelEndPick").addEventListener("click", (e)=>{ e.preventDefault(); cancelPickEndBar(); });
-  } else {
-    el.textContent = "";
-  }
-}
-
 function barIsLinked(id){
   return notes.some(n=> n.startBarId===id || n.endBarId===id);
 }
@@ -1013,6 +1144,18 @@ function findMarkerById(id){
   for(const page in markersByPage){
     const m = (markersByPage[page]||[]).find(x=>x.id===id);
     if(m) return m;
+  }
+  return null;
+}
+
+// Look up a bar marker by its displayed number (unique project-wide since
+// renumberAllBars keeps numbers contiguous) rather than by internal id —
+// this is what lets a note's bar range be typed directly instead of only
+// settable by clicking on the score.
+function findMarkerByNumber(number){
+  for(const page in markersByPage){
+    const m = (markersByPage[page]||[]).find(x=>x.number===number);
+    if(m) return { marker: m, page: parseInt(page,10) };
   }
   return null;
 }
@@ -1060,6 +1203,17 @@ document.getElementById("barSens").addEventListener("input", (e)=>{
   document.getElementById("barSensVal").textContent = e.target.value + "%";
 });
 
+// Puts a bar marker's badge into edit mode with its text selected, ready to
+// type over — used both for double-clicking an existing badge and for
+// jumping straight into naming a bar right after placing it (so you can
+// place a marker anywhere and immediately type e.g. "20" without a mapping
+// every bar leading up to it).
+function enterBadgeEditMode(badge){
+  badge.contentEditable = "true";
+  badge.focus();
+  document.execCommand("selectAll", false, null);
+}
+
 function renderMarkerOverlay(){
   const wrap = document.getElementById("canvasWrap");
   wrap.querySelectorAll(".marker-line,.marker-badge,.system-band").forEach(el=>el.remove());
@@ -1101,12 +1255,7 @@ function renderMarkerOverlay(){
     badge.textContent = m.number;
     badge.dataset.id = m.id;
     badge.addEventListener("click", (e)=>{ e.stopPropagation(); onMarkerClick(m.id); });
-    badge.addEventListener("dblclick", (e)=>{
-      e.stopPropagation();
-      badge.contentEditable = "true";
-      badge.focus();
-      document.execCommand("selectAll", false, null);
-    });
+    badge.addEventListener("dblclick", (e)=>{ e.stopPropagation(); enterBadgeEditMode(badge); });
     badge.addEventListener("blur", ()=>{
       if(badge.isContentEditable){
         badge.contentEditable = "false";
@@ -1125,6 +1274,7 @@ function renderMarkerOverlay(){
     });
     badge.addEventListener("keydown", (e)=>{
       if(e.key==="Enter"){ e.preventDefault(); badge.blur(); }
+      if(e.key==="Escape"){ badge.textContent = m.number; badge.blur(); }
     });
     wrap.appendChild(badge);
   });
@@ -1146,6 +1296,9 @@ document.getElementById("canvasWrap").addEventListener("click", (e)=>{
   persist();
   renderMarkerOverlay();
   renderNotes();
+  // jump straight into naming this bar — click, type the real number, done
+  const newBadge = document.querySelector('.marker-badge[data-id="'+marker.id+'"]');
+  if(newBadge) enterBadgeEditMode(newBadge);
 });
 
 // drag-to-mark-system: mousedown starts a drag, mousemove previews it, mouseup commits it
@@ -1199,19 +1352,6 @@ function onMarkerClick(id){
   const m = (markersByPage[currentPage]||[]).find(x=>x.id===id);
   if(!m) return;
 
-  if(pendingEndBarNoteId){
-    const note = notes.find(n=>n.id===pendingEndBarNoteId);
-    pendingEndBarNoteId = null;
-    updatePendingBanner();
-    if(note){
-      note.endBarId = m.id; note.endPage = currentPage; note.endBarNumber = m.number;
-      persist();
-      renderNotes();
-      renderMarkerOverlay();
-    }
-    return;
-  }
-
   selectedMarkerId = id;
   renderMarkerOverlay();
   const note = notes.find(n=> n.startBarId===id || n.endBarId===id);
@@ -1238,6 +1378,7 @@ document.getElementById("addNoteBtn").addEventListener("click", ()=>{
 function openAddNoteFor(marker){
   const note = {
     id: uid(),
+    groupId: null,
     startBarId: marker ? marker.id : null,
     startPage: marker ? currentPage : null,
     startBarNumber: marker ? marker.number : null,
@@ -1292,34 +1433,230 @@ function whereLabel(note){
   return note.section || "Unlinked";
 }
 
+// ---------- sub-heading groups ----------
+function createGroup(name){
+  groups.push({ id: uid(), name });
+  persist();
+  renderNotes();
+}
+function renameGroup(id, name){
+  const g = groups.find(x=>x.id===id);
+  if(!g) return;
+  g.name = name;
+  persist();
+  renderNotes();
+}
+function deleteGroup(id){
+  groups = groups.filter(g=>g.id!==id);
+  notes.forEach(n=>{ if(n.groupId===id) n.groupId = null; }); // ungroup, never delete the notes themselves
+  persist();
+  renderNotes();
+}
+
+document.getElementById("addHeadingBtn").addEventListener("click", ()=>{
+  document.getElementById("newHeadingNameInput").value = "";
+  document.getElementById("newHeadingModal").style.display = "flex";
+  document.getElementById("newHeadingNameInput").focus();
+});
+function closeNewHeadingModal(){ document.getElementById("newHeadingModal").style.display = "none"; }
+document.getElementById("newHeadingCancelBtn").addEventListener("click", closeNewHeadingModal);
+document.getElementById("newHeadingModal").addEventListener("click", (e)=>{
+  if(e.target.id === "newHeadingModal") closeNewHeadingModal();
+});
+document.getElementById("newHeadingCreateBtn").addEventListener("click", ()=>{
+  const name = document.getElementById("newHeadingNameInput").value.trim();
+  closeNewHeadingModal();
+  if(name) createGroup(name);
+});
+document.getElementById("newHeadingNameInput").addEventListener("keydown", (e)=>{
+  if(e.key==="Enter") document.getElementById("newHeadingCreateBtn").click();
+  if(e.key==="Escape") closeNewHeadingModal();
+});
+
+// ---------- drag-and-drop reordering / regrouping ----------
+// A note card is only draggable from its handle (not the whole card, which
+// is full of text inputs and contenteditable fields that need normal click/
+// select behavior). Dragging live-reorders the `notes` array and re-renders
+// as you hover different cards or group bodies, then persists once on drop.
+let lastDragTargetKey = null;
+
+function handleDragMove(clientX, clientY){
+  document.querySelectorAll(".group-body.drop-target").forEach(el=>el.classList.remove("drop-target"));
+  const el = document.elementFromPoint(clientX, clientY);
+  if(!el) return;
+  const body = el.closest(".group-body");
+  if(!body) return;
+  body.classList.add("drop-target");
+  const groupId = body.dataset.groupId || null;
+
+  const overCard = el.closest(".note-card");
+  if(overCard && overCard.dataset.id === dragNoteId) return;
+
+  if(overCard){
+    const rect = overCard.getBoundingClientRect();
+    const before = clientY < rect.top + rect.height/2;
+    const key = "card:" + overCard.dataset.id + ":" + before;
+    if(key === lastDragTargetKey) return;
+    lastDragTargetKey = key;
+    moveNoteRelativeTo(dragNoteId, overCard.dataset.id, before, groupId);
+  } else {
+    const key = "group:" + groupId;
+    if(key === lastDragTargetKey) return;
+    const dragged = notes.find(n=>n.id===dragNoteId);
+    if(dragged && dragged.groupId === groupId) return;
+    lastDragTargetKey = key;
+    moveNoteToEndOfGroup(dragNoteId, groupId);
+  }
+}
+function moveNoteRelativeTo(draggedId, targetId, before, groupId){
+  const draggedIdx = notes.findIndex(n=>n.id===draggedId);
+  if(draggedIdx===-1) return;
+  const [dragged] = notes.splice(draggedIdx, 1);
+  dragged.groupId = groupId;
+  const targetIdx = notes.findIndex(n=>n.id===targetId);
+  if(targetIdx===-1) notes.push(dragged);
+  else notes.splice(before ? targetIdx : targetIdx+1, 0, dragged);
+  renderNotes();
+}
+function moveNoteToEndOfGroup(draggedId, groupId){
+  const draggedIdx = notes.findIndex(n=>n.id===draggedId);
+  if(draggedIdx===-1) return;
+  const [dragged] = notes.splice(draggedIdx, 1);
+  dragged.groupId = groupId;
+  let lastIdxInGroup = -1;
+  for(let i=notes.length-1;i>=0;i--){ if(notes[i].groupId===groupId){ lastIdxInGroup=i; break; } }
+  if(lastIdxInGroup===-1) notes.push(dragged);
+  else notes.splice(lastIdxInGroup+1, 0, dragged);
+  renderNotes();
+}
+function finishDrag(){
+  if(!dragNoteId) return;
+  dragNoteId = null;
+  lastDragTargetKey = null;
+  document.querySelectorAll(".group-body.drop-target").forEach(el=>el.classList.remove("drop-target"));
+  persist();
+  renderNotes();
+}
+document.addEventListener("mousemove", (e)=>{
+  if(!dragNoteId) return;
+  handleDragMove(e.clientX, e.clientY);
+});
+document.addEventListener("mouseup", ()=>{
+  if(dragNoteId) finishDrag();
+});
+
+function buildGroupSection(group, groupNotes){
+  const section = document.createElement("div");
+  section.className = "group-section";
+
+  if(group || groups.length>0){
+    const header = document.createElement("div");
+    header.className = "group-header" + (group ? "" : " ungrouped");
+    const nameEl = document.createElement("span");
+    nameEl.className = "group-name";
+    nameEl.textContent = group ? group.name : "Ungrouped";
+    header.appendChild(nameEl);
+    const countEl = document.createElement("span");
+    countEl.className = "group-count";
+    countEl.textContent = String(groupNotes.length);
+    header.appendChild(countEl);
+    if(group){
+      const renameBtn = document.createElement("button");
+      renameBtn.className = "project-icon-btn";
+      renameBtn.textContent = "✎";
+      renameBtn.title = "Rename heading";
+      renameBtn.addEventListener("click", ()=>{
+        const input = document.createElement("input");
+        input.type = "text"; input.className = "group-name-input"; input.value = group.name;
+        nameEl.replaceWith(input);
+        input.focus(); input.select();
+        const commit = ()=> renameGroup(group.id, input.value.trim() || group.name);
+        input.addEventListener("blur", commit);
+        input.addEventListener("keydown", (ev)=>{
+          if(ev.key==="Enter") input.blur();
+          if(ev.key==="Escape"){ input.removeEventListener("blur", commit); renderNotes(); }
+        });
+      });
+      header.appendChild(renameBtn);
+      const delBtn = document.createElement("button");
+      delBtn.className = "project-icon-btn del";
+      delBtn.textContent = "✕";
+      delBtn.title = "Delete heading (notes are kept, just ungrouped)";
+      armDeleteConfirm(delBtn, ()=> deleteGroup(group.id));
+      header.appendChild(delBtn);
+    }
+    section.appendChild(header);
+  }
+
+  const body = document.createElement("div");
+  body.className = "group-body";
+  body.dataset.groupId = group ? group.id : "";
+  if(groupNotes.length===0){
+    const emptyMsg = document.createElement("div");
+    emptyMsg.className = "group-body-empty";
+    emptyMsg.textContent = "Drag notes here";
+    body.appendChild(emptyMsg);
+  } else {
+    groupNotes.forEach(n=> body.appendChild(buildNoteCard(n)));
+  }
+  section.appendChild(body);
+  return section;
+}
+
 function renderNotes(){
   const listEl = document.getElementById("notesScroll");
-  const filtered = notes.filter(n=>{
-    if(!query) return true;
-    const hay = (n.section+" "+n.what+" "+n.why+" "+whereLabel(n)).toLowerCase();
-    return hay.includes(query);
-  });
   listEl.innerHTML = "";
-  if(filtered.length===0){
+
+  if(notes.length===0){
     const empty = document.createElement("div");
     empty.id = "notesEmpty";
-    empty.textContent = notes.length===0
-      ? 'No notes yet. Click a bar on the score, then "+ Add note" — or add one unlinked and connect it later.'
-      : "No notes match your search.";
+    empty.textContent = 'No notes yet. Click a bar on the score, then "+ Add note" — or add one unlinked and connect it later.';
     listEl.appendChild(empty);
     return;
   }
-  filtered.forEach(n=>{
+
+  if(query){
+    const filtered = notes.filter(n=>{
+      const hay = (n.section+" "+n.what+" "+n.why+" "+whereLabel(n)).toLowerCase();
+      return hay.includes(query);
+    });
+    if(filtered.length===0){
+      const empty = document.createElement("div");
+      empty.id = "notesEmpty";
+      empty.textContent = "No notes match your search.";
+      listEl.appendChild(empty);
+      return;
+    }
+    const body = document.createElement("div");
+    body.className = "group-body";
+    filtered.forEach(n=> body.appendChild(buildNoteCard(n)));
+    listEl.appendChild(body);
+    return;
+  }
+
+  groups.forEach(g=>{
+    listEl.appendChild(buildGroupSection(g, notes.filter(n=>n.groupId===g.id)));
+  });
+  const ungrouped = notes.filter(n=>n.groupId==null);
+  if(ungrouped.length>0 || groups.length===0){
+    listEl.appendChild(buildGroupSection(null, ungrouped));
+  }
+}
+
+function buildNoteCard(n){
     const card = document.createElement("div");
-    card.className = "note-card";
+    card.className = "note-card" + (n.id===dragNoteId ? " dragging" : "");
     card.dataset.id = n.id;
-    const hasEnd = n.endBarId!=null;
     card.innerHTML = `
       <div class="note-top">
-        <button class="where-badge${n.startBarId? '':' unlinked'}" data-action="where">${escapeHtml(whereLabel(n))}</button>
-        ${n.startBarId ? (hasEnd
-          ? '<button class="range-btn" data-action="clear-end" title="Remove range end">✕ end bar</button>'
-          : '<button class="range-btn" data-action="set-end" title="Pick a second bar to make this a range">+ end bar</button>') : ''}
+        <span class="drag-handle" title="Drag to reorder or move into a heading">⠿</span>
+        <button class="where-badge${n.startBarId? '':' unlinked'}" data-action="where" ${n.startBarId?'':'disabled'}>${escapeHtml(whereLabel(n))}</button>
+        <span class="bar-num-row">
+          <span class="field-label" style="margin:0;">Bar</span>
+          <input type="text" inputmode="numeric" class="bar-num-input" data-field="startBarNum" placeholder="#" value="${n.startBarNumber!=null?n.startBarNumber:''}">
+          <span class="bar-num-sep">–</span>
+          <input type="text" inputmode="numeric" class="bar-num-input" data-field="endBarNum" placeholder="(end)" value="${n.endBarNumber!=null?n.endBarNumber:''}" ${n.startBarId?'':'disabled'}>
+        </span>
         <input type="text" class="section-field" data-field="section" placeholder="Section label (e.g. Intro, Verse, Solo)…" value="${escapeHtml(n.section)}">
         <button class="note-del" data-action="delete">✕ Delete</button>
       </div>
@@ -1334,23 +1671,62 @@ function renderNotes(){
       <div class="note-listen">
         <span class="field-label" style="margin:0;">From</span>
         <input type="text" class="ts-input" data-field="start" placeholder="mm:ss" value="${n.startSec!=null?secToClock(n.startSec):''}">
+        <button class="link-btn now-btn" type="button" data-action="now-start" title="Capture the video's current time">Now</button>
         <span class="field-label" style="margin:0;">To</span>
         <input type="text" class="ts-input" data-field="end" placeholder="mm:ss (optional)" value="${n.endSec!=null?secToClock(n.endSec):''}">
+        <button class="link-btn now-btn" type="button" data-action="now-end" title="Capture the video's current time">Now</button>
         <button class="link-btn play" type="button" ${n.startSec==null?'disabled':''}>▶ Play</button>
       </div>
     `;
-    listEl.appendChild(card);
+
+    card.querySelector(".drag-handle").addEventListener("mousedown", (e)=>{
+      e.preventDefault();
+      dragNoteId = n.id;
+      lastDragTargetKey = null;
+      card.classList.add("dragging");
+    });
 
     armDeleteConfirm(card.querySelector('[data-action="delete"]'), ()=> deleteNote(n.id));
     const whereBtn = card.querySelector('[data-action="where"]');
     if(n.startBarId) whereBtn.addEventListener("click", ()=> jumpToBar(n.startPage, n.startBarId));
 
-    const setEndBtn = card.querySelector('[data-action="set-end"]');
-    if(setEndBtn) setEndBtn.addEventListener("click", ()=> startPickEndBar(n.id));
-    const clearEndBtn = card.querySelector('[data-action="clear-end"]');
-    if(clearEndBtn) clearEndBtn.addEventListener("click", ()=>{
-      n.endBarId = null; n.endPage = null; n.endBarNumber = null;
+    const startBarInput = card.querySelector('[data-field="startBarNum"]');
+    const endBarInput = card.querySelector('[data-field="endBarNum"]');
+    function flashInvalidBar(input){
+      input.classList.add("invalid");
+      setTimeout(()=> input.classList.remove("invalid"), 1200);
+    }
+    function commitBarNumber(input, isEnd){
+      const raw = input.value.trim();
+      if(!raw){
+        if(isEnd){
+          n.endBarId = null; n.endPage = null; n.endBarNumber = null;
+        } else {
+          // clearing the start bar leaves nothing for an end to attach to
+          n.startBarId = null; n.startPage = null; n.startBarNumber = null;
+          n.endBarId = null; n.endPage = null; n.endBarNumber = null;
+        }
+        persist(); renderNotes(); renderMarkerOverlay();
+        return;
+      }
+      const num = parseInt(raw, 10);
+      const found = isNaN(num) ? null : findMarkerByNumber(num);
+      if(!found){
+        flashInvalidBar(input);
+        input.value = isEnd ? (n.endBarNumber!=null?n.endBarNumber:'') : (n.startBarNumber!=null?n.startBarNumber:'');
+        return;
+      }
+      if(isEnd){
+        n.endBarId = found.marker.id; n.endPage = found.page; n.endBarNumber = found.marker.number;
+      } else {
+        n.startBarId = found.marker.id; n.startPage = found.page; n.startBarNumber = found.marker.number;
+      }
       persist(); renderNotes(); renderMarkerOverlay();
+    }
+    startBarInput.addEventListener("change", ()=> commitBarNumber(startBarInput, false));
+    endBarInput.addEventListener("change", ()=> commitBarNumber(endBarInput, true));
+    [startBarInput, endBarInput].forEach(inp=>{
+      inp.addEventListener("keydown", (e)=>{ if(e.key==="Enter") inp.blur(); });
     });
 
     const sectionInput = card.querySelector('[data-field="section"]');
@@ -1392,7 +1768,16 @@ function renderNotes(){
       inp.addEventListener("blur", ()=> updateLiveMarker(null));
     });
     playBtn.addEventListener("click", ()=>{ if(n.startSec!=null) playVideoAt(n.startSec, n.endSec); });
-  });
+
+    function captureCurrentTime(input, field){
+      if(!ytReady || !ytPlayer.getCurrentTime) return;
+      input.value = secToClock(ytPlayer.getCurrentTime());
+      commitTimestamp(input, field);
+    }
+    card.querySelector('[data-action="now-start"]').addEventListener("click", ()=> captureCurrentTime(startInput, "startSec"));
+    card.querySelector('[data-action="now-end"]').addEventListener("click", ()=> captureCurrentTime(endInput, "endSec"));
+
+    return card;
 }
 
 function onEditableKeydown(e){
@@ -1415,7 +1800,7 @@ function onEditableKeydown(e){
 // export / import project
 // =====================================================================
 document.getElementById("exportBtn").addEventListener("click", ()=>{
-  const blob = new Blob([JSON.stringify({ markersByPage, pageSystems, notes, barCounter, pdfName: currentProjectPdfName, videoId }, null, 2)], {type:"application/json"});
+  const blob = new Blob([JSON.stringify({ markersByPage, pageSystems, notes, groups, barCounter, pdfName: currentProjectPdfName, videoId }, null, 2)], {type:"application/json"});
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url; a.download = (currentProjectMeta ? currentProjectMeta.name.replace(/[^\w-]+/g,"-") : "score-analysis") + "-project.json";
@@ -1433,6 +1818,7 @@ document.getElementById("importFile").addEventListener("change", (e)=>{
       markersByPage = d.markersByPage || {};
       pageSystems = d.pageSystems || {};
       notes = (d.notes || []).map(migrateNote);
+      groups = d.groups || [];
       barCounter = d.barCounter || 0;
       if(d.videoId){ videoId = d.videoId; loadVideo(videoId, true); }
       persist();
@@ -1574,13 +1960,14 @@ setInterval(()=>{
   const pct = Math.min(100, Math.max(0, t/durationSec*100));
   vwPlayhead.style.left = pct + "%"; vwPlayhead.style.display = "block";
   vwProgress.style.width = pct + "%";
+  document.getElementById("vwNow").innerHTML = secToClock(t) + '<span class="vw-now-sep">/</span>' + secToClock(durationSec);
   if(activeEndSec!=null && t>=activeEndSec){
     ytPlayer.pauseVideo();
     updatePlayPauseIcon(false);
     activeEndSec = null;
   }
   if(ytPlayer.getPlayerState) updatePlayPauseIcon(ytPlayer.getPlayerState()===1);
-}, 500);
+}, 250);
 
 // =====================================================================
 // init
