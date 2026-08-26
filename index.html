@@ -29,6 +29,11 @@
   #homeView{display:none;flex-direction:column;height:100%;}
   #homeTopbar{padding:16px 20px;border-bottom:1px solid var(--line);background:var(--panel);display:flex;align-items:center;gap:12px;}
   #homeTopbar h1{font-size:1.1rem;margin:0;flex:1;}
+  #themePicker{display:flex;align-items:center;gap:7px;}
+  .theme-label{font-size:0.76rem;color:var(--ink-soft);margin-right:2px;white-space:nowrap;}
+  .theme-swatch{width:22px;height:22px;border-radius:50%;border:2px solid var(--line);background:var(--swatch-color);cursor:pointer;padding:0;transition:transform 0.12s,border-color 0.12s;flex-shrink:0;}
+  .theme-swatch:hover{transform:scale(1.15);}
+  .theme-swatch.active{border-color:var(--ink);transform:scale(1.15);}
   #homeGrid{flex:1;overflow:auto;padding:24px;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;align-content:start;}
   #homeEmpty{grid-column:1/-1;text-align:center;color:var(--ink-soft);padding:60px 20px;border:1px dashed var(--line);border-radius:var(--radius);}
   .project-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px;cursor:pointer;display:flex;flex-direction:column;gap:6px;transition:border-color 0.15s,box-shadow 0.15s;}
@@ -190,6 +195,7 @@
 <div id="homeView">
   <div id="homeTopbar">
     <h1>🎼 Score Analysis Studio — Projects</h1>
+    <div id="themePicker"><span class="theme-label">Theme</span></div>
     <button class="btn primary" id="newProjectBtn">+ New project</button>
   </div>
   <div id="homeGrid"></div>
@@ -232,6 +238,9 @@
     <button class="btn" id="exportBtn">⬇ Export project</button>
     <button class="btn" id="importBtn">⬆ Import project</button>
     <input type="file" id="importFile" accept="application/json" style="display:none;">
+    <button class="btn" id="exportDocxBtn">📄 Export Study Notes (.docx)</button>
+    <button class="btn" id="importDocxBtn">📥 Import Study Notes (.docx)</button>
+    <input type="file" id="importDocxFile" accept=".docx" style="display:none;">
     <div class="spacer"></div>
     <span class="status" id="topStatus">No score loaded</span>
   </div>
@@ -316,6 +325,55 @@
 <script src="https://www.youtube.com/iframe_api"></script>
 <script>
 pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+// =====================================================================
+// colour theme — a browser-wide preference (not tied to any one project),
+// so it's picked on the Home screen and applies everywhere. Only the accent
+// colour changes between themes; backgrounds/text stay neutral so contrast
+// and readability are never at risk, in either light or dark mode.
+// =====================================================================
+const THEMES = {
+  purple:  { swatch:"#7b5cff", light:{accent:"#7b5cff",accentSoft:"#efeaff"}, dark:{accent:"#a58bff",accentSoft:"#2a2440"} },
+  blue:    { swatch:"#2563eb", light:{accent:"#2563eb",accentSoft:"#e8f0fe"}, dark:{accent:"#7aa2f7",accentSoft:"#1b2a4a"} },
+  teal:    { swatch:"#0d9488", light:{accent:"#0d9488",accentSoft:"#e1f5f2"}, dark:{accent:"#5eead4",accentSoft:"#123a35"} },
+  rose:    { swatch:"#e11d6f", light:{accent:"#e11d6f",accentSoft:"#fde7f0"}, dark:{accent:"#f472b6",accentSoft:"#3a1c2c"} },
+  amber:   { swatch:"#d97706", light:{accent:"#d97706",accentSoft:"#fef3e0"}, dark:{accent:"#fbbf24",accentSoft:"#3a2a10"} },
+  crimson: { swatch:"#dc2626", light:{accent:"#dc2626",accentSoft:"#fde8e8"}, dark:{accent:"#f87171",accentSoft:"#3a1717"} }
+};
+const THEME_KEY = "scoreStudioTheme";
+let currentTheme = localStorage.getItem(THEME_KEY);
+if(!THEMES[currentTheme]) currentTheme = "purple";
+
+function applyTheme(){
+  const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const t = THEMES[currentTheme][isDark ? "dark" : "light"];
+  document.documentElement.style.setProperty("--accent", t.accent);
+  document.documentElement.style.setProperty("--accent-soft", t.accentSoft);
+  document.querySelectorAll(".theme-swatch").forEach(el=>{
+    el.classList.toggle("active", el.dataset.theme===currentTheme);
+  });
+}
+function setTheme(key){
+  if(!THEMES[key]) return;
+  currentTheme = key;
+  try{ localStorage.setItem(THEME_KEY, key); }catch(e){ /* storage blocked */ }
+  applyTheme();
+}
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
+
+function renderThemePicker(){
+  const picker = document.getElementById("themePicker");
+  picker.querySelectorAll(".theme-swatch").forEach(el=>el.remove());
+  Object.keys(THEMES).forEach(key=>{
+    const btn = document.createElement("button");
+    btn.className = "theme-swatch" + (key===currentTheme ? " active" : "");
+    btn.dataset.theme = key;
+    btn.style.setProperty("--swatch-color", THEMES[key].swatch);
+    btn.title = key.charAt(0).toUpperCase() + key.slice(1);
+    btn.addEventListener("click", ()=> setTheme(key));
+    picker.appendChild(btn);
+  });
+}
 
 // =====================================================================
 // state
@@ -828,11 +886,11 @@ let pendingRenderPageNum = null;
 function renderPage(pageNum){
   if(renderInProgress){
     pendingRenderPageNum = pageNum;
-    return;
+    return Promise.resolve(); // a superseded request — see waitUntilRenderIdle() for callers that need to await the real thing
   }
   renderInProgress = true;
   const renderingForProject = currentProjectId; // guard against a slow render outliving a project switch
-  pdfDoc.getPage(pageNum).then(page=>{
+  return pdfDoc.getPage(pageNum).then(page=>{
     if(currentProjectId !== renderingForProject) return;
     const scroll = document.getElementById("scoreScroll");
     const targetWidth = Math.min(scroll.clientWidth - 40, 900) * zoomLevel;
@@ -868,6 +926,17 @@ function renderPage(pageNum){
       pendingRenderPageNum = null;
       renderPage(next);
     }
+  });
+}
+
+// lets a caller (e.g. docx export) wait for any in-flight/queued render started
+// elsewhere to fully settle before it issues its own renderPage() calls
+function waitUntilRenderIdle(){
+  return new Promise(resolve=>{
+    (function check(){
+      if(!renderInProgress && pendingRenderPageNum===null) resolve();
+      else setTimeout(check, 50);
+    })();
   });
 }
 
@@ -1807,6 +1876,316 @@ document.getElementById("exportBtn").addEventListener("click", ()=>{
   document.body.appendChild(a); a.click(); a.remove();
   URL.revokeObjectURL(url);
 });
+
+// =====================================================================
+// export to the class's Word study-note scaffold — a numbered
+// "Elements(s) / Sub Element(s) - <heading>" line per group, followed by
+// one Example|Analysis table per note in it (matching the teacher's
+// original template exactly: peach header row, black single-line borders,
+// A4 page). The "Example" side gets an actual cropped image of that bar
+// straight from the loaded score when possible, falling back to a text
+// caption (bar range / timestamp) if no PDF or no linked bar is available —
+// a single note's image never blocks the rest of the export, thanks to a
+// per-capture timeout.
+// =====================================================================
+async function exportStudyNotesDocx(){
+  if(!currentProjectId) return;
+  const btn = document.getElementById("exportDocxBtn");
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Generating…";
+  const originalPage = currentPage;
+  try{
+    const docxLib = await import("https://cdn.jsdelivr.net/npm/docx@8/build/index.mjs");
+    const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, ShadingType, AlignmentType, VerticalAlign, ImageRun, LevelFormat, BorderStyle } = docxLib;
+
+    const LEFT_W = 3791, RIGHT_W = 5235; // twips, matches the scaffold's ~42/58 column split
+    const borderLine = { style: BorderStyle.SINGLE, size: 8, color: "000000" };
+    const tableBorders = { top: borderLine, bottom: borderLine, left: borderLine, right: borderLine, insideHorizontal: borderLine, insideVertical: borderLine };
+    const cellMargins = { top:100, bottom:100, left:100, right:100 };
+
+    function headerCell(text, width){
+      return new TableCell({
+        width: { size: width, type: WidthType.DXA },
+        shading: { type: ShadingType.CLEAR, fill: "fce5cd" },
+        verticalAlign: VerticalAlign.TOP,
+        margins: cellMargins,
+        children: [ new Paragraph({ alignment: AlignmentType.CENTER, children: [ new TextRun({ text, bold:true }) ] }) ]
+      });
+    }
+
+    // Reuse the app's own render pipeline (main #pdfCanvas) rather than a parallel
+    // pdfDoc.getPage()+render() call — pdf.js hangs forever if a page already
+    // rendered elsewhere gets render() called on it a second time.
+    async function ensurePageShown(pageNum){
+      await waitUntilRenderIdle();
+      if(currentPage !== pageNum){
+        currentPage = pageNum;
+        await renderPage(pageNum);
+        await waitUntilRenderIdle();
+      }
+    }
+
+    async function captureBarImage(note){
+      if(!note.startBarId || !pdfDoc) return null;
+      try{
+        const startMarker = findMarkerById(note.startBarId);
+        if(!startMarker) return null;
+        const endMarker = note.endBarId ? findMarkerById(note.endBarId) : null;
+        await ensurePageShown(note.startPage || 1);
+        const pageCanvas = document.getElementById("pdfCanvas");
+
+        const leftFrac = Math.max(0, startMarker.xFrac - 0.10);
+        const rightFrac = Math.min(1, (endMarker ? endMarker.xFrac : startMarker.xFrac) + 0.10);
+        const topFrac = Math.max(0, startMarker.yTopFrac - 0.01);
+        const botFrac = Math.min(1, startMarker.yBotFrac + 0.01);
+        const cropX = leftFrac*pageCanvas.width, cropW = Math.max(1, (rightFrac-leftFrac)*pageCanvas.width);
+        const cropY = topFrac*pageCanvas.height, cropH = Math.max(1, (botFrac-topFrac)*pageCanvas.height);
+
+        const cropCanvas = document.createElement("canvas");
+        cropCanvas.width = Math.ceil(cropW); cropCanvas.height = Math.ceil(cropH);
+        cropCanvas.getContext("2d").drawImage(pageCanvas, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+
+        const blob = await new Promise(resolve=> cropCanvas.toBlob(resolve, "image/png"));
+        if(!blob) return null;
+        const arrayBuffer = await blob.arrayBuffer();
+        const maxWidthPx = 220; // fits inside the left column with margins
+        const scale = Math.min(1, maxWidthPx/cropCanvas.width);
+        return {
+          data: new Uint8Array(arrayBuffer),
+          width: Math.max(1, Math.round(cropCanvas.width*scale)),
+          height: Math.max(1, Math.round(cropCanvas.height*scale))
+        };
+      }catch(e){ return null; } // a single failed capture falls back to text, never blocks export
+    }
+
+    function exampleCell(imageResult, note){
+      const children = [];
+      if(imageResult){
+        children.push(new Paragraph({
+          alignment: AlignmentType.CENTER,
+          children: [ new ImageRun({ data: imageResult.data, transformation: { width: imageResult.width, height: imageResult.height }, type: "png" }) ]
+        }));
+      }
+      const caption = whereLabel(note) + (note.startSec!=null ? " · " + secToClock(note.startSec) + (note.endSec!=null ? "–"+secToClock(note.endSec) : "") : "");
+      children.push(new Paragraph({ alignment: AlignmentType.CENTER, children: [ new TextRun({ text: caption, italics:true, size:18 }) ] }));
+      return new TableCell({ width: { size: LEFT_W, type: WidthType.DXA }, verticalAlign: VerticalAlign.TOP, margins: cellMargins, children });
+    }
+
+    function analysisCell(note){
+      const children = [];
+      children.push(new Paragraph({ children: [ new TextRun({ text:"What (compositional / theoretical / notational)", bold:true, size:18 }) ] }));
+      (note.what && note.what.trim() ? note.what.split("\n") : ["(not filled in)"]).forEach(line=>
+        children.push(new Paragraph({ children:[ new TextRun(line) ] }))
+      );
+      children.push(new Paragraph({ children: [ new TextRun("") ] }));
+      children.push(new Paragraph({ children: [ new TextRun({ text:"Why (effect)", bold:true, size:18 }) ] }));
+      (note.why && note.why.trim() ? note.why.split("\n") : ["(not filled in)"]).forEach(line=>
+        children.push(new Paragraph({ children:[ new TextRun(line) ] }))
+      );
+      return new TableCell({ width: { size: RIGHT_W, type: WidthType.DXA }, verticalAlign: VerticalAlign.TOP, margins: cellMargins, children });
+    }
+
+    async function buildNoteBlock(note){
+      const imageResult = await captureBarImage(note);
+      const table = new Table({
+        width: { size: LEFT_W+RIGHT_W, type: WidthType.DXA },
+        columnWidths: [LEFT_W, RIGHT_W],
+        borders: tableBorders,
+        rows: [
+          new TableRow({ children: [ headerCell("Example (Drawing of quotation)", LEFT_W), headerCell("Analysis", RIGHT_W) ] }),
+          new TableRow({ children: [ exampleCell(imageResult, note), analysisCell(note) ] })
+        ]
+      });
+      return [ table, new Paragraph({ text: "" }) ];
+    }
+
+    function headingParagraph(name){
+      return new Paragraph({
+        numbering: { reference: "elementHeadingNumbering", level: 0 },
+        children: [
+          new TextRun({ text: "Elements(s) / Sub Element(s) ", bold:true }),
+          new TextRun({ text: "- ", bold:false }),
+          new TextRun({ text: name, bold:true })
+        ]
+      });
+    }
+
+    const bodyChildren = [];
+    for(const g of groups){
+      const groupNotes = notes.filter(n=>n.groupId===g.id);
+      if(groupNotes.length===0) continue;
+      bodyChildren.push(headingParagraph(g.name));
+      for(const n of groupNotes) (await buildNoteBlock(n)).forEach(el=>bodyChildren.push(el));
+    }
+    const ungrouped = notes.filter(n=>n.groupId==null);
+    if(ungrouped.length>0){
+      if(groups.length>0) bodyChildren.push(headingParagraph("Ungrouped"));
+      for(const n of ungrouped) (await buildNoteBlock(n)).forEach(el=>bodyChildren.push(el));
+    }
+    if(bodyChildren.length===0){
+      bodyChildren.push(new Paragraph({ children: [ new TextRun("No notes yet — add some analysis notes before exporting.") ] }));
+    }
+
+    const doc = new Document({
+      numbering: {
+        config: [{
+          reference: "elementHeadingNumbering",
+          levels: [{ level:0, format: LevelFormat.DECIMAL, text:"%1.", alignment: AlignmentType.LEFT, style:{ paragraph:{ indent:{ left:720, hanging:360 } } } }]
+        }]
+      },
+      sections: [{
+        properties: { page: { size: { width: 11906, height: 16838 }, margin: { top:1440, bottom:1440, left:1440, right:1440 } } },
+        children: bodyChildren
+      }]
+    });
+
+    const blob = await Packer.toBlob(doc);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = (currentProjectMeta ? currentProjectMeta.name.replace(/[^\w-]+/g,"-") : "score-analysis") + "-study-notes.docx";
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  }catch(err){
+    console.error("Study notes export failed:", err);
+    alert("Couldn't generate the study notes document: " + err.message);
+  }finally{
+    if(currentPage !== originalPage){
+      currentPage = originalPage;
+      renderPage(originalPage);
+    }
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+}
+document.getElementById("exportDocxBtn").addEventListener("click", exportStudyNotesDocx);
+
+// Imports a filled-in study-notes scaffold (.docx) back into the current project.
+// Only the heading names and the Analysis cell's text can be recovered from a Word
+// file — there's no way to know which bar, timestamp, or video that text was about —
+// so every imported note comes in unlinked, to be connected to a bar afterward.
+async function importStudyNotesDocx(file){
+  if(!currentProjectId) return;
+  const btn = document.getElementById("importDocxBtn");
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Importing…";
+  try{
+    const { unzipSync, strFromU8 } = await import("https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js");
+    const buf = new Uint8Array(await file.arrayBuffer());
+    const zipped = unzipSync(buf, { filter: f => f.name === "word/document.xml" });
+    const xmlBytes = zipped["word/document.xml"];
+    if(!xmlBytes) throw new Error("This doesn't look like a Word .docx file (no document.xml found).");
+    const xmlText = strFromU8(xmlBytes);
+    const xmlDoc = new DOMParser().parseFromString(xmlText, "application/xml");
+    if(xmlDoc.getElementsByTagName("parsererror").length) throw new Error("Couldn't read the Word document's contents.");
+    const body = xmlDoc.getElementsByTagName("w:body")[0];
+    if(!body) throw new Error("Couldn't find any content in this document.");
+
+    const HEADING_RE = /elements?\(s\)\s*\/\s*sub\s*elements?\(s\)\s*-?\s*(.*)/i;
+    function textOf(pEl){
+      const ts = pEl.getElementsByTagName("w:t");
+      let s = "";
+      for(let i=0;i<ts.length;i++) s += ts[i].textContent;
+      return s;
+    }
+    function directChildren(el, tag){ return Array.from(el.children).filter(c=>c.tagName===tag); }
+    // the original scaffold leaves Analysis as one freeform block, but our own
+    // exported files label it as "What (...)" / "Why (effect)" paragraphs —
+    // split on those labels when present, otherwise treat it all as one block.
+    function splitWhatWhy(lines){
+      const whatIdx = lines.findIndex(l=>/^\s*what\b/i.test(l));
+      const whyIdx = lines.findIndex(l=>/^\s*why\b/i.test(l));
+      if(whatIdx===-1 && whyIdx===-1) return { what: lines.join("\n").trim(), why: "" };
+      let whatLines, whyLines;
+      if(whatIdx!==-1 && whyIdx!==-1 && whyIdx>whatIdx){
+        whatLines = lines.slice(whatIdx+1, whyIdx);
+        whyLines = lines.slice(whyIdx+1);
+      }else if(whatIdx!==-1){
+        whatLines = lines.slice(whatIdx+1);
+        whyLines = [];
+      }else{
+        whatLines = [];
+        whyLines = lines.slice(whyIdx+1);
+      }
+      return { what: whatLines.join("\n").trim(), why: whyLines.join("\n").trim() };
+    }
+
+    let currentGroupId = null;
+    let importedNotes = 0, importedHeadings = 0;
+    const groupIdByName = new Map(groups.map(g=>[g.name.trim().toLowerCase(), g.id]));
+
+    for(const child of Array.from(body.children)){
+      if(child.tagName === "w:p"){
+        const text = textOf(child).trim();
+        if(!text) continue;
+        const m = text.match(HEADING_RE);
+        if(!m) continue;
+        const name = m[1].trim();
+        if(!name || /^ungrouped$/i.test(name)){
+          currentGroupId = null;
+        }else{
+          const key = name.toLowerCase();
+          if(groupIdByName.has(key)){
+            currentGroupId = groupIdByName.get(key);
+          }else{
+            const g = { id: uid(), name };
+            groups.push(g);
+            groupIdByName.set(key, g.id);
+            currentGroupId = g.id;
+            importedHeadings++;
+          }
+        }
+      }else if(child.tagName === "w:tbl"){
+        const gridCols = child.getElementsByTagName("w:gridCol");
+        const rows = directChildren(child, "w:tr");
+        if(gridCols.length<2 || rows.length<2) continue; // not a two-column scaffold table
+        const analysisCellLines = [];
+        for(let r=1; r<rows.length; r++){
+          const tcs = directChildren(rows[r], "w:tc");
+          if(tcs.length<2) continue;
+          directChildren(tcs[1], "w:p").forEach(p=> analysisCellLines.push(textOf(p)));
+        }
+        if(!analysisCellLines.some(l=>l.trim())) continue; // skip untouched/blank tables
+        const { what, why } = splitWhatWhy(analysisCellLines);
+        notes.push({
+          id: uid(),
+          groupId: currentGroupId,
+          startBarId: null, startPage: null, startBarNumber: null,
+          endBarId: null, endPage: null, endBarNumber: null,
+          section: "",
+          what, why,
+          startSec: null, endSec: null
+        });
+        importedNotes++;
+      }
+    }
+
+    if(importedNotes===0){
+      alert("No filled-in Example/Analysis tables were found in that document.");
+    }else{
+      persist();
+      renderNotes();
+      alert("Imported " + importedNotes + " note" + (importedNotes===1?"":"s") +
+        (importedHeadings ? " under " + importedHeadings + " new heading" + (importedHeadings===1?"":"s") : "") +
+        ". Word can't tell us which bar, timestamp, or video moment these belong to, so they've come in unlinked — type a bar number into each note's \"Bar #\" field to connect it.");
+    }
+  }catch(err){
+    console.error("Study notes import failed:", err);
+    alert("Couldn't import that document: " + err.message);
+  }finally{
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+}
+document.getElementById("importDocxBtn").addEventListener("click", ()=> document.getElementById("importDocxFile").click());
+document.getElementById("importDocxFile").addEventListener("change", (e)=>{
+  const file = e.target.files[0];
+  e.target.value = "";
+  if(!file || !currentProjectId) return;
+  importStudyNotesDocx(file);
+});
 document.getElementById("importBtn").addEventListener("click", ()=> document.getElementById("importFile").click());
 document.getElementById("importFile").addEventListener("change", (e)=>{
   const file = e.target.files[0];
@@ -1973,6 +2352,8 @@ setInterval(()=>{
 // init
 // =====================================================================
 (async function init(){
+  renderThemePicker();
+  applyTheme();
   await migrateOldSingleProjectData();
   showHome();
 })();
