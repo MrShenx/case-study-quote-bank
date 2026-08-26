@@ -12,12 +12,18 @@
     --radius:12px;
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   }
+  /* system preference applies automatically, unless the student picks an explicit mode below */
   @media (prefers-color-scheme: dark){
-    :root{
+    :root:not([data-theme="light"]){
       --bg:#15171a;--panel:#1e2125;--ink:#e9eaec;--ink-soft:#a2a8b0;--line:#2c3036;
       --accent:#a58bff;--accent-soft:#2a2440;--good:#6fd696;--good-soft:#173229;
       --bad:#f0897a;--bad-soft:#3a1f18;--warn:#f0c56a;--warn-bg:#3a2f10;
     }
+  }
+  :root[data-theme="dark"]{
+    --bg:#15171a;--panel:#1e2125;--ink:#e9eaec;--ink-soft:#a2a8b0;--line:#2c3036;
+    --accent:#a58bff;--accent-soft:#2a2440;--good:#6fd696;--good-soft:#173229;
+    --bad:#f0897a;--bad-soft:#3a1f18;--warn:#f0c56a;--warn-bg:#3a2f10;
   }
   *{box-sizing:border-box;}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);overflow:hidden;}
@@ -34,6 +40,10 @@
   .theme-swatch{width:22px;height:22px;border-radius:50%;border:2px solid var(--line);background:var(--swatch-color);cursor:pointer;padding:0;transition:transform 0.12s,border-color 0.12s;flex-shrink:0;}
   .theme-swatch:hover{transform:scale(1.15);}
   .theme-swatch.active{border-color:var(--ink);transform:scale(1.15);}
+  #modePicker{display:flex;align-items:center;gap:2px;background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:2px;}
+  .mode-btn{border:none;background:transparent;color:var(--ink-soft);font-size:0.85rem;line-height:1;padding:5px 9px;border-radius:999px;cursor:pointer;}
+  .mode-btn:hover{color:var(--ink);}
+  .mode-btn.active{background:var(--accent);color:#fff;}
   #homeGrid{flex:1;overflow:auto;padding:24px;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;align-content:start;}
   #homeEmpty{grid-column:1/-1;text-align:center;color:var(--ink-soft);padding:60px 20px;border:1px dashed var(--line);border-radius:var(--radius);}
   .project-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px;cursor:pointer;display:flex;flex-direction:column;gap:6px;transition:border-color 0.15s,box-shadow 0.15s;}
@@ -196,6 +206,7 @@
   <div id="homeTopbar">
     <h1>🎼 Score Analysis Studio — Projects</h1>
     <div id="themePicker"><span class="theme-label">Theme</span></div>
+    <div id="modePicker"></div>
     <button class="btn primary" id="newProjectBtn">+ New project</button>
   </div>
   <div id="homeGrid"></div>
@@ -344,13 +355,32 @@ const THEME_KEY = "scoreStudioTheme";
 let currentTheme = localStorage.getItem(THEME_KEY);
 if(!THEMES[currentTheme]) currentTheme = "purple";
 
+// light/dark mode — "system" follows the OS/browser setting (the old behaviour);
+// an explicit light/dark choice overrides that via the [data-theme] attribute,
+// which the CSS above gives priority over the prefers-color-scheme media query.
+const MODES = ["system","light","dark"];
+const MODE_LABELS = { system:"🖥️ System", light:"☀️ Light", dark:"🌙 Dark" };
+const MODE_KEY = "scoreStudioMode";
+let currentMode = localStorage.getItem(MODE_KEY);
+if(!MODES.includes(currentMode)) currentMode = "system";
+
+function isDarkMode(){
+  return currentMode==="system"
+    ? window.matchMedia("(prefers-color-scheme: dark)").matches
+    : currentMode==="dark";
+}
+
 function applyTheme(){
-  const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-  const t = THEMES[currentTheme][isDark ? "dark" : "light"];
+  if(currentMode==="system") document.documentElement.removeAttribute("data-theme");
+  else document.documentElement.dataset.theme = currentMode;
+  const t = THEMES[currentTheme][isDarkMode() ? "dark" : "light"];
   document.documentElement.style.setProperty("--accent", t.accent);
   document.documentElement.style.setProperty("--accent-soft", t.accentSoft);
   document.querySelectorAll(".theme-swatch").forEach(el=>{
     el.classList.toggle("active", el.dataset.theme===currentTheme);
+  });
+  document.querySelectorAll(".mode-btn").forEach(el=>{
+    el.classList.toggle("active", el.dataset.mode===currentMode);
   });
 }
 function setTheme(key){
@@ -359,7 +389,26 @@ function setTheme(key){
   try{ localStorage.setItem(THEME_KEY, key); }catch(e){ /* storage blocked */ }
   applyTheme();
 }
+function setMode(key){
+  if(!MODES.includes(key)) return;
+  currentMode = key;
+  try{ localStorage.setItem(MODE_KEY, key); }catch(e){ /* storage blocked */ }
+  applyTheme();
+}
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
+
+function renderModePicker(){
+  const picker = document.getElementById("modePicker");
+  picker.innerHTML = "";
+  MODES.forEach(key=>{
+    const btn = document.createElement("button");
+    btn.className = "mode-btn" + (key===currentMode ? " active" : "");
+    btn.dataset.mode = key;
+    btn.textContent = MODE_LABELS[key];
+    btn.addEventListener("click", ()=> setMode(key));
+    picker.appendChild(btn);
+  });
+}
 
 function renderThemePicker(){
   const picker = document.getElementById("themePicker");
@@ -2353,6 +2402,7 @@ setInterval(()=>{
 // =====================================================================
 (async function init(){
   renderThemePicker();
+  renderModePicker();
   applyTheme();
   await migrateOldSingleProjectData();
   showHome();
