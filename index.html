@@ -100,14 +100,20 @@
   .marker-line:hover{opacity:1;width:3px;margin-left:-1.5px;}
   .marker-line.linked{background:var(--good);}
   .marker-line.selected{background:var(--bad);width:3px;}
+  .marker-cluster{position:absolute;transform:translate(-50%,-100%);top:0;display:flex;align-items:center;gap:4px;z-index:6;}
   .marker-badge{
-    position:absolute;transform:translate(-50%,-100%);top:0;
     background:var(--accent);color:#fff;font-size:10.5px;font-weight:700;line-height:1;
-    padding:2px 6px;border-radius:8px;cursor:pointer;z-index:6;white-space:nowrap;user-select:none;
+    padding:2px 6px;border-radius:8px;cursor:pointer;white-space:nowrap;user-select:none;
   }
   .marker-badge.linked{background:var(--good);}
   .marker-badge.selected{background:var(--bad);}
   .marker-badge[contenteditable="true"]{cursor:text;outline:2px solid #fff;}
+  .marker-del-btn{
+    flex-shrink:0;width:14px;height:14px;line-height:14px;text-align:center;
+    background:var(--bad);color:#fff;font-size:10px;font-weight:700;
+    border-radius:50%;cursor:pointer;user-select:none;
+  }
+  .marker-del-btn:hover{opacity:0.8;}
   .system-band{position:absolute;left:0;right:0;background:var(--accent);opacity:0.05;pointer-events:none;z-index:1;border-top:1px dashed transparent;border-bottom:1px dashed transparent;}
   body.system-mode .system-band{pointer-events:auto;cursor:pointer;}
   body.system-mode .system-band:hover{background:var(--bad);opacity:0.15;border-color:var(--bad);}
@@ -145,6 +151,9 @@
   .group-body{min-height:14px;border-radius:var(--radius);transition:background 0.1s,outline 0.1s;}
   .group-body.drop-target{background:var(--accent-soft);outline:2px dashed var(--accent);outline-offset:4px;}
   .group-body-empty{font-size:0.78rem;color:var(--ink-soft);text-align:center;padding:14px;border:1px dashed var(--line);border-radius:var(--radius);}
+  .group-section.collapsed .group-body{display:none;}
+  .group-collapse-btn{background:none;border:none;color:inherit;cursor:pointer;padding:2px 4px;font-size:0.7rem;line-height:1;flex-shrink:0;transition:transform 0.12s;}
+  .group-section.collapsed .group-collapse-btn{transform:rotate(-90deg);}
   .where-badge{font-size:0.72rem;font-weight:700;padding:3px 10px;border-radius:999px;background:var(--accent-soft);color:var(--accent);cursor:pointer;border:none;}
   .where-badge.unlinked{background:var(--warn-bg);color:var(--warn);cursor:default;}
   .where-badge:disabled{opacity:1;}
@@ -298,6 +307,7 @@
     <div id="notesPanel">
       <div id="notesToolbar">
         <input type="text" id="noteSearch" placeholder="Search Where / What / Why…">
+        <button class="btn" id="collapseAllBtn">▾ Collapse all</button>
         <button class="btn" id="addHeadingBtn">+ Add heading</button>
         <button class="btn primary" id="addNoteBtn">+ Add note</button>
       </div>
@@ -433,7 +443,8 @@ const ZOOM_MIN = 0.5, ZOOM_MAX = 2.5, ZOOM_STEP = 0.15;
 let markersByPage = {};   // pageNum -> [{id, xFrac, yTopFrac, yBotFrac, number}]
 let pageSystems = {};     // pageNum -> [{yTopFrac, yBotFrac, manual?}]
 let notes = [];           // {id, groupId|null, startBarId|null, startPage, startBarNumber, endBarId|null, endPage, endBarNumber, section, what, why, startSec, endSec}
-let groups = [];          // {id, name} — student-created sub-headings notes can be dragged into
+let groups = [];          // {id, name, collapsed} — student-created sub-headings notes can be dragged into
+let ungroupedCollapsed = false;
 let barCounter = 0;
 let dragNoteId = null;    // note.id currently being dragged, or null
 let selectedMarkerId = null;
@@ -578,8 +589,10 @@ function normalizeProjectRecord(rec){
   rec.pageSystems = rec.pageSystems || {};
   rec.notes = (rec.notes || []).map(migrateNote);
   rec.groups = rec.groups || [];
+  rec.groups.forEach(g=>{ if(g.collapsed===undefined) g.collapsed = false; });
   rec.barCounter = rec.barCounter || 0;
   rec.videoId = rec.videoId || null;
+  rec.ungroupedCollapsed = rec.ungroupedCollapsed || false;
   Object.values(rec.markersByPage).forEach(list=>{
     (list||[]).forEach(m=>{ if(m.manual===undefined) m.manual = false; });
   });
@@ -597,7 +610,7 @@ function persist(){
     createdAt: currentProjectMeta.createdAt,
     updatedAt: Date.now(),
     pdfName: currentProjectPdfName,
-    markersByPage, pageSystems, notes, groups, barCounter, videoId
+    markersByPage, pageSystems, notes, groups, barCounter, videoId, ungroupedCollapsed
   });
 }
 function persistPdfBlob(blob){
@@ -773,6 +786,7 @@ async function openProject(id){
   pageSystems = rec.pageSystems;
   barCounter = rec.barCounter;
   videoId = rec.videoId;
+  ungroupedCollapsed = rec.ungroupedCollapsed;
 
   pendingRenderPageNum = null; // abandon any queued render from the project we're leaving
   pdfDoc = null; numPages = 0; currentPage = 1; selectedMarkerId = null;
@@ -1244,11 +1258,12 @@ document.getElementById("tagModeBtn").addEventListener("click", ()=>{
   document.body.classList.toggle("tag-mode", tagMode);
   document.getElementById("tagModeBtn").classList.toggle("active", tagMode);
   document.getElementById("tagModeBtn").textContent = tagMode ? "✓ Tag mode on" : "✎ Tag mode";
+  renderMarkerOverlay(); // the delete (✕) button and click-to-delete only apply in tag mode
 });
 
 document.getElementById("systemModeBtn").addEventListener("click", ()=>{
   systemMode = !systemMode;
-  if(systemMode && tagMode){ tagMode = false; document.body.classList.remove("tag-mode"); document.getElementById("tagModeBtn").classList.remove("active"); document.getElementById("tagModeBtn").textContent = "✎ Tag mode"; }
+  if(systemMode && tagMode){ tagMode = false; document.body.classList.remove("tag-mode"); document.getElementById("tagModeBtn").classList.remove("active"); document.getElementById("tagModeBtn").textContent = "✎ Tag mode"; renderMarkerOverlay(); }
   document.body.classList.toggle("system-mode", systemMode);
   document.getElementById("systemModeBtn").classList.toggle("active", systemMode);
   document.getElementById("systemModeBtn").textContent = systemMode ? "✓ Marking systems" : "📏 Mark system";
@@ -1303,10 +1318,18 @@ function renumberAllBars(){
     if(n.startBarId){
       const m = findMarkerById(n.startBarId);
       if(m) n.startBarNumber = m.number;
+    } else if(n.startBarNumber!=null){
+      // a bar number with no marker yet (e.g. imported from Word before the
+      // score was tagged) — link up automatically as soon as that bar exists
+      const found = findMarkerByNumber(n.startBarNumber);
+      if(found){ n.startBarId = found.marker.id; n.startPage = found.page; }
     }
     if(n.endBarId){
       const m = findMarkerById(n.endBarId);
       if(m) n.endBarNumber = m.number;
+    } else if(n.endBarNumber!=null){
+      const found = findMarkerByNumber(n.endBarNumber);
+      if(found){ n.endBarId = found.marker.id; n.endPage = found.page; }
     }
   });
 }
@@ -1334,7 +1357,7 @@ function enterBadgeEditMode(badge){
 
 function renderMarkerOverlay(){
   const wrap = document.getElementById("canvasWrap");
-  wrap.querySelectorAll(".marker-line,.marker-badge,.system-band").forEach(el=>el.remove());
+  wrap.querySelectorAll(".marker-line,.marker-cluster,.system-band").forEach(el=>el.remove());
   const canvas = document.getElementById("pdfCanvas");
   const dispW = canvas.clientWidth, dispH = canvas.clientHeight;
 
@@ -1366,13 +1389,32 @@ function renderMarkerOverlay(){
     line.addEventListener("click", (e)=>{ e.stopPropagation(); onMarkerClick(m.id); });
     wrap.appendChild(line);
 
+    const cluster = document.createElement("div");
+    cluster.className = "marker-cluster";
+    cluster.style.left = (m.xFrac*dispW) + "px";
+    cluster.style.top = (m.yTopFrac*dispH) + "px";
+    wrap.appendChild(cluster);
+
+    if(tagMode){
+      const delBtn = document.createElement("div");
+      delBtn.className = "marker-del-btn";
+      delBtn.textContent = "✕";
+      delBtn.title = "Delete this bar marker";
+      delBtn.addEventListener("click", (e)=>{ e.stopPropagation(); deleteMarker(m.id); });
+      cluster.appendChild(delBtn);
+    }
+
     const badge = document.createElement("div");
     badge.className = "marker-badge" + (linked?" linked":"") + (m.id===selectedMarkerId?" selected":"");
-    badge.style.left = (m.xFrac*dispW) + "px";
-    badge.style.top = (m.yTopFrac*dispH) + "px";
     badge.textContent = m.number;
     badge.dataset.id = m.id;
-    badge.addEventListener("click", (e)=>{ e.stopPropagation(); onMarkerClick(m.id); });
+    badge.addEventListener("click", (e)=>{
+      e.stopPropagation();
+      // in tag mode the marker LINE deletes on click, but the number badge is
+      // the dedicated rename target — it must never fall through to delete
+      if(tagMode) enterBadgeEditMode(badge);
+      else onMarkerClick(m.id);
+    });
     badge.addEventListener("dblclick", (e)=>{ e.stopPropagation(); enterBadgeEditMode(badge); });
     badge.addEventListener("blur", ()=>{
       if(badge.isContentEditable){
@@ -1394,7 +1436,7 @@ function renderMarkerOverlay(){
       if(e.key==="Enter"){ e.preventDefault(); badge.blur(); }
       if(e.key==="Escape"){ badge.textContent = m.number; badge.blur(); }
     });
-    wrap.appendChild(badge);
+    cluster.appendChild(badge);
   });
 }
 
@@ -1457,14 +1499,18 @@ document.addEventListener("mouseup", (e)=>{
   renderMarkerOverlay();
 });
 
+function deleteMarker(id){
+  markersByPage[currentPage] = (markersByPage[currentPage]||[]).filter(m=>m.id!==id);
+  if(selectedMarkerId===id) selectedMarkerId=null;
+  renumberAllBars();
+  persist();
+  renderMarkerOverlay();
+  renderNotes();
+}
+
 function onMarkerClick(id){
   if(tagMode){
-    markersByPage[currentPage] = (markersByPage[currentPage]||[]).filter(m=>m.id!==id);
-    if(selectedMarkerId===id) selectedMarkerId=null;
-    renumberAllBars();
-    persist();
-    renderMarkerOverlay();
-    renderNotes();
+    deleteMarker(id);
     return;
   }
   const m = (markersByPage[currentPage]||[]).find(x=>x.id===id);
@@ -1553,7 +1599,17 @@ function whereLabel(note){
 
 // ---------- sub-heading groups ----------
 function createGroup(name){
-  groups.push({ id: uid(), name });
+  groups.push({ id: uid(), name, collapsed: false });
+  persist();
+  renderNotes();
+}
+function toggleGroupCollapsed(groupId){
+  if(groupId===null){ ungroupedCollapsed = !ungroupedCollapsed; }
+  else{
+    const g = groups.find(x=>x.id===groupId);
+    if(!g) return;
+    g.collapsed = !g.collapsed;
+  }
   persist();
   renderNotes();
 }
@@ -1571,6 +1627,13 @@ function deleteGroup(id){
   renderNotes();
 }
 
+document.getElementById("collapseAllBtn").addEventListener("click", ()=>{
+  const anyExpanded = groups.some(g=>!g.collapsed) || !ungroupedCollapsed;
+  groups.forEach(g=> g.collapsed = anyExpanded);
+  ungroupedCollapsed = anyExpanded;
+  persist();
+  renderNotes();
+});
 document.getElementById("addHeadingBtn").addEventListener("click", ()=>{
   document.getElementById("newHeadingNameInput").value = "";
   document.getElementById("newHeadingModal").style.display = "flex";
@@ -1665,14 +1728,23 @@ document.addEventListener("mouseup", ()=>{
 
 function buildGroupSection(group, groupNotes){
   const section = document.createElement("div");
-  section.className = "group-section";
+  const collapsed = group ? !!group.collapsed : !!ungroupedCollapsed;
+  section.className = "group-section" + (collapsed ? " collapsed" : "");
 
   if(group || groups.length>0){
     const header = document.createElement("div");
     header.className = "group-header" + (group ? "" : " ungrouped");
+    const collapseBtn = document.createElement("button");
+    collapseBtn.className = "group-collapse-btn";
+    collapseBtn.textContent = "▾";
+    collapseBtn.title = collapsed ? "Expand" : "Collapse";
+    collapseBtn.addEventListener("click", ()=> toggleGroupCollapsed(group ? group.id : null));
+    header.appendChild(collapseBtn);
     const nameEl = document.createElement("span");
     nameEl.className = "group-name";
     nameEl.textContent = group ? group.name : "Ungrouped";
+    nameEl.style.cursor = "pointer";
+    nameEl.addEventListener("click", ()=> toggleGroupCollapsed(group ? group.id : null));
     header.appendChild(nameEl);
     const countEl = document.createElement("span");
     countEl.className = "group-count";
@@ -1721,7 +1793,15 @@ function buildGroupSection(group, groupNotes){
   return section;
 }
 
+function updateCollapseAllBtn(){
+  const btn = document.getElementById("collapseAllBtn");
+  btn.disabled = notes.length===0 || !!query;
+  const anyExpanded = groups.some(g=>!g.collapsed) || !ungroupedCollapsed;
+  btn.textContent = anyExpanded ? "▾ Collapse all" : "▸ Expand all";
+}
+
 function renderNotes(){
+  updateCollapseAllBtn();
   const listEl = document.getElementById("notesScroll");
   listEl.innerHTML = "";
 
@@ -1773,7 +1853,7 @@ function buildNoteCard(n){
           <span class="field-label" style="margin:0;">Bar</span>
           <input type="text" inputmode="numeric" class="bar-num-input" data-field="startBarNum" placeholder="#" value="${n.startBarNumber!=null?n.startBarNumber:''}">
           <span class="bar-num-sep">–</span>
-          <input type="text" inputmode="numeric" class="bar-num-input" data-field="endBarNum" placeholder="(end)" value="${n.endBarNumber!=null?n.endBarNumber:''}" ${n.startBarId?'':'disabled'}>
+          <input type="text" inputmode="numeric" class="bar-num-input" data-field="endBarNum" placeholder="(end)" value="${n.endBarNumber!=null?n.endBarNumber:''}" ${n.startBarNumber!=null?'':'disabled'}>
         </span>
         <input type="text" class="section-field" data-field="section" placeholder="Section label (e.g. Intro, Verse, Solo)…" value="${escapeHtml(n.section)}">
         <button class="note-del" data-action="delete">✕ Delete</button>
@@ -1898,7 +1978,34 @@ function buildNoteCard(n){
     return card;
 }
 
+// typing "- " or "* " at the start of a line turns it into a "• " bullet,
+// the same shorthand Google Docs uses — these fields are plain text (no real
+// list markup), so a literal bullet character is the manual way to get a dot
+// point too: type it directly, paste one, or use this "- " shortcut.
 function onEditableKeydown(e){
+  if(e.key === " "){
+    const sel = window.getSelection();
+    if(sel.rangeCount && sel.getRangeAt(0).collapsed){
+      const range = sel.getRangeAt(0);
+      const pre = document.createRange();
+      pre.selectNodeContents(e.currentTarget);
+      pre.setEnd(range.startContainer, range.startOffset);
+      const frag = pre.cloneContents();
+      let before = "";
+      (function collect(node){
+        if(node.nodeType === Node.TEXT_NODE) before += node.textContent;
+        else if(node.nodeName === "BR") before += "\n";
+        else node.childNodes.forEach(collect);
+      })(frag);
+      const lastLine = before.split("\n").pop();
+      if(lastLine === "-" || lastLine === "*"){
+        e.preventDefault();
+        document.execCommand("delete", false, null); // remove the "-"/"*" just typed
+        document.execCommand("insertText", false, "• ");
+        return;
+      }
+    }
+  }
   if(e.key !== "Enter") return;
   e.preventDefault();
   const sel = window.getSelection();
@@ -2123,7 +2230,7 @@ async function importStudyNotesDocx(file){
   try{
     const { unzipSync, strFromU8 } = await import("https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js");
     const buf = new Uint8Array(await file.arrayBuffer());
-    const zipped = unzipSync(buf, { filter: f => f.name === "word/document.xml" });
+    const zipped = unzipSync(buf, { filter: f => f.name === "word/document.xml" || f.name === "word/numbering.xml" });
     const xmlBytes = zipped["word/document.xml"];
     if(!xmlBytes) throw new Error("This doesn't look like a Word .docx file (no document.xml found).");
     const xmlText = strFromU8(xmlBytes);
@@ -2132,14 +2239,57 @@ async function importStudyNotesDocx(file){
     const body = xmlDoc.getElementsByTagName("w:body")[0];
     if(!body) throw new Error("Couldn't find any content in this document.");
 
+    function directChildren(el, tag){ return Array.from(el.children).filter(c=>c.tagName===tag); }
+
+    // Word stores a bullet-list marker in numbering.xml, not as a literal "•" in
+    // document.xml — map numId -> ilvl -> isBullet so bullet paragraphs can be
+    // reconstructed as plain "• " text lines (this app's notes are plain text).
+    const bulletNumIds = new Map(); // numId -> Set of bullet ilvls
+    if(zipped["word/numbering.xml"]){
+      try{
+        const numXmlDoc = new DOMParser().parseFromString(strFromU8(zipped["word/numbering.xml"]), "application/xml");
+        if(!numXmlDoc.getElementsByTagName("parsererror").length){
+          const bulletAbstractLevels = new Map(); // abstractNumId -> Set of bullet ilvls
+          const abstractNums = numXmlDoc.getElementsByTagName("w:abstractNum");
+          for(let i=0;i<abstractNums.length;i++){
+            const an = abstractNums[i];
+            const absId = an.getAttribute("w:abstractNumId");
+            const bulletIlvls = new Set();
+            directChildren(an, "w:lvl").forEach(lvl=>{
+              const numFmtEl = directChildren(lvl, "w:numFmt")[0];
+              if(numFmtEl && numFmtEl.getAttribute("w:val")==="bullet") bulletIlvls.add(lvl.getAttribute("w:ilvl"));
+            });
+            bulletAbstractLevels.set(absId, bulletIlvls);
+          }
+          const nums = numXmlDoc.getElementsByTagName("w:num");
+          for(let i=0;i<nums.length;i++){
+            const numId = nums[i].getAttribute("w:numId");
+            const absEl = directChildren(nums[i], "w:abstractNumId")[0];
+            if(absEl) bulletNumIds.set(numId, bulletAbstractLevels.get(absEl.getAttribute("w:val")) || new Set());
+          }
+        }
+      }catch(e){ /* no numbering info — bullets just come through as plain text */ }
+    }
+    function isBulletParagraph(pEl){
+      const pPr = directChildren(pEl, "w:pPr")[0];
+      const numPr = pPr && directChildren(pPr, "w:numPr")[0];
+      if(!numPr) return false;
+      const numIdEl = directChildren(numPr, "w:numId")[0];
+      if(!numIdEl) return false;
+      const ilvlEl = directChildren(numPr, "w:ilvl")[0];
+      const ilvl = ilvlEl ? ilvlEl.getAttribute("w:val") : "0";
+      const bulletIlvls = bulletNumIds.get(numIdEl.getAttribute("w:val"));
+      return !!(bulletIlvls && bulletIlvls.has(ilvl));
+    }
+
     const HEADING_RE = /elements?\(s\)\s*\/\s*sub\s*elements?\(s\)\s*-?\s*(.*)/i;
     function textOf(pEl){
       const ts = pEl.getElementsByTagName("w:t");
       let s = "";
       for(let i=0;i<ts.length;i++) s += ts[i].textContent;
+      if(isBulletParagraph(pEl) && s.trim()) s = "• " + s.trim();
       return s;
     }
-    function directChildren(el, tag){ return Array.from(el.children).filter(c=>c.tagName===tag); }
     // the original scaffold leaves Analysis as one freeform block, but our own
     // exported files label it as "What (...)" / "Why (effect)" paragraphs —
     // split on those labels when present, otherwise treat it all as one block.
@@ -2161,8 +2311,39 @@ async function importStudyNotesDocx(file){
       return { what: whatLines.join("\n").trim(), why: whyLines.join("\n").trim() };
     }
 
+    // students often stack several examples in one table by writing a section
+    // label + bar reference (e.g. "Section A - A Capella" / "b. 1-3") right in
+    // the Example or Analysis cell — split on that pattern into separate notes,
+    // carrying the most recent section label forward when a marker omits one.
+    const SECTION_RE = /^section\b/i;
+    const BAR_RE = /^b(?:ars?)?\.?\s*(\d+)\s*(?:[-–—]\s*(\d+))?\.?\s*$/i;
+    function splitIntoExamples(lines){
+      const blocks = [];
+      const leading = [];
+      let currentSection = "";
+      let cur = null;
+      for(let i=0;i<lines.length;i++){
+        const raw = lines[i];
+        const trimmed = raw.trim();
+        const barMatch = trimmed.match(BAR_RE);
+        if(barMatch){
+          cur = { section: currentSection, startBarNumber: parseInt(barMatch[1],10), endBarNumber: barMatch[2]!=null?parseInt(barMatch[2],10):null, contentLines: [] };
+          blocks.push(cur);
+          continue;
+        }
+        if(SECTION_RE.test(trimmed) && i+1<lines.length && BAR_RE.test(lines[i+1].trim())){
+          currentSection = trimmed; // only claimed as a label if a bar marker immediately follows
+          continue;
+        }
+        (cur ? cur.contentLines : leading).push(raw);
+      }
+      if(!blocks.length) return [{ section:"", startBarNumber:null, endBarNumber:null, contentLines: leading }];
+      if(leading.length) blocks[0].contentLines = leading.concat(blocks[0].contentLines);
+      return blocks;
+    }
+
     let currentGroupId = null;
-    let importedNotes = 0, importedHeadings = 0;
+    let importedNotes = 0, importedHeadings = 0, importedBarRefs = 0;
     const groupIdByName = new Map(groups.map(g=>[g.name.trim().toLowerCase(), g.id]));
 
     for(const child of Array.from(body.children)){
@@ -2190,24 +2371,39 @@ async function importStudyNotesDocx(file){
         const gridCols = child.getElementsByTagName("w:gridCol");
         const rows = directChildren(child, "w:tr");
         if(gridCols.length<2 || rows.length<2) continue; // not a two-column scaffold table
-        const analysisCellLines = [];
+        const combinedLines = [];
         for(let r=1; r<rows.length; r++){
           const tcs = directChildren(rows[r], "w:tc");
           if(tcs.length<2) continue;
-          directChildren(tcs[1], "w:p").forEach(p=> analysisCellLines.push(textOf(p)));
+          directChildren(tcs[0], "w:p").forEach(p=> combinedLines.push(textOf(p))); // Example cell: often just "Section X" / "b. N-M"
+          directChildren(tcs[1], "w:p").forEach(p=> combinedLines.push(textOf(p))); // Analysis cell
         }
-        if(!analysisCellLines.some(l=>l.trim())) continue; // skip untouched/blank tables
-        const { what, why } = splitWhatWhy(analysisCellLines);
-        notes.push({
-          id: uid(),
-          groupId: currentGroupId,
-          startBarId: null, startPage: null, startBarNumber: null,
-          endBarId: null, endPage: null, endBarNumber: null,
-          section: "",
-          what, why,
-          startSec: null, endSec: null
+        if(!combinedLines.some(l=>l.trim())) continue; // skip untouched/blank tables
+
+        splitIntoExamples(combinedLines).forEach(block=>{
+          if(!block.contentLines.some(l=>l.trim()) && block.startBarNumber==null) return; // nothing to import
+          const { what, why } = splitWhatWhy(block.contentLines);
+          let startBarId=null, startPage=null, endBarId=null, endPage=null;
+          if(block.startBarNumber!=null){
+            importedBarRefs++;
+            const found = findMarkerByNumber(block.startBarNumber);
+            if(found){ startBarId=found.marker.id; startPage=found.page; }
+          }
+          if(block.endBarNumber!=null){
+            const found = findMarkerByNumber(block.endBarNumber);
+            if(found){ endBarId=found.marker.id; endPage=found.page; }
+          }
+          notes.push({
+            id: uid(),
+            groupId: currentGroupId,
+            startBarId, startPage, startBarNumber: block.startBarNumber,
+            endBarId, endPage, endBarNumber: block.endBarNumber,
+            section: block.section,
+            what, why,
+            startSec: null, endSec: null
+          });
+          importedNotes++;
         });
-        importedNotes++;
       }
     }
 
@@ -2217,8 +2413,10 @@ async function importStudyNotesDocx(file){
       persist();
       renderNotes();
       alert("Imported " + importedNotes + " note" + (importedNotes===1?"":"s") +
-        (importedHeadings ? " under " + importedHeadings + " new heading" + (importedHeadings===1?"":"s") : "") +
-        ". Word can't tell us which bar, timestamp, or video moment these belong to, so they've come in unlinked — type a bar number into each note's \"Bar #\" field to connect it.");
+        (importedHeadings ? " under " + importedHeadings + " new heading" + (importedHeadings===1?"":"s") : "") + ". " +
+        (importedBarRefs
+          ? "Bar numbers and section labels found in the document came in with them" + (importedBarRefs<importedNotes ? " where given" : "") + "; timestamps and video still can't be recovered from Word, so double-check the bar links (a number only auto-connects to a bar if your score already has that bar tagged)."
+          : "Word can't tell us which bar, timestamp, or video moment these belong to, so they've come in unlinked — type a bar number into each note's \"Bar #\" field to connect it."));
     }
   }catch(err){
     console.error("Study notes import failed:", err);
