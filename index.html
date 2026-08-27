@@ -1594,6 +1594,14 @@ function whereLabel(note){
       : "bar " + note.startBarNumber;
     return sec + barPart;
   }
+  if(note.startBarNumber!=null){
+    // a bar number typed in before that bar was tagged — shown as pending
+    // until renumberAllBars() links it up to a real marker
+    const barPart = (note.endBarNumber!=null && note.endBarNumber!==note.startBarNumber)
+      ? "bar " + note.startBarNumber + "–" + note.endBarNumber
+      : "bar " + note.startBarNumber;
+    return barPart + " (not tagged yet)";
+  }
   return note.section || "Unlinked";
 }
 
@@ -1908,16 +1916,24 @@ function buildNoteCard(n){
         return;
       }
       const num = parseInt(raw, 10);
-      const found = isNaN(num) ? null : findMarkerByNumber(num);
-      if(!found){
+      if(isNaN(num) || num < 1){
         flashInvalidBar(input);
         input.value = isEnd ? (n.endBarNumber!=null?n.endBarNumber:'') : (n.startBarNumber!=null?n.startBarNumber:'');
         return;
       }
+      // accept the number even if no score is loaded yet or that bar isn't
+      // tagged yet — it links up on its own (see renumberAllBars) as soon as
+      // a matching bar marker exists, so students don't have to wait for the
+      // PDF before recording which bars an example covers
+      const found = findMarkerByNumber(num);
       if(isEnd){
-        n.endBarId = found.marker.id; n.endPage = found.page; n.endBarNumber = found.marker.number;
+        n.endBarNumber = num;
+        n.endBarId = found ? found.marker.id : null;
+        n.endPage = found ? found.page : null;
       } else {
-        n.startBarId = found.marker.id; n.startPage = found.page; n.startBarNumber = found.marker.number;
+        n.startBarNumber = num;
+        n.startBarId = found ? found.marker.id : null;
+        n.startPage = found ? found.page : null;
       }
       persist(); renderNotes(); renderMarkerOverlay();
     }
