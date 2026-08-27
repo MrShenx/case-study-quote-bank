@@ -1805,7 +1805,7 @@ function renderNotes(){
   const listEl = document.getElementById("notesScroll");
   listEl.innerHTML = "";
 
-  if(notes.length===0){
+  if(notes.length===0 && groups.length===0){
     const empty = document.createElement("div");
     empty.id = "notesEmpty";
     empty.textContent = 'No notes yet. Click a bar on the score, then "+ Add note" — or add one unlinked and connect it later.';
