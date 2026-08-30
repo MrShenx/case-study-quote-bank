@@ -45,6 +45,7 @@
   .mode-btn:hover{color:var(--ink);}
   .mode-btn.active{background:var(--accent);color:#fff;}
   #homeGrid{flex:1;overflow:auto;padding:24px;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;align-content:start;}
+  #homeFooter{flex-shrink:0;text-align:center;padding:10px;font-size:0.72rem;color:var(--ink-soft);border-top:1px solid var(--line);}
   #homeEmpty{grid-column:1/-1;text-align:center;color:var(--ink-soft);padding:60px 20px;border:1px dashed var(--line);border-radius:var(--radius);}
   .project-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px;cursor:pointer;display:flex;flex-direction:column;gap:6px;transition:border-color 0.15s,box-shadow 0.15s;}
   .project-card:hover{border-color:var(--accent);box-shadow:0 4px 16px rgba(0,0,0,0.08);}
@@ -219,6 +220,7 @@
     <button class="btn primary" id="newProjectBtn">+ New project</button>
   </div>
   <div id="homeGrid"></div>
+  <div id="homeFooter">Made by Mr Shen with Claude</div>
 </div>
 
 <div id="newProjectModal" class="modal-overlay" style="display:none;">
@@ -266,11 +268,11 @@
   </div>
 
   <div id="advPanel">
-    <label>Staff-line sensitivity <span id="staffSensVal">40%</span>
-      <input type="range" id="staffSens" min="20" max="70" value="40">
+    <label>Staff-line sensitivity <span id="staffSensVal">30%</span>
+      <input type="range" id="staffSens" min="15" max="70" value="30">
     </label>
-    <label>Barline sensitivity <span id="barSensVal">82%</span>
-      <input type="range" id="barSens" min="60" max="98" value="82">
+    <label>Barline sensitivity <span id="barSensVal">30%</span>
+      <input type="range" id="barSens" min="15" max="98" value="30">
     </label>
     <span style="color:var(--ink-soft);max-width:340px;">Auto-detection is a heuristic — it looks for long horizontal lines (staves) and long vertical lines that span them (barlines). Dense scans, ornate fonts, or low contrast will need manual cleanup in Tag mode.</span>
   </div>
@@ -1185,8 +1187,8 @@ function detectBarlinesInSystem(imgData, w, h, sysTop, sysBottom, relativeSensit
 
 function detectBarsOnCanvas(canvas, opts){
   opts = opts || {};
-  const staffThreshold = (opts.staffThreshold!=null ? opts.staffThreshold : 40)/100;
-  const barThreshold = (opts.barThreshold!=null ? opts.barThreshold : 82)/100;
+  const staffThreshold = (opts.staffThreshold!=null ? opts.staffThreshold : 30)/100;
+  const barThreshold = (opts.barThreshold!=null ? opts.barThreshold : 30)/100;
   const ctx = canvas.getContext("2d");
   const w = canvas.width, h = canvas.height;
   const imgData = ctx.getImageData(0,0,w,h);
@@ -2040,8 +2042,32 @@ function onEditableKeydown(e){
 // =====================================================================
 // export / import project
 // =====================================================================
-document.getElementById("exportBtn").addEventListener("click", ()=>{
-  const blob = new Blob([JSON.stringify({ markersByPage, pageSystems, notes, groups, barCounter, pdfName: currentProjectPdfName, videoId }, null, 2)], {type:"application/json"});
+document.getElementById("exportBtn").addEventListener("click", async ()=>{
+  const btn = document.getElementById("exportBtn");
+  const originalText = btn.textContent;
+  const data = { markersByPage, pageSystems, notes, groups, barCounter, pdfName: currentProjectPdfName, videoId };
+  // embed the score PDF itself (as a data URL) so the exported file is fully
+  // self-contained — importing it elsewhere needs no separate PDF upload
+  if(currentProjectId){
+    try{
+      btn.disabled = true; btn.textContent = "Preparing…";
+      const pdfRec = await dbGet(PDF_STORE, currentProjectId);
+      if(pdfRec && pdfRec.blob){
+        data.pdfDataUrl = await new Promise((resolve, reject)=>{
+          const reader = new FileReader();
+          reader.onload = ()=> resolve(reader.result);
+          reader.onerror = ()=> reject(reader.error);
+          reader.readAsDataURL(pdfRec.blob);
+        });
+      }
+    }catch(err){
+      console.error("Couldn't embed the PDF in the export:", err);
+      // export still proceeds without it rather than failing outright
+    }finally{
+      btn.disabled = false; btn.textContent = originalText;
+    }
+  }
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type:"application/json"});
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url; a.download = (currentProjectMeta ? currentProjectMeta.name.replace(/[^\w-]+/g,"-") : "score-analysis") + "-project.json";
@@ -2107,8 +2133,13 @@ async function exportStudyNotesDocx(){
         await ensurePageShown(note.startPage || 1);
         const pageCanvas = document.getElementById("pdfCanvas");
 
+        // endMarker's xFrac only means anything if it's on the SAME page we're
+        // cropping from — otherwise it's a coordinate from a different page's
+        // canvas entirely. When the range crosses a page break, show through
+        // to this page's right edge instead of mixing the two coordinate spaces.
+        const endOnSamePage = endMarker && note.endPage === note.startPage;
         const leftFrac = Math.max(0, startMarker.xFrac - 0.10);
-        const rightFrac = Math.min(1, (endMarker ? endMarker.xFrac : startMarker.xFrac) + 0.10);
+        const rightFrac = endMarker && !endOnSamePage ? 1 : Math.min(1, (endOnSamePage ? endMarker.xFrac : startMarker.xFrac) + 0.10);
         const topFrac = Math.max(0, startMarker.yTopFrac - 0.01);
         const botFrac = Math.min(1, startMarker.yBotFrac + 0.01);
         const cropX = leftFrac*pageCanvas.width, cropW = Math.max(1, (rightFrac-leftFrac)*pageCanvas.width);
@@ -2158,7 +2189,13 @@ async function exportStudyNotesDocx(){
       return new TableCell({ width: { size: RIGHT_W, type: WidthType.DXA }, verticalAlign: VerticalAlign.TOP, margins: cellMargins, children });
     }
 
+    let noteBlocksBuilt = 0;
+    const totalNoteBlocks = notes.length;
     async function buildNoteBlock(note){
+      // image capture re-renders a full page for a large/complex score, which
+      // can take a while — showing progress keeps this from reading as hung
+      noteBlocksBuilt++;
+      btn.textContent = "Generating… (" + noteBlocksBuilt + "/" + totalNoteBlocks + ")";
       const imageResult = await captureBarImage(note);
       const table = new Table({
         width: { size: LEFT_W+RIGHT_W, type: WidthType.DXA },
@@ -2286,16 +2323,19 @@ async function importStudyNotesDocx(file){
         }
       }catch(e){ /* no numbering info — bullets just come through as plain text */ }
     }
-    function isBulletParagraph(pEl){
+    // returns the bullet's nesting level (0, 1, 2…) or null if not a bullet —
+    // the level lets nested sub-points stay visually distinct from their
+    // parent point instead of flattening into one indistinguishable list
+    function bulletLevelOf(pEl){
       const pPr = directChildren(pEl, "w:pPr")[0];
       const numPr = pPr && directChildren(pPr, "w:numPr")[0];
-      if(!numPr) return false;
+      if(!numPr) return null;
       const numIdEl = directChildren(numPr, "w:numId")[0];
-      if(!numIdEl) return false;
+      if(!numIdEl) return null;
       const ilvlEl = directChildren(numPr, "w:ilvl")[0];
       const ilvl = ilvlEl ? ilvlEl.getAttribute("w:val") : "0";
       const bulletIlvls = bulletNumIds.get(numIdEl.getAttribute("w:val"));
-      return !!(bulletIlvls && bulletIlvls.has(ilvl));
+      return (bulletIlvls && bulletIlvls.has(ilvl)) ? parseInt(ilvl, 10) : null;
     }
 
     const HEADING_RE = /elements?\(s\)\s*\/\s*sub\s*elements?\(s\)\s*-?\s*(.*)/i;
@@ -2303,7 +2343,8 @@ async function importStudyNotesDocx(file){
       const ts = pEl.getElementsByTagName("w:t");
       let s = "";
       for(let i=0;i<ts.length;i++) s += ts[i].textContent;
-      if(isBulletParagraph(pEl) && s.trim()) s = "• " + s.trim();
+      const lvl = bulletLevelOf(pEl);
+      if(lvl!=null && s.trim()) s = "  ".repeat(lvl) + "• " + s.trim();
       return s;
     }
     // the original scaffold leaves Analysis as one freeform block, but our own
@@ -2333,17 +2374,36 @@ async function importStudyNotesDocx(file){
     // carrying the most recent section label forward when a marker omits one.
     const SECTION_RE = /^section\b/i;
     const BAR_RE = /^b(?:ars?)?\.?\s*(\d+)\s*(?:[-–—]\s*(\d+))?\.?\s*$/i;
+    // true if, skipping blank lines from `fromIdx`, the next content is a bar
+    // marker — directly, or a "Section ..." label immediately ahead of one
+    function upcomingBlockStartsWithin(lines, fromIdx){
+      let idx = fromIdx;
+      while(idx<lines.length && lines[idx].trim()==="") idx++;
+      if(idx>=lines.length) return false;
+      if(BAR_RE.test(lines[idx].trim())) return true;
+      if(SECTION_RE.test(lines[idx].trim())){
+        let idx2 = idx+1;
+        while(idx2<lines.length && lines[idx2].trim()==="") idx2++;
+        return idx2<lines.length && BAR_RE.test(lines[idx2].trim());
+      }
+      return false;
+    }
     function splitIntoExamples(lines){
       const blocks = [];
       const leading = [];
       let currentSection = "";
       let cur = null;
+      let pending = []; // lines that preview an upcoming example (e.g. a topic
+                         // name a line or two before its "Section ... / b. N" pair)
+                         // rather than belonging to the example still in progress
       for(let i=0;i<lines.length;i++){
         const raw = lines[i];
         const trimmed = raw.trim();
         const barMatch = trimmed.match(BAR_RE);
         if(barMatch){
           cur = { section: currentSection, startBarNumber: parseInt(barMatch[1],10), endBarNumber: barMatch[2]!=null?parseInt(barMatch[2],10):null, contentLines: [] };
+          pending.forEach(l=> cur.contentLines.push(l));
+          pending = [];
           blocks.push(cur);
           continue;
         }
@@ -2351,8 +2411,14 @@ async function importStudyNotesDocx(file){
           currentSection = trimmed; // only claimed as a label if a bar marker immediately follows
           continue;
         }
+        if(trimmed!=="" && upcomingBlockStartsWithin(lines, i+1)){
+          pending.push(raw); // holds it for whichever block claims it next
+          continue;
+        }
+        if(pending.length){ pending.forEach(l=> (cur ? cur.contentLines : leading).push(l)); pending = []; }
         (cur ? cur.contentLines : leading).push(raw);
       }
+      if(pending.length) pending.forEach(l=> (cur ? cur.contentLines : leading).push(l));
       if(!blocks.length) return [{ section:"", startBarNumber:null, endBarNumber:null, contentLines: leading }];
       if(leading.length) blocks[0].contentLines = leading.concat(blocks[0].contentLines);
       return blocks;
@@ -2467,6 +2533,15 @@ document.getElementById("importFile").addEventListener("change", (e)=>{
       renderMarkerOverlay();
       renderNotes();
       renderRail();
+
+      if(d.pdfDataUrl){
+        fetch(d.pdfDataUrl).then(r=>r.blob()).then(blob=>{
+          loadPdfBlob(blob, d.pdfName || "score.pdf", false, false);
+        }).catch(err=>{
+          console.error("Couldn't restore the embedded PDF:", err);
+          alert("Everything else imported fine, but the project file's embedded score PDF couldn't be read — upload it separately.");
+        });
+      }
     }catch(err){
       alert("Couldn't read that file — make sure it's a project .json exported from this page.");
     }
