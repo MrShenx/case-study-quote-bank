@@ -1,0 +1,9 @@
+{
+  "name": "score-analysis-studio",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Score Analysis Studio — the app itself is a single static index.html with no build step; this file exists only to declare the dependency the /api/project/[id].js serverless function needs.",
+  "dependencies": {
+    "@vercel/kv": "3.0.0"
+  }
+}
