@@ -5,9 +5,12 @@
 //
 // Storage: Vercel KV (a hosted Redis-compatible key/value store). This file
 // only runs once a KV database has been created in the Vercel dashboard and
-// "Connected" to this project — that step injects the KV_REST_API_URL /
-// KV_REST_API_TOKEN environment variables that the @vercel/kv package reads
-// automatically. Nothing to configure here beyond that dashboard connection.
+// "Connected" to this project — that step injects KV_REST_API_URL /
+// KV_REST_API_TOKEN (or a database-name-prefixed version of those same
+// names, e.g. "mydb_KV_REST_API_URL" — Vercel's marketplace integrations do
+// this automatically to avoid collisions when a project has more than one
+// database connected). resolveEnvVar() below finds either form, so nothing
+// needs to be renamed by hand in the dashboard.
 //
 // Deliberately NOT stored here: the PDF itself, or video timestamps' audio —
 // this only backs up the analysis (bar tags, notes, headings). The PDF is
@@ -15,7 +18,20 @@
 // far cheaper than the size/cost of storing a multi-MB file per student per
 // save. Keeping this endpoint's payload small also keeps it fast and cheap.
 
-import { kv } from '@vercel/kv';
+import { createClient } from '@vercel/kv';
+
+// Finds an env var by its plain name (e.g. "KV_REST_API_URL"), or, failing
+// that, any var ending in "_" + that name (e.g. "casestudyquotes_KV_REST_API_URL")
+// — whichever form the connected database's integration happened to use.
+function resolveEnvVar(name) {
+  if (process.env[name]) return process.env[name];
+  const key = Object.keys(process.env).find((k) => k.endsWith('_' + name));
+  return key ? process.env[key] : undefined;
+}
+
+const KV_URL = resolveEnvVar('KV_REST_API_URL');
+const KV_TOKEN = resolveEnvVar('KV_REST_API_TOKEN');
+const kv = KV_URL && KV_TOKEN ? createClient({ url: KV_URL, token: KV_TOKEN }) : null;
 
 // cloud codes are generated client-side via crypto.randomUUID() (see
 // index.html) — this just guards against anything else being thrown at the
@@ -33,6 +49,14 @@ function keyFor(id) {
 }
 
 export default async function handler(req, res) {
+  if (!kv) {
+    res.status(500).json({
+      error: 'No database is connected to this deployment yet (or it was connected after the last ' +
+             'deploy — try redeploying). Check the Storage tab in the Vercel dashboard.'
+    });
+    return;
+  }
+
   const id = req.query && req.query.id;
   if (typeof id !== 'string' || !ID_RE.test(id)) {
     res.status(400).json({ error: 'Invalid or missing project id.' });
