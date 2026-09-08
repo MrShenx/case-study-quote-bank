@@ -245,6 +245,30 @@
   </div>
 </div>
 
+<div id="cloudSaveModal" class="modal-overlay" style="display:none;">
+  <div class="modal-box">
+    <h2 id="cloudSaveTitle">Saved to cloud</h2>
+    <p id="cloudSaveDesc" style="font-size:0.85rem;color:var(--ink-soft);margin-top:-8px;">Write this code down — it's the only way to get this project back on another device or after clearing browser data.</p>
+    <input type="text" id="cloudCodeDisplay" readonly>
+    <div class="modal-actions">
+      <button class="btn" id="cloudCodeCopyBtn">Copy code</button>
+      <button class="btn primary" id="cloudSaveCloseBtn">Done</button>
+    </div>
+  </div>
+</div>
+
+<div id="cloudLoadModal" class="modal-overlay" style="display:none;">
+  <div class="modal-box">
+    <h2>Load from cloud</h2>
+    <p style="font-size:0.85rem;color:var(--ink-soft);margin-top:-8px;">This replaces this project's bar tags, notes, and headings with whatever was saved under this code. The score PDF and video link aren't affected.</p>
+    <input type="text" id="cloudLoadCodeInput" placeholder="Paste your cloud code">
+    <div class="modal-actions">
+      <button class="btn" id="cloudLoadCancelBtn">Cancel</button>
+      <button class="btn primary" id="cloudLoadConfirmBtn">Load</button>
+    </div>
+  </div>
+</div>
+
 <div id="studioView">
 
   <div id="topbar">
@@ -260,6 +284,8 @@
     <button class="btn" id="exportBtn">⬇ Export project</button>
     <button class="btn" id="importBtn">⬆ Import project</button>
     <input type="file" id="importFile" accept="application/json" style="display:none;">
+    <button class="btn" id="cloudSaveBtn">☁️ Save to Cloud</button>
+    <button class="btn" id="cloudLoadBtn">☁️ Load from Cloud</button>
     <button class="btn" id="exportDocxBtn">📄 Export Study Notes (.docx)</button>
     <button class="btn" id="importDocxBtn">📥 Import Study Notes (.docx)</button>
     <input type="file" id="importDocxFile" accept=".docx" style="display:none;">
@@ -447,6 +473,7 @@ let pageSystems = {};     // pageNum -> [{yTopFrac, yBotFrac, manual?}]
 let notes = [];           // {id, groupId|null, startBarId|null, startPage, startBarNumber, endBarId|null, endPage, endBarNumber, section, what, why, startSec, endSec}
 let groups = [];          // {id, name, collapsed} — student-created sub-headings notes can be dragged into
 let ungroupedCollapsed = false;
+let cloudId = null; // this project's cloud-backup code, once one exists (see saveToCloud())
 let barCounter = 0;
 let dragNoteId = null;    // note.id currently being dragged, or null
 let selectedMarkerId = null;
@@ -595,6 +622,7 @@ function normalizeProjectRecord(rec){
   rec.barCounter = rec.barCounter || 0;
   rec.videoId = rec.videoId || null;
   rec.ungroupedCollapsed = rec.ungroupedCollapsed || false;
+  rec.cloudId = rec.cloudId || null;
   Object.values(rec.markersByPage).forEach(list=>{
     (list||[]).forEach(m=>{ if(m.manual===undefined) m.manual = false; });
   });
@@ -612,7 +640,7 @@ function persist(){
     createdAt: currentProjectMeta.createdAt,
     updatedAt: Date.now(),
     pdfName: currentProjectPdfName,
-    markersByPage, pageSystems, notes, groups, barCounter, videoId, ungroupedCollapsed
+    markersByPage, pageSystems, notes, groups, barCounter, videoId, ungroupedCollapsed, cloudId
   });
 }
 function persistPdfBlob(blob){
@@ -789,6 +817,7 @@ async function openProject(id){
   barCounter = rec.barCounter;
   videoId = rec.videoId;
   ungroupedCollapsed = rec.ungroupedCollapsed;
+  cloudId = rec.cloudId;
 
   pendingRenderPageNum = null; // abandon any queued render from the project we're leaving
   pdfDoc = null; numPages = 0; currentPage = 1; selectedMarkerId = null;
@@ -2516,38 +2545,156 @@ document.getElementById("importDocxFile").addEventListener("change", (e)=>{
   importStudyNotesDocx(file);
 });
 document.getElementById("importBtn").addEventListener("click", ()=> document.getElementById("importFile").click());
+// Shared by the local-file "Import project" flow and "Load from Cloud" —
+// applies an exported/backed-up project's data onto the currently open
+// project. `d.pdfDataUrl` (a full local export) is optional; a cloud backup
+// never has one, since the PDF itself is deliberately never sent to the
+// cloud endpoint (see api/project/[id].js).
+function applyImportedProjectData(d){
+  markersByPage = d.markersByPage || {};
+  pageSystems = d.pageSystems || {};
+  notes = (d.notes || []).map(migrateNote);
+  groups = d.groups || [];
+  barCounter = d.barCounter || 0;
+  if(d.videoId){ videoId = d.videoId; loadVideo(videoId, true); }
+  persist();
+  renderMarkerOverlay();
+  renderNotes();
+  renderRail();
+
+  if(d.pdfDataUrl){
+    fetch(d.pdfDataUrl).then(r=>r.blob()).then(blob=>{
+      loadPdfBlob(blob, d.pdfName || "score.pdf", false, false);
+    }).catch(err=>{
+      console.error("Couldn't restore the embedded PDF:", err);
+      alert("Everything else imported fine, but the project file's embedded score PDF couldn't be read — upload it separately.");
+    });
+  }
+}
+
 document.getElementById("importFile").addEventListener("change", (e)=>{
   const file = e.target.files[0];
   if(!file || !currentProjectId) return;
   const reader = new FileReader();
   reader.onload = () => {
     try{
-      const d = JSON.parse(reader.result);
-      markersByPage = d.markersByPage || {};
-      pageSystems = d.pageSystems || {};
-      notes = (d.notes || []).map(migrateNote);
-      groups = d.groups || [];
-      barCounter = d.barCounter || 0;
-      if(d.videoId){ videoId = d.videoId; loadVideo(videoId, true); }
-      persist();
-      renderMarkerOverlay();
-      renderNotes();
-      renderRail();
-
-      if(d.pdfDataUrl){
-        fetch(d.pdfDataUrl).then(r=>r.blob()).then(blob=>{
-          loadPdfBlob(blob, d.pdfName || "score.pdf", false, false);
-        }).catch(err=>{
-          console.error("Couldn't restore the embedded PDF:", err);
-          alert("Everything else imported fine, but the project file's embedded score PDF couldn't be read — upload it separately.");
-        });
-      }
+      applyImportedProjectData(JSON.parse(reader.result));
     }catch(err){
       alert("Couldn't read that file — make sure it's a project .json exported from this page.");
     }
   };
   reader.readAsText(file);
   e.target.value = "";
+});
+
+// =====================================================================
+// cloud backup — a lightweight, opt-in analysis-only backup so a student's
+// tags/notes/headings survive clearing browser data or switching devices.
+// Deliberately excludes the PDF and any timestamps' audio: only the things
+// that are genuinely tedious to redo. Requires this page to actually be
+// served from the Vercel deployment that has the /api function connected to
+// a KV database — opening index.html locally or via GitHub Pages will just
+// fail the network request below with a clear error.
+// =====================================================================
+function cloudProjectPayload(){
+  return {
+    name: currentProjectMeta ? currentProjectMeta.name : "Untitled score",
+    pdfName: currentProjectPdfName,
+    markersByPage, pageSystems, notes, groups, barCounter, videoId
+  };
+}
+
+async function saveToCloud(){
+  if(!currentProjectId) return;
+  const btn = document.getElementById("cloudSaveBtn");
+  const originalText = btn.textContent;
+  const payload = cloudProjectPayload();
+  const approxBytes = new Blob([JSON.stringify(payload)]).size;
+  if(approxBytes > 900*1024){
+    alert("This project has too much analysis text to back up to the cloud right now (limit ~900KB, the score PDF itself is never included). Consider splitting it into two projects.");
+    return;
+  }
+  const id = cloudId || uid() + uid(); // long enough to not be guessable
+  btn.disabled = true;
+  btn.textContent = "Saving…";
+  try{
+    const resp = await fetch("/api/project/" + id, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    if(!resp.ok){
+      const err = await resp.json().catch(()=>({}));
+      throw new Error(err.error || ("Server responded with " + resp.status));
+    }
+    cloudId = id;
+    persist();
+    document.getElementById("cloudSaveTitle").textContent = "Saved to cloud";
+    document.getElementById("cloudSaveDesc").textContent = "Write this code down — it's the only way to get this project back on another device or after clearing browser data.";
+    document.getElementById("cloudCodeDisplay").value = id;
+    document.getElementById("cloudSaveModal").style.display = "flex";
+  }catch(err){
+    console.error("Cloud save failed:", err);
+    alert("Couldn't save to the cloud: " + err.message + "\n\nThis feature only works when this page is hosted on your Vercel deployment with a database connected — it won't work from a local file or from GitHub Pages.");
+  }finally{
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+}
+document.getElementById("cloudSaveBtn").addEventListener("click", saveToCloud);
+document.getElementById("cloudCodeCopyBtn").addEventListener("click", ()=>{
+  const input = document.getElementById("cloudCodeDisplay");
+  input.select();
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(input.value).catch(()=>{});
+  }
+});
+document.getElementById("cloudSaveCloseBtn").addEventListener("click", ()=>{
+  document.getElementById("cloudSaveModal").style.display = "none";
+});
+
+document.getElementById("cloudLoadBtn").addEventListener("click", ()=>{
+  if(!currentProjectId) return;
+  document.getElementById("cloudLoadCodeInput").value = cloudId || "";
+  document.getElementById("cloudLoadModal").style.display = "flex";
+  document.getElementById("cloudLoadCodeInput").focus();
+});
+document.getElementById("cloudLoadCancelBtn").addEventListener("click", ()=>{
+  document.getElementById("cloudLoadModal").style.display = "none";
+});
+document.getElementById("cloudLoadModal").addEventListener("click", (e)=>{
+  if(e.target.id === "cloudLoadModal") document.getElementById("cloudLoadModal").style.display = "none";
+});
+async function loadFromCloud(){
+  const code = document.getElementById("cloudLoadCodeInput").value.trim();
+  if(!code) return;
+  const btn = document.getElementById("cloudLoadConfirmBtn");
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Loading…";
+  try{
+    const resp = await fetch("/api/project/" + encodeURIComponent(code));
+    if(!resp.ok){
+      const err = await resp.json().catch(()=>({}));
+      throw new Error(err.error || ("Server responded with " + resp.status));
+    }
+    const d = await resp.json();
+    applyImportedProjectData(d);
+    cloudId = code;
+    persist();
+    document.getElementById("cloudLoadModal").style.display = "none";
+  }catch(err){
+    console.error("Cloud load failed:", err);
+    alert("Couldn't load from the cloud: " + err.message);
+  }finally{
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+}
+document.getElementById("cloudLoadConfirmBtn").addEventListener("click", loadFromCloud);
+document.getElementById("cloudLoadCodeInput").addEventListener("keydown", (e)=>{
+  if(e.key==="Enter") loadFromCloud();
+  if(e.key==="Escape") document.getElementById("cloudLoadModal").style.display = "none";
 });
 
 // =====================================================================
