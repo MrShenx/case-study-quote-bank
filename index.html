@@ -71,13 +71,24 @@
     display:flex;flex-wrap:wrap;align-items:center;gap:10px;
   }
   #topbar h1{font-size:1.02rem;margin:0;white-space:nowrap;}
-  .btn{padding:7px 14px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font-size:0.8rem;cursor:pointer;white-space:nowrap;}
+  .btn{padding:7px 14px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font-size:0.8rem;cursor:pointer;white-space:nowrap;text-decoration:none;display:inline-block;}
   .btn.primary{background:var(--accent);color:#fff;border-color:var(--accent);}
   .btn.active{background:var(--accent);color:#fff;border-color:var(--accent);}
   .btn:disabled{opacity:0.4;cursor:not-allowed;}
   .spacer{flex:1;}
   .divider{width:1px;align-self:stretch;background:var(--line);}
   #topbar .status{font-size:0.76rem;color:var(--ink-soft);}
+  .dropdown-wrap{position:relative;}
+  .dropdown-menu{
+    display:none;position:absolute;top:calc(100% + 6px);left:0;z-index:50;
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    box-shadow:0 10px 30px rgba(0,0,0,0.18);padding:6px;min-width:230px;
+  }
+  .dropdown-menu.open{display:block;}
+  .dropdown-menu .btn{display:flex;align-items:center;width:100%;text-align:left;border-radius:8px;border:none;padding:8px 10px;background:transparent;white-space:normal;}
+  .dropdown-menu .btn:hover{background:var(--accent-soft);color:var(--accent);}
+  .dropdown-section-label{font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-soft);padding:8px 10px 4px;}
+  .dropdown-section-label:first-child{padding-top:4px;}
 
   /* ---------- main split ---------- */
   #main{flex:1;display:flex;min-height:0;}
@@ -208,6 +219,72 @@
     #scorePanel,#notesPanel{width:100%;border-right:none;border-bottom:1px solid var(--line);}
     #scoreScroll{max-height:60vh;}
   }
+
+  /* =====================================================================
+     Practice Mode — essay-writing practice built from the student's own
+     study notes. A third top-level view alongside Home/Studio (see
+     showPractice() in the script below), sharing this page's single
+     IndexedDB connection — no cross-file/cross-origin boundary, unlike the
+     old standalone practice.html this was merged in from.
+     ===================================================================== */
+  #practiceView{display:none;flex-direction:column;height:100%;}
+  #practiceTopbar{padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel);display:flex;flex-wrap:wrap;align-items:center;gap:10px;}
+  #practiceTopbar h1{font-size:1.02rem;margin:0;white-space:nowrap;}
+  .btn.del:hover{background:var(--bad-soft);color:var(--bad);border-color:var(--bad-soft);}
+
+  #practiceListView{flex:1;overflow:auto;padding:24px;display:none;}
+  #practiceListView.active{display:block;}
+  #practiceListGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;max-width:1000px;margin:0 auto;}
+  #practiceListEmpty{grid-column:1/-1;text-align:center;color:var(--ink-soft);padding:60px 20px;border:1px dashed var(--line);border-radius:var(--radius);}
+  .practice-card-q{font-weight:700;font-size:0.95rem;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;}
+
+  #practicePickerView{display:none;flex:1;overflow:auto;}
+  #practicePickerBox{max-width:600px;margin:40px auto;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:20px;}
+  #practicePickerBox h2{margin-top:0;}
+  #practicePickerBox select{width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);margin-bottom:12px;font:inherit;}
+  #practicePickerPreview{background:var(--accent-soft);color:var(--accent);border-radius:8px;padding:12px;font-size:0.9rem;min-height:20px;margin-bottom:14px;}
+
+  #practiceWriteView{flex:1;display:none;min-height:0;flex-direction:column;}
+  #practiceWriteView.active{display:flex;}
+  #practiceQuestionBar{padding:10px 16px;border-bottom:1px solid var(--line);background:var(--accent-soft);color:var(--accent);font-size:0.85rem;font-weight:600;}
+  #practiceWriteMain{flex:1;display:flex;min-height:0;}
+  #practiceParagraphPanel{width:58%;border-right:1px solid var(--line);display:flex;flex-direction:column;min-width:0;}
+  #practiceParagraphToolbar{padding:8px 14px;border-bottom:1px solid var(--line);background:var(--panel);display:flex;gap:8px;}
+  #practiceParagraphScroll{flex:1;overflow:auto;padding:16px;}
+  .paragraph-box{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px;margin-bottom:14px;}
+  .paragraph-box .ptop{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+  .paragraph-title{font-weight:700;font-size:0.88rem;border:1px solid transparent;border-radius:6px;padding:2px 6px;background:transparent;flex:1;}
+  .paragraph-title:focus{border-color:var(--accent);background:var(--bg);outline:none;}
+  .paragraph-text{width:100%;min-height:120px;border:1px solid var(--line);border-radius:8px;padding:10px;font-size:0.9rem;line-height:1.5;resize:vertical;background:var(--bg);color:var(--ink);}
+  .paragraph-text:focus{outline:2px solid var(--accent);}
+  .evidence-dock{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;min-height:12px;border-radius:8px;transition:background 0.1s,outline 0.1s;}
+  .evidence-dock.drop-target{background:var(--accent-soft);outline:2px dashed var(--accent);outline-offset:2px;}
+  .evidence-chip{display:flex;align-items:center;gap:6px;background:var(--accent-soft);color:var(--accent);border-radius:999px;padding:4px 10px 4px 12px;font-size:0.72rem;font-weight:600;}
+  .evidence-chip button{background:none;border:none;color:inherit;cursor:pointer;font-size:0.8rem;padding:0;line-height:1;}
+
+  #practiceEvidencePanel{width:42%;display:flex;flex-direction:column;min-width:0;}
+  #practiceEvidenceToolbar{padding:8px 14px;border-bottom:1px solid var(--line);background:var(--panel);font-size:0.8rem;color:var(--ink-soft);}
+  #practiceEvidenceScroll{flex:1;overflow:auto;padding:12px;}
+  .piece-section{margin-bottom:10px;}
+  .piece-header{display:flex;align-items:center;gap:6px;cursor:pointer;padding:8px 10px;background:var(--panel);border:1px solid var(--line);border-radius:8px;font-weight:700;font-size:0.85rem;}
+  .piece-header .chev{transition:transform 0.12s;font-size:0.7rem;}
+  .piece-section.collapsed .chev{transform:rotate(-90deg);}
+  .piece-body{padding:8px 4px 4px;display:flex;flex-direction:column;gap:8px;}
+  .piece-section.collapsed .piece-body{display:none;}
+  .piece-empty{font-size:0.76rem;color:var(--ink-soft);padding:6px 10px;}
+
+  .note-bubble{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 10px;cursor:grab;user-select:none;}
+  .note-bubble.dragging{opacity:0.4;}
+  .note-bubble .where{font-size:0.7rem;font-weight:700;color:var(--accent);margin-bottom:3px;}
+  .note-bubble .snippet{font-size:0.78rem;line-height:1.4;color:var(--ink);white-space:pre-wrap;}
+  .note-bubble.used{border-color:var(--good);}
+
+  .drag-ghost{position:fixed;z-index:999;pointer-events:none;opacity:0.9;transform:translate(-50%,-50%);box-shadow:0 8px 24px rgba(0,0,0,0.25);}
+
+  @media(max-width:860px){
+    #practiceWriteMain{flex-direction:column;overflow:auto;}
+    #practiceParagraphPanel,#practiceEvidencePanel{width:100%;border-right:none;border-bottom:1px solid var(--line);}
+  }
 </style>
 </head>
 <body>
@@ -217,6 +294,7 @@
     <h1>🎼 Score Analysis Studio — Projects</h1>
     <div id="themePicker"><span class="theme-label">Theme</span></div>
     <div id="modePicker"></div>
+    <button class="btn" id="practiceNavBtn">📝 Practice Response</button>
     <button class="btn primary" id="newProjectBtn">+ New project</button>
   </div>
   <div id="homeGrid"></div>
@@ -281,14 +359,22 @@
     <button class="btn" id="systemModeBtn" disabled>📏 Mark system</button>
     <button class="btn" id="advToggleBtn">⚙</button>
     <div class="divider"></div>
-    <button class="btn" id="exportBtn">⬇ Export project</button>
-    <button class="btn" id="importBtn">⬆ Import project</button>
-    <input type="file" id="importFile" accept="application/json" style="display:none;">
-    <button class="btn" id="cloudSaveBtn">☁️ Save to Cloud</button>
-    <button class="btn" id="cloudLoadBtn">☁️ Load from Cloud</button>
-    <button class="btn" id="exportDocxBtn">📄 Export Study Notes (.docx)</button>
-    <button class="btn" id="importDocxBtn">📥 Import Study Notes (.docx)</button>
-    <input type="file" id="importDocxFile" accept=".docx" style="display:none;">
+    <div class="dropdown-wrap">
+      <button class="btn" id="fileMenuBtn">📁 Project data ▾</button>
+      <div class="dropdown-menu" id="fileMenu">
+        <div class="dropdown-section-label">Local file</div>
+        <button class="btn" id="exportBtn">⬇ Export project</button>
+        <button class="btn" id="importBtn">⬆ Import project</button>
+        <input type="file" id="importFile" accept="application/json" style="display:none;">
+        <div class="dropdown-section-label">Cloud backup</div>
+        <button class="btn" id="cloudSaveBtn">☁️ Save to Cloud</button>
+        <button class="btn" id="cloudLoadBtn">☁️ Load from Cloud</button>
+        <div class="dropdown-section-label">Study notes (.docx)</div>
+        <button class="btn" id="exportDocxBtn">📄 Export Study Notes</button>
+        <button class="btn" id="importDocxBtn">📥 Import Study Notes</button>
+        <input type="file" id="importDocxFile" accept=".docx" style="display:none;">
+      </div>
+    </div>
     <div class="spacer"></div>
     <span class="status" id="topStatus">No score loaded</span>
   </div>
@@ -368,6 +454,57 @@
     </div>
   </div>
 
+</div>
+
+<div id="practiceView">
+  <div id="practiceTopbar">
+    <button class="btn" id="practiceHomeBtn">🏠 Home</button>
+    <h1>📝 Practice Response</h1>
+    <div class="spacer"></div>
+    <button class="btn" id="practiceBackBtn" style="display:none;">☰ My practice responses</button>
+    <button class="btn primary" id="practiceExportBtn" style="display:none;">⬇ Export response (.docx)</button>
+  </div>
+
+  <div id="practiceListView">
+    <div style="max-width:1000px;margin:0 auto 16px;display:flex;align-items:center;">
+      <span style="color:var(--ink-soft);font-size:0.85rem;">Practice essay responses, built from your existing study notes.</span>
+      <div class="spacer"></div>
+      <button class="btn primary" id="practiceNewResponseBtn">+ New practice response</button>
+    </div>
+    <div id="practiceListGrid"><div id="practiceListEmpty">No practice responses yet — click "+ New practice response" to start one.</div></div>
+  </div>
+
+  <div id="practicePickerView">
+    <div id="practicePickerBox">
+      <h2>Choose a question</h2>
+      <label style="font-size:0.8rem;color:var(--ink-soft);">Pick a specific year</label>
+      <select id="practiceYearSelect"></select>
+      <button class="btn" id="practiceRandomQBtn" style="width:100%;margin-bottom:14px;">🎲 Or pick one at random</button>
+      <div id="practicePickerPreview">Select a year, or click random, to preview a question here.</div>
+      <div class="modal-actions">
+        <button class="btn" id="practicePickerCancelBtn">Cancel</button>
+        <button class="btn primary" id="practicePickerStartBtn" disabled>Start writing</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="practiceWriteView">
+    <div id="practiceQuestionBar"></div>
+    <div id="practiceWriteMain">
+      <div id="practiceParagraphPanel">
+        <div id="practiceParagraphToolbar">
+          <button class="btn" id="practiceAddParagraphBtn">+ Add paragraph</button>
+          <span class="spacer"></span>
+          <span style="font-size:0.72rem;color:var(--ink-soft);align-self:center;">Autosaves as you go</span>
+        </div>
+        <div id="practiceParagraphScroll"></div>
+      </div>
+      <div id="practiceEvidencePanel">
+        <div id="practiceEvidenceToolbar">Your study notes, by piece — drag a note into a paragraph below to mark it as evidence for that paragraph. Dragging never inserts its text; you still write the sentence yourself.</div>
+        <div id="practiceEvidenceScroll"></div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -702,6 +839,7 @@ function showHome(){
   currentProjectMeta = null;
   document.getElementById("homeView").style.display = "flex";
   document.getElementById("studioView").style.display = "none";
+  document.getElementById("practiceView").style.display = "none";
   renderHomeGrid();
 }
 
@@ -790,8 +928,21 @@ document.getElementById("newProjectNameInput").addEventListener("keydown", (e)=>
 async function showStudio(id){
   document.getElementById("homeView").style.display = "none";
   document.getElementById("studioView").style.display = "flex";
+  document.getElementById("practiceView").style.display = "none";
   await openProject(id);
 }
+
+async function showPractice(){
+  document.getElementById("homeView").style.display = "none";
+  document.getElementById("studioView").style.display = "none";
+  document.getElementById("practiceView").style.display = "flex";
+  // Refreshed every time Practice Mode is entered (rather than once at page
+  // load) so a note added in Studio moments ago shows up immediately here —
+  // no stale cache, no page reload needed.
+  practicePieces = await listProjects();
+  practiceShowList();
+}
+document.getElementById("practiceNavBtn").addEventListener("click", showPractice);
 
 function resetVideoPlayer(){
   if(ytPlayer && ytPlayer.destroy){ try{ ytPlayer.destroy(); }catch(e){ /* already gone */ } }
@@ -1367,6 +1518,30 @@ function renumberAllBars(){
 
 document.getElementById("advToggleBtn").addEventListener("click", ()=>{
   document.getElementById("advPanel").classList.toggle("open");
+});
+
+// file/cloud/study-notes actions dropdown — groups everything that used to
+// clutter the topbar as separate buttons; the buttons/inputs inside it are
+// untouched, just relocated, so none of their own click handlers changed
+document.getElementById("fileMenuBtn").addEventListener("click", (e)=>{
+  e.stopPropagation();
+  document.getElementById("fileMenu").classList.toggle("open");
+});
+document.getElementById("fileMenu").addEventListener("click", (e)=>{
+  // let a click inside the menu run its own handler first, then close —
+  // except clicks on a file <input> itself (opening the OS file picker)
+  // or its own label text, which shouldn't dismiss the menu underneath it
+  if(e.target.tagName === "INPUT") return;
+  setTimeout(()=> document.getElementById("fileMenu").classList.remove("open"), 0);
+});
+document.addEventListener("click", (e)=>{
+  const menu = document.getElementById("fileMenu");
+  if(menu.classList.contains("open") && !menu.contains(e.target) && e.target.id!=="fileMenuBtn"){
+    menu.classList.remove("open");
+  }
+});
+document.addEventListener("keydown", (e)=>{
+  if(e.key==="Escape") document.getElementById("fileMenu").classList.remove("open");
 });
 document.getElementById("staffSens").addEventListener("input", (e)=>{
   document.getElementById("staffSensVal").textContent = e.target.value + "%";
@@ -2832,6 +3007,468 @@ setInterval(()=>{
   }
   if(ytPlayer.getPlayerState) updatePlayPauseIcon(ytPlayer.getPlayerState()===1);
 }, 250);
+
+// =====================================================================
+// Practice Mode — essay-writing practice built from the student's own
+// study notes (see showPractice() above for how this view is entered).
+// Responses live in their own separate IndexedDB database, kept apart from
+// the main project database on purpose — a bug here should never be able
+// to touch a student's actual score analysis. Pieces/notes themselves are
+// read via listProjects() (already defined above) rather than a second
+// raw IndexedDB connection, since this now lives on the same page as the
+// rest of the app.
+// =====================================================================
+const PRACTICE_DB_NAME = "scoreStudioPracticeDB";
+const PRACTICE_DB_VERSION = 1;
+const RESPONSE_STORE = "responses";
+let __practiceDbPromise = null;
+function openPracticeDB(){
+  if(__practiceDbPromise) return __practiceDbPromise;
+  __practiceDbPromise = new Promise((resolve,reject)=>{
+    const req = indexedDB.open(PRACTICE_DB_NAME, PRACTICE_DB_VERSION);
+    req.onupgradeneeded = (e)=>{
+      const db = e.target.result;
+      if(!db.objectStoreNames.contains(RESPONSE_STORE)) db.createObjectStore(RESPONSE_STORE, { keyPath:"id" });
+    };
+    req.onsuccess = ()=> resolve(req.result);
+    req.onerror = ()=> reject(req.error);
+  });
+  return __practiceDbPromise;
+}
+async function saveResponseRecord(rec){
+  const db = await openPracticeDB();
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction(RESPONSE_STORE, "readwrite");
+    tx.objectStore(RESPONSE_STORE).put(rec);
+    tx.oncomplete = ()=>resolve();
+    tx.onerror = ()=>reject(tx.error);
+  });
+}
+async function listResponses(){
+  const db = await openPracticeDB();
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction(RESPONSE_STORE, "readonly");
+    const req = tx.objectStore(RESPONSE_STORE).getAll();
+    req.onsuccess = ()=> resolve((req.result||[]).sort((a,b)=> (b.updatedAt||0)-(a.updatedAt||0)));
+    req.onerror = ()=> reject(req.error);
+  });
+}
+async function getResponse(id){
+  const db = await openPracticeDB();
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction(RESPONSE_STORE, "readonly");
+    const req = tx.objectStore(RESPONSE_STORE).get(id);
+    req.onsuccess = ()=> resolve(req.result || null);
+    req.onerror = ()=> reject(req.error);
+  });
+}
+async function deleteResponse(id){
+  const db = await openPracticeDB();
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction(RESPONSE_STORE, "readwrite");
+    tx.objectStore(RESPONSE_STORE).delete(id);
+    tx.oncomplete = ()=>resolve();
+    tx.onerror = ()=>reject(tx.error);
+  });
+}
+
+// The HSC Music 2 Question 4 pool (2001–2025), inlined directly rather than
+// fetched from a JSON file, so the picker never depends on a network/file
+// request that could fail or be missing from a deployment.
+const QUESTION_POOL = [
+  { "id": "hsc-2001", "year": "2001", "text": "The last twenty-five years have been marked by composers' exploration of tone colour and performing techniques. Discuss this statement in relation to at least TWO works you have studied from the Mandatory Topic, Music of the Last 25 Years (Australian focus). At least ONE work must be Australian." },
+  { "id": "hsc-2002", "year": "2002", "text": "Contemporary composers use varying degrees of tradition and innovation. Discuss this statement in relation to the music used in Question 3 and works you have studied in the Mandatory Topic, Music of the Last 25 Years (Australian focus)." },
+  { "id": "hsc-2003", "year": "2003", "text": "Composers choose instruments and/or voices for musically expressive purposes. Discuss this statement in relation to works you have studied in both the Mandatory Topic, Music of the last 25 years (Australian focus), and Additional Topic. You may also refer to the works used in this examination paper." },
+  { "id": "hsc-2004", "year": "2004", "text": "Music starts with an idea, but it is the development of the idea that sustains interest. Discuss this statement in relation to works you have studied from the Mandatory Topic Music of the last 25 years (Australian focus), and/or the Additional Topic." },
+  { "id": "hsc-2005", "year": "2005", "text": "Composers both break with and maintain musical conventions in their work. With reference to specific concepts of music, critically examine this statement in relation to at least TWO works you have studied from the Mandatory Topic Music of the last 25 years (Australian focus)." },
+  { "id": "hsc-2006", "year": "2006", "text": "How have composers used pitch in at least THREE works from the Mandatory Topic Music of the last 25 Years (Australian focus)?" },
+  { "id": "hsc-2007", "year": "2007", "text": "\"What came to me as a revelation was the use of rhythm in developing an overall structure in music.\" — Philip Glass. To what extent does this statement apply to ONE work from the Additional Topic and at least ONE work from the Mandatory Topic that you have studied? Refer to specific musical examples to support your answer." },
+  { "id": "hsc-2008", "year": "2008", "text": "Choose any TWO concepts of music and compare their treatment in TWO or more works you have studied from both the Mandatory and the Additional Topics. Choose at least ONE work from the Mandatory Topic and at least ONE work from the Additional Topic and name these works." },
+  { "id": "hsc-2009", "year": "2009", "text": "Discuss how the concepts of tone colour and texture have been manipulated by composers in two or more works you have studied. One work should come from the Mandatory Topic Music of the last 25 years (Australian Focus) AND one work from the Additional Topic. Use musical quotes where appropriate to support your answer." },
+  { "id": "hsc-2010", "year": "2010", "text": "How have composers explored the concepts of music to create works that reflect a distinctive Style? In your answer refer to significant works that you have studied in your Higher School Certificate course." },
+  { "id": "hsc-2011", "year": "2011", "text": "How have composers manipulated the concepts of music to achieve unity in their works? In your answer refer to significant compositions that you have studied in your Higher School Certificate course." },
+  { "id": "hsc-2012", "year": "2012", "text": "Compare Bernstein's treatment of musical ideas in Turkey Trot with the treatment of musical ideas in a significant work you have studied. MUST be chosen from the mandatory topic Music of the last 25 years (Australian focus)." },
+  { "id": "hsc-2013", "year": "2013", "text": "Based on SlingJaw Wrasse from Six Fish (2003) by Nigel Westlake. Compare the use of duration and ONE other concept of music in SlingJaw Wrasse with the way in which both concepts are used in ONE other significant work you have studied. The other significant work MUST be chosen from the mandatory topic Music of the last 25 years (Australian focus)." },
+  { "id": "hsc-2014", "year": "2014", "text": "Based on an excerpt from String Quartet No. 2 (2002) by Graeme Koehne (bars 1–79). How are Koehne's compositional techniques similar to those used in ONE other significant work you have studied? The other significant work MUST be chosen from the mandatory topic Music of the last 25 years (Australian focus)." },
+  { "id": "hsc-2015", "year": "2015", "text": "Based on Möbius Strip from Five of One, Half a Dozen of the Other . . . ? (2000) by Stuart Greenbaum. Compare how the concepts of music have been manipulated in Möbius Strip and ONE other work you have studied. The other work MUST be chosen from EITHER the mandatory topic OR from your additional topic." },
+  { "id": "hsc-2016", "year": "2016", "text": "Compare how TWO composers develop their musical ideas. In your response, refer to TWO works, one from the MANDATORY TOPIC and one from your ADDITIONAL TOPIC." },
+  { "id": "hsc-2017", "year": "2017", "text": "Based on Movement II from High Tension Wires by Nigel Westlake. Compare how tone colour and duration are explored in Movement II from High Tension Wires and ONE other significant work you have studied. The other significant work MUST be chosen from the mandatory topic, Music of the last 25 years (Australian focus)." },
+  { "id": "hsc-2018", "year": "2018", "text": "Explain how composers treat the concepts of music to create a particular style. In your response, refer to TWO works from the mandatory topic, Music of the last 25 years (Australian focus)." },
+  { "id": "hsc-2019", "year": "2019", "text": "\"The material of music is sound and silence. Integrating these is composing.\" — John Cage, 1961. To what extent is this statement true of works you have studied in both the mandatory topic, Music of the last 25 years (Australian focus) AND the additional topic? In your response, make reference to relevant musical examples." },
+  { "id": "hsc-2020", "year": "2020", "text": "Based on 'Overture' from Gogol Suite by Alfred Schnittke. How do composers use the concepts of music to create musical interest? In your answer, refer to 'Overture' from Gogol Suite and ONE other significant work you have studied. The other significant work MUST be chosen from the mandatory topic, Music of the last 25 years (Australian focus)." },
+  { "id": "hsc-2021", "year": "2021", "text": "Based on Glenro (Postcard.) for piano and tape by Connor D'Netto. With Score. No recording provided. Analyse how composers allow performers the freedom to interpret musical scores. In your answer, refer to Glenro and TWO other significant works you have studied. One work MUST be from the mandatory topic, Music of the last 25 years (Australian focus). The other work MUST be from your additional topic." },
+  { "id": "hsc-2022", "year": "2022", "text": "Analyse how different composers use the concepts of music to reflect different cultural contexts in their works. In your answer, refer to TWO works you have studied from the mandatory topic, Music of the last 25 years (Australian focus). You may refer to works from part (a) and part (b) of the mandatory topic: (a) art music (as distinct from traditional and popular music) (b) popular music; music in radio, film, television and multimedia; jazz; music for theatre." },
+  { "id": "hsc-2023", "year": "2023", "text": "With reference to pitch and duration, to what extent does contemporary Australian music feature the development of musical ideas? In your answer, refer to TWO works you have studied from the mandatory topic, Music of the last 25 years (Australian focus)." },
+  { "id": "hsc-2024", "year": "2024", "text": "Based on an excerpt from And the Lord said (bars 42–61), Fiat Lux by Alice Chance. Compare how pitch and texture are used in And the Lord said, Fiat Lux by Alice Chance and at least ONE work you have studied from the mandatory topic, Music of the last 25 years (Australian focus)." },
+  { "id": "hsc-2025", "year": "2025", "text": "This question is based on Memoirs of a Snail (2024) by Elena Kats-Chernin. Compare how tone colour is used in Memoirs of a Snail by Elena Kats-Chernin and at least TWO works you have studied from the mandatory topic: Music of the last 25 years (Australian Focus)." }
+];
+
+let practicePieces = [];             // all projects (with notes), refreshed each time Practice Mode is entered — see showPractice()
+let practiceCurrentResponse = null;  // the response record currently being written
+let practiceDragNoteRef = null;      // {pieceId, noteId} currently being dragged, or null
+let practiceGhostEl = null;
+let practiceSaveTimer = null;
+let practicePickedQuestion = null;
+const practiceCollapsedPieces = new Set();
+
+function findPracticeNote(pieceId, noteId){
+  const piece = practicePieces.find(p=>p.id===pieceId);
+  if(!piece) return null;
+  return (piece.notes||[]).find(n=>n.id===noteId) || null;
+}
+
+// ---------- view switching within Practice Mode ----------
+function practiceShowList(){
+  document.getElementById("practiceListView").classList.add("active");
+  document.getElementById("practicePickerView").style.display = "none";
+  document.getElementById("practiceWriteView").classList.remove("active");
+  document.getElementById("practiceBackBtn").style.display = "none";
+  document.getElementById("practiceExportBtn").style.display = "none";
+  practiceCurrentResponse = null;
+  practiceRenderList();
+}
+function practiceShowPicker(){
+  document.getElementById("practiceListView").classList.remove("active");
+  document.getElementById("practicePickerView").style.display = "block";
+  document.getElementById("practiceWriteView").classList.remove("active");
+  document.getElementById("practiceBackBtn").style.display = "";
+  document.getElementById("practiceExportBtn").style.display = "none";
+  practiceRenderPicker();
+}
+function practiceShowWrite(){
+  document.getElementById("practiceListView").classList.remove("active");
+  document.getElementById("practicePickerView").style.display = "none";
+  document.getElementById("practiceWriteView").classList.add("active");
+  document.getElementById("practiceBackBtn").style.display = "";
+  document.getElementById("practiceExportBtn").style.display = "";
+  practiceRenderWrite();
+}
+document.getElementById("practiceHomeBtn").addEventListener("click", showHome);
+document.getElementById("practiceBackBtn").addEventListener("click", practiceShowList);
+
+// ---------- list view ----------
+async function practiceRenderList(){
+  const grid = document.getElementById("practiceListGrid");
+  const responses = await listResponses();
+  grid.innerHTML = "";
+  if(responses.length===0){
+    grid.innerHTML = '<div id="practiceListEmpty">No practice responses yet — click "+ New practice response" to start one.</div>';
+    return;
+  }
+  responses.forEach(r=>{
+    const card = document.createElement("div");
+    card.className = "project-card";
+    card.innerHTML = `
+      <div class="project-card-top">
+        <span class="practice-card-q">${escapeHtml(r.questionText)}</span>
+      </div>
+      <div class="project-meta">${r.questionYear ? escapeHtml(r.questionYear) + " · " : ""}${new Date(r.updatedAt||r.createdAt).toLocaleDateString()}</div>
+    `;
+    const delBtn = document.createElement("button");
+    delBtn.className = "project-icon-btn del";
+    delBtn.title = "Delete response";
+    delBtn.textContent = "✕";
+    armDeleteConfirm(delBtn, async ()=>{
+      await deleteResponse(r.id);
+      practiceRenderList();
+    });
+    card.querySelector(".project-card-top").appendChild(delBtn);
+    card.addEventListener("click", async ()=>{
+      practiceCurrentResponse = await getResponse(r.id);
+      practiceShowWrite();
+    });
+    grid.appendChild(card);
+  });
+}
+document.getElementById("practiceNewResponseBtn").addEventListener("click", practiceShowPicker);
+document.getElementById("practicePickerCancelBtn").addEventListener("click", practiceShowList);
+
+// ---------- question picker ----------
+function practiceRenderPicker(){
+  practicePickedQuestion = null;
+  document.getElementById("practicePickerStartBtn").disabled = true;
+  document.getElementById("practicePickerPreview").textContent = "Select a year, or click random, to preview a question here.";
+  const sel = document.getElementById("practiceYearSelect");
+  sel.innerHTML = '<option value="">— Select a year —</option>' +
+    QUESTION_POOL.map(q=> `<option value="${q.id}">${q.year}</option>`).join("");
+}
+document.getElementById("practiceYearSelect").addEventListener("change", (e)=>{
+  const q = QUESTION_POOL.find(x=>x.id===e.target.value);
+  if(q) practicePickQuestion(q);
+});
+document.getElementById("practiceRandomQBtn").addEventListener("click", ()=>{
+  if(QUESTION_POOL.length===0) return;
+  const q = QUESTION_POOL[Math.floor(Math.random()*QUESTION_POOL.length)];
+  document.getElementById("practiceYearSelect").value = q.id;
+  practicePickQuestion(q);
+});
+function practicePickQuestion(q){
+  practicePickedQuestion = q;
+  document.getElementById("practicePickerPreview").textContent = q.text;
+  document.getElementById("practicePickerStartBtn").disabled = false;
+}
+document.getElementById("practicePickerStartBtn").addEventListener("click", async ()=>{
+  if(!practicePickedQuestion) return;
+  practiceCurrentResponse = {
+    id: uid(),
+    questionId: practicePickedQuestion.id,
+    questionText: practicePickedQuestion.text,
+    questionYear: practicePickedQuestion.year,
+    createdAt: Date.now(), updatedAt: Date.now(),
+    paragraphs: [
+      { id: uid(), title:"Introduction", text:"", evidenceIds:[] },
+      { id: uid(), title:"Body 1", text:"", evidenceIds:[] },
+      { id: uid(), title:"Conclusion", text:"", evidenceIds:[] },
+    ]
+  };
+  await saveResponseRecord(practiceCurrentResponse);
+  practiceShowWrite();
+});
+
+// ---------- writing view — paragraph boxes ----------
+function practiceScheduleSave(){
+  if(!practiceCurrentResponse) return;
+  practiceCurrentResponse.updatedAt = Date.now();
+  clearTimeout(practiceSaveTimer);
+  practiceSaveTimer = setTimeout(()=> saveResponseRecord(practiceCurrentResponse), 400);
+}
+function practiceRenderWrite(){
+  document.getElementById("practiceQuestionBar").textContent =
+    (practiceCurrentResponse.questionYear ? practiceCurrentResponse.questionYear + " — " : "") + practiceCurrentResponse.questionText;
+  practiceRenderParagraphs();
+  practiceRenderEvidencePanel();
+}
+function practiceRenderParagraphs(){
+  const scroll = document.getElementById("practiceParagraphScroll");
+  scroll.innerHTML = "";
+  practiceCurrentResponse.paragraphs.forEach(p=>{
+    scroll.appendChild(practiceBuildParagraphBox(p));
+  });
+}
+function practiceBuildParagraphBox(p){
+  const box = document.createElement("div");
+  box.className = "paragraph-box";
+  box.dataset.id = p.id;
+
+  const top = document.createElement("div");
+  top.className = "ptop";
+  const title = document.createElement("input");
+  title.type = "text";
+  title.className = "paragraph-title";
+  title.value = p.title;
+  title.addEventListener("change", ()=>{ p.title = title.value.trim() || p.title; practiceScheduleSave(); });
+  top.appendChild(title);
+  if(practiceCurrentResponse.paragraphs.length > 1){
+    const del = document.createElement("button");
+    del.className = "btn del";
+    del.textContent = "✕";
+    del.style.padding = "3px 8px";
+    del.title = "Remove this paragraph box";
+    del.addEventListener("click", ()=>{
+      practiceCurrentResponse.paragraphs = practiceCurrentResponse.paragraphs.filter(x=>x.id!==p.id);
+      practiceScheduleSave();
+      practiceRenderParagraphs();
+    });
+    top.appendChild(del);
+  }
+  box.appendChild(top);
+
+  const text = document.createElement("textarea");
+  text.className = "paragraph-text";
+  text.placeholder = "Write this paragraph here…";
+  text.value = p.text;
+  text.addEventListener("input", ()=>{ p.text = text.value; practiceScheduleSave(); });
+  box.appendChild(text);
+
+  const dock = document.createElement("div");
+  dock.className = "evidence-dock";
+  dock.dataset.paragraphId = p.id;
+  p.evidenceIds.forEach(ref=>{
+    dock.appendChild(practiceBuildEvidenceChip(p, ref));
+  });
+  box.appendChild(dock);
+
+  // drop target behaviour (custom drag system, see below)
+  dock.addEventListener("mouseup", ()=>{
+    if(!practiceDragNoteRef) return;
+    const already = p.evidenceIds.some(r=> r.pieceId===practiceDragNoteRef.pieceId && r.noteId===practiceDragNoteRef.noteId);
+    if(!already){
+      p.evidenceIds.push({ pieceId: practiceDragNoteRef.pieceId, noteId: practiceDragNoteRef.noteId });
+      practiceScheduleSave();
+      practiceRenderParagraphs();
+      practiceRenderEvidencePanel();
+    }
+  });
+
+  return box;
+}
+function practiceBuildEvidenceChip(p, ref){
+  const chip = document.createElement("div");
+  chip.className = "evidence-chip";
+  const n = findPracticeNote(ref.pieceId, ref.noteId);
+  chip.textContent = n ? whereLabel(n) : "(note no longer exists)";
+  const rm = document.createElement("button");
+  rm.textContent = "✕";
+  rm.title = "Remove from this paragraph";
+  rm.addEventListener("click", ()=>{
+    p.evidenceIds = p.evidenceIds.filter(r=> !(r.pieceId===ref.pieceId && r.noteId===ref.noteId));
+    practiceScheduleSave();
+    practiceRenderParagraphs();
+    practiceRenderEvidencePanel();
+  });
+  chip.appendChild(rm);
+  return chip;
+}
+document.getElementById("practiceAddParagraphBtn").addEventListener("click", ()=>{
+  // Number the new box after the highest existing "Body N" title (not just a
+  // raw count), so it reads "Body 2" rather than skipping to "Body 3" once
+  // an Introduction/Conclusion are also in the list.
+  const bodyNumbers = practiceCurrentResponse.paragraphs
+    .map(p => /^Body (\d+)$/.exec(p.title))
+    .filter(Boolean)
+    .map(m => parseInt(m[1], 10));
+  const nextBody = bodyNumbers.length ? Math.max(...bodyNumbers) + 1 : 1;
+  const newParagraph = { id: uid(), title: "Body " + nextBody, text: "", evidenceIds: [] };
+  // Insert before the last box (treated as the closing/Conclusion paragraph)
+  // instead of appending to the very end — otherwise a new body paragraph
+  // would land after the conclusion, both on screen and in the exported doc.
+  const insertAt = practiceCurrentResponse.paragraphs.length > 0 ? practiceCurrentResponse.paragraphs.length - 1 : 0;
+  practiceCurrentResponse.paragraphs.splice(insertAt, 0, newParagraph);
+  practiceScheduleSave();
+  practiceRenderParagraphs();
+});
+
+// ---------- evidence panel — pieces (projects) as collapsible sections,
+// notes as draggable read-only bubbles ----------
+function practiceRenderEvidencePanel(){
+  const scroll = document.getElementById("practiceEvidenceScroll");
+  scroll.innerHTML = "";
+  if(practicePieces.length===0){
+    scroll.innerHTML = '<div class="piece-empty">No pieces found yet — go analyse a score in the main app first.</div>';
+    return;
+  }
+  const usedRefs = new Set();
+  practiceCurrentResponse.paragraphs.forEach(p=> p.evidenceIds.forEach(r=> usedRefs.add(r.pieceId+"|"+r.noteId)));
+
+  practicePieces.forEach(piece=>{
+    const section = document.createElement("div");
+    section.className = "piece-section" + (practiceCollapsedPieces.has(piece.id) ? " collapsed" : "");
+    const header = document.createElement("div");
+    header.className = "piece-header";
+    header.innerHTML = `<span class="chev">▾</span><span>${escapeHtml(piece.name || "Untitled score")}</span>`;
+    header.addEventListener("click", ()=>{
+      if(practiceCollapsedPieces.has(piece.id)) practiceCollapsedPieces.delete(piece.id); else practiceCollapsedPieces.add(piece.id);
+      practiceRenderEvidencePanel();
+    });
+    section.appendChild(header);
+
+    const body = document.createElement("div");
+    body.className = "piece-body";
+    const pieceNotes = piece.notes || [];
+    if(pieceNotes.length===0){
+      body.innerHTML = '<div class="piece-empty">No notes in this piece yet.</div>';
+    }else{
+      pieceNotes.forEach(n=>{
+        const bubble = document.createElement("div");
+        bubble.className = "note-bubble" + (usedRefs.has(piece.id+"|"+n.id) ? " used" : "");
+        bubble.innerHTML = `<div class="where">${escapeHtml(whereLabel(n))}</div><div class="snippet">${escapeHtml((n.what||"").slice(0,140))}${(n.what||"").length>140?"…":""}</div>`;
+        bubble.addEventListener("mousedown", (e)=> practiceStartDrag(e, piece.id, n.id, bubble));
+        body.appendChild(bubble);
+      });
+    }
+    section.appendChild(body);
+    scroll.appendChild(section);
+  });
+}
+
+// Custom mousedown/mousemove/mouseup drag — deliberately not native HTML5
+// drag-and-drop, which conflicts with contenteditable/textarea elements
+// (the paragraph text areas), matching the same approach the score view
+// uses for its own note dragging. A floating ghost bubble follows the
+// cursor; the actual "drop" logic lives on each dock's mouseup handler
+// above, which only cares about `practiceDragNoteRef` — this handler's job
+// is just the visuals.
+function practiceStartDrag(e, pieceId, noteId, sourceEl){
+  e.preventDefault();
+  practiceDragNoteRef = { pieceId, noteId };
+  sourceEl.classList.add("dragging");
+  practiceGhostEl = sourceEl.cloneNode(true);
+  practiceGhostEl.classList.add("drag-ghost");
+  practiceGhostEl.style.width = sourceEl.offsetWidth + "px";
+  document.body.appendChild(practiceGhostEl);
+  practiceMoveGhost(e.clientX, e.clientY);
+
+  function onMove(ev){ practiceMoveGhost(ev.clientX, ev.clientY); }
+  function onUp(){
+    document.removeEventListener("mousemove", onMove);
+    document.removeEventListener("mouseup", onUp);
+    sourceEl.classList.remove("dragging");
+    document.querySelectorAll(".evidence-dock.drop-target").forEach(el=>el.classList.remove("drop-target"));
+    if(practiceGhostEl){ practiceGhostEl.remove(); practiceGhostEl = null; }
+    practiceDragNoteRef = null;
+  }
+  document.addEventListener("mousemove", onMove);
+  document.addEventListener("mouseup", onUp);
+}
+function practiceMoveGhost(x, y){
+  if(practiceGhostEl){ practiceGhostEl.style.left = x+"px"; practiceGhostEl.style.top = y+"px"; }
+  document.querySelectorAll(".evidence-dock").forEach(dock=>{
+    const r = dock.getBoundingClientRect();
+    const inside = x>=r.left && x<=r.right && y>=r.top && y<=r.bottom;
+    dock.classList.toggle("drop-target", inside);
+  });
+}
+
+// ---------- export — Arial 11, single spacing, question then each
+// non-empty paragraph in order; no paragraph-box titles or evidence chips
+// included, since the exported file should read as a real exam-style
+// response, not an annotated planning sheet. ----------
+document.getElementById("practiceExportBtn").addEventListener("click", async ()=>{
+  if(!practiceCurrentResponse) return;
+  const btn = document.getElementById("practiceExportBtn");
+  const original = btn.textContent;
+  btn.disabled = true; btn.textContent = "Exporting…";
+  try{
+    const { Document, Packer, Paragraph, TextRun } = await import("https://cdn.jsdelivr.net/npm/docx@8/build/index.mjs");
+    const FONT = "Arial", SIZE = 22; // docx sizes are in half-points: 22 = 11pt
+    const children = [];
+    children.push(new Paragraph({
+      spacing: { line: 240, lineRule: "auto", after: 200 },
+      children: [ new TextRun({ text: practiceCurrentResponse.questionText, bold:true, italics:true, font:FONT, size:SIZE }) ]
+    }));
+    practiceCurrentResponse.paragraphs.forEach(p=>{
+      const text = (p.text||"").trim();
+      if(!text) return;
+      text.split(/\n+/).forEach(line=>{
+        children.push(new Paragraph({
+          spacing: { line: 240, lineRule: "auto", after: 200 },
+          children: [ new TextRun({ text: line, font:FONT, size:SIZE }) ]
+        }));
+      });
+    });
+    if(children.length===1){
+      children.push(new Paragraph({ children:[ new TextRun({ text:"(No response written yet.)", italics:true, font:FONT, size:SIZE }) ] }));
+    }
+    const doc = new Document({
+      sections: [{
+        properties: { page: { size:{ width:11906, height:16838 }, margin:{ top:1440, bottom:1440, left:1440, right:1440 } } },
+        children
+      }]
+    });
+    const blob = await Packer.toBlob(doc);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "practice-response-" + (practiceCurrentResponse.questionYear||"").replace(/[^\w-]+/g,"-") + ".docx";
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  }catch(err){
+    console.error("Export failed:", err);
+    alert("Couldn't export the response: " + err.message);
+  }finally{
+    btn.disabled = false; btn.textContent = original;
+  }
+});
 
 // =====================================================================
 // init
