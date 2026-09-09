@@ -247,6 +247,15 @@
   #practiceWriteView{flex:1;display:none;min-height:0;flex-direction:column;}
   #practiceWriteView.active{display:flex;}
   #practiceQuestionBar{padding:10px 16px;border-bottom:1px solid var(--line);background:var(--accent-soft);color:var(--accent);font-size:0.85rem;font-weight:600;}
+  #practiceTimerBar{padding:8px 16px;border-bottom:1px solid var(--line);background:var(--panel);display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  #practiceTimerBar .timer-label{font-size:0.8rem;font-weight:700;color:var(--ink-soft);}
+  #practiceTimerBar select{padding:5px 8px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit;font-size:0.8rem;}
+  #practiceTimerDisplay{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:1.1rem;font-weight:700;min-width:56px;text-align:center;}
+  #practiceTimerDisplay.timer-warning{color:var(--warn);}
+  #practiceTimerDisplay.timer-done{color:var(--bad);animation:practiceTimerPulse 1s infinite;}
+  #practiceTimerStatus{font-size:0.8rem;font-weight:700;color:var(--bad);}
+  @keyframes practiceTimerPulse{0%,100%{opacity:1;}50%{opacity:0.35;}}
+  .note-toggle{background:none;border:none;color:var(--accent);cursor:pointer;font-size:0.72rem;font-weight:700;padding:4px 0 0;}
   #practiceWriteMain{flex:1;display:flex;min-height:0;}
   #practiceParagraphPanel{width:58%;border-right:1px solid var(--line);display:flex;flex-direction:column;min-width:0;}
   #practiceParagraphToolbar{padding:8px 14px;border-bottom:1px solid var(--line);background:var(--panel);display:flex;gap:8px;}
@@ -292,9 +301,10 @@
 <div id="homeView">
   <div id="homeTopbar">
     <h1>🎼 Score Analysis Studio — Projects</h1>
+    <button class="btn" id="practiceNavBtn">📝 Practice Response</button>
+    <div class="spacer"></div>
     <div id="themePicker"><span class="theme-label">Theme</span></div>
     <div id="modePicker"></div>
-    <button class="btn" id="practiceNavBtn">📝 Practice Response</button>
     <button class="btn primary" id="newProjectBtn">+ New project</button>
   </div>
   <div id="homeGrid"></div>
@@ -347,6 +357,20 @@
   </div>
 </div>
 
+<div id="leaveReminderModal" class="modal-overlay" style="display:none;">
+  <div class="modal-box">
+    <h2>Back this project up?</h2>
+    <p style="font-size:0.85rem;color:var(--ink-soft);margin-top:-8px;">This project only lives in this browser right now. If you switch devices or this browser's data ever gets cleared, anything not backed up is gone for good.</p>
+    <div class="modal-actions" style="justify-content:flex-start;flex-wrap:wrap;">
+      <button class="btn primary" id="leaveReminderCloudBtn">☁️ Save to Cloud</button>
+      <button class="btn" id="leaveReminderExportBtn">⬇ Export JSON</button>
+    </div>
+    <div class="modal-actions" style="margin-top:14px;">
+      <button class="btn" id="leaveReminderContinueBtn">Continue to Home</button>
+    </div>
+  </div>
+</div>
+
 <div id="studioView">
 
   <div id="topbar">
@@ -363,8 +387,8 @@
       <button class="btn" id="fileMenuBtn">📁 Project data ▾</button>
       <div class="dropdown-menu" id="fileMenu">
         <div class="dropdown-section-label">Local file</div>
-        <button class="btn" id="exportBtn">⬇ Export project</button>
-        <button class="btn" id="importBtn">⬆ Import project</button>
+        <button class="btn" id="exportBtn" title="Downloads a .json file containing this project's bar tags, notes, and headings (not the score PDF)">⬇ Export project (.json)</button>
+        <button class="btn" id="importBtn" title="Loads a .json file previously exported from this page">⬆ Import project (.json)</button>
         <input type="file" id="importFile" accept="application/json" style="display:none;">
         <div class="dropdown-section-label">Cloud backup</div>
         <button class="btn" id="cloudSaveBtn">☁️ Save to Cloud</button>
@@ -477,10 +501,12 @@
   <div id="practicePickerView">
     <div id="practicePickerBox">
       <h2>Choose a question</h2>
-      <label style="font-size:0.8rem;color:var(--ink-soft);">Pick a specific year</label>
+      <label style="font-size:0.8rem;color:var(--ink-soft);">Year level</label>
+      <select id="practiceLevelSelect"></select>
+      <label style="font-size:0.8rem;color:var(--ink-soft);">Pick a specific question</label>
       <select id="practiceYearSelect"></select>
       <button class="btn" id="practiceRandomQBtn" style="width:100%;margin-bottom:14px;">🎲 Or pick one at random</button>
-      <div id="practicePickerPreview">Select a year, or click random, to preview a question here.</div>
+      <div id="practicePickerPreview">Select a question, or click random, to preview it here.</div>
       <div class="modal-actions">
         <button class="btn" id="practicePickerCancelBtn">Cancel</button>
         <button class="btn primary" id="practicePickerStartBtn" disabled>Start writing</button>
@@ -490,6 +516,24 @@
 
   <div id="practiceWriteView">
     <div id="practiceQuestionBar"></div>
+    <div id="practiceTimerBar">
+      <span class="timer-label">⏱ Timed response</span>
+      <select id="practiceTimerDurationSelect">
+        <option value="10">10 min</option>
+        <option value="15">15 min</option>
+        <option value="20">20 min</option>
+        <option value="25">25 min</option>
+        <option value="30">30 min</option>
+        <option value="35">35 min</option>
+        <option value="40">40 min</option>
+        <option value="45">45 min</option>
+      </select>
+      <span id="practiceTimerDisplay">20:00</span>
+      <button class="btn primary" id="practiceTimerStartBtn">▶ Start</button>
+      <button class="btn" id="practiceTimerPauseBtn" style="display:none;">⏸ Pause</button>
+      <button class="btn" id="practiceTimerResetBtn">↺ Reset</button>
+      <span id="practiceTimerStatus"></span>
+    </div>
     <div id="practiceWriteMain">
       <div id="practiceParagraphPanel">
         <div id="practiceParagraphToolbar">
@@ -899,7 +943,54 @@ async function renderHomeGrid(){
   });
 }
 
-document.getElementById("homeBtn").addEventListener("click", showHome);
+// Nudges students to back up before leaving a project that actually has
+// something in it worth losing (a loaded score and/or at least one note) —
+// an empty freshly-created project has nothing to back up, so skip the
+// nag there. This only covers in-app navigation via the Home button; see
+// the beforeunload listener further down for the tab-close/refresh case,
+// which browsers only let us trigger a generic warning for (no custom text).
+function projectHasContentWorthSaving(){
+  // currentProjectId must also be checked — showHome() doesn't clear the
+  // `notes` working array, so without this a student safely browsing the
+  // Home page (no project open) would still trip the tab-close warning
+  // below, using stale data left over from whatever they had open last.
+  return !!currentProjectId && (!!currentProjectPdfName || notes.length > 0);
+}
+document.getElementById("homeBtn").addEventListener("click", ()=>{
+  if(projectHasContentWorthSaving()){
+    document.getElementById("leaveReminderModal").style.display = "flex";
+  } else {
+    showHome();
+  }
+});
+document.getElementById("leaveReminderContinueBtn").addEventListener("click", ()=>{
+  document.getElementById("leaveReminderModal").style.display = "none";
+  showHome();
+});
+document.getElementById("leaveReminderCloudBtn").addEventListener("click", ()=>{
+  document.getElementById("leaveReminderModal").style.display = "none";
+  saveToCloud();
+});
+document.getElementById("leaveReminderExportBtn").addEventListener("click", ()=>{
+  document.getElementById("leaveReminderModal").style.display = "none";
+  exportProjectJson();
+});
+document.getElementById("leaveReminderModal").addEventListener("click", (e)=>{
+  if(e.target.id === "leaveReminderModal") document.getElementById("leaveReminderModal").style.display = "none";
+});
+
+// Closing the tab or refreshing can't show our own reminder text — every
+// modern browser ignores a custom beforeunload message and shows only its
+// own generic "Leave site?" wording, as a long-standing anti-phishing/
+// anti-annoyance measure. This still gives students a pause-and-reconsider
+// moment before an accidental close, which is the best this mechanism can
+// do; the in-app Home-button reminder above is where the real, specific
+// "save to Cloud or export JSON" message actually gets shown.
+window.addEventListener("beforeunload", (e)=>{
+  if(!projectHasContentWorthSaving()) return;
+  e.preventDefault();
+  e.returnValue = "";
+});
 
 function openNewProjectModal(){
   document.getElementById("newProjectNameInput").value = "";
@@ -2246,7 +2337,7 @@ function onEditableKeydown(e){
 // =====================================================================
 // export / import project
 // =====================================================================
-document.getElementById("exportBtn").addEventListener("click", async ()=>{
+async function exportProjectJson(){
   const btn = document.getElementById("exportBtn");
   const originalText = btn.textContent;
   const data = { markersByPage, pageSystems, notes, groups, barCounter, pdfName: currentProjectPdfName, videoId };
@@ -2277,7 +2368,8 @@ document.getElementById("exportBtn").addEventListener("click", async ()=>{
   a.href = url; a.download = (currentProjectMeta ? currentProjectMeta.name.replace(/[^\w-]+/g,"-") : "score-analysis") + "-project.json";
   document.body.appendChild(a); a.click(); a.remove();
   URL.revokeObjectURL(url);
-});
+}
+document.getElementById("exportBtn").addEventListener("click", exportProjectJson);
 
 // =====================================================================
 // export to the class's Word study-note scaffold — a numbered
@@ -3072,10 +3164,17 @@ async function deleteResponse(id){
   });
 }
 
-// The HSC Music 2 Question 4 pool (2001–2025), inlined directly rather than
-// fetched from a JSON file, so the picker never depends on a network/file
-// request that could fail or be missing from a deployment.
-const QUESTION_POOL = [
+// Practice question pools, one per year level. Year 12's is the real HSC
+// Music 2 Question 4 pool (2001–2025), inlined directly rather than fetched
+// from a JSON file, so the picker never depends on a network/file request
+// that could fail or be missing from a deployment. Year 10 and Year 11 are
+// deliberately empty for now — practiceRenderPicker() below shows a clear
+// "no questions yet" state for any pool with nothing in it, rather than a
+// silently-empty dropdown, until real questions are added to their arrays.
+const QUESTION_POOLS = {
+  year10: { label: "Year 10", questions: [] },
+  year11: { label: "Year 11", questions: [] },
+  year12: { label: "Year 12 (HSC)", questions: [
   { "id": "hsc-2001", "year": "2001", "text": "The last twenty-five years have been marked by composers' exploration of tone colour and performing techniques. Discuss this statement in relation to at least TWO works you have studied from the Mandatory Topic, Music of the Last 25 Years (Australian focus). At least ONE work must be Australian." },
   { "id": "hsc-2002", "year": "2002", "text": "Contemporary composers use varying degrees of tradition and innovation. Discuss this statement in relation to the music used in Question 3 and works you have studied in the Mandatory Topic, Music of the Last 25 Years (Australian focus)." },
   { "id": "hsc-2003", "year": "2003", "text": "Composers choose instruments and/or voices for musically expressive purposes. Discuss this statement in relation to works you have studied in both the Mandatory Topic, Music of the last 25 years (Australian focus), and Additional Topic. You may also refer to the works used in this examination paper." },
@@ -3101,7 +3200,8 @@ const QUESTION_POOL = [
   { "id": "hsc-2023", "year": "2023", "text": "With reference to pitch and duration, to what extent does contemporary Australian music feature the development of musical ideas? In your answer, refer to TWO works you have studied from the mandatory topic, Music of the last 25 years (Australian focus)." },
   { "id": "hsc-2024", "year": "2024", "text": "Based on an excerpt from And the Lord said (bars 42–61), Fiat Lux by Alice Chance. Compare how pitch and texture are used in And the Lord said, Fiat Lux by Alice Chance and at least ONE work you have studied from the mandatory topic, Music of the last 25 years (Australian focus)." },
   { "id": "hsc-2025", "year": "2025", "text": "This question is based on Memoirs of a Snail (2024) by Elena Kats-Chernin. Compare how tone colour is used in Memoirs of a Snail by Elena Kats-Chernin and at least TWO works you have studied from the mandatory topic: Music of the last 25 years (Australian Focus)." }
-];
+  ] }
+};
 
 let practicePieces = [];             // all projects (with notes), refreshed each time Practice Mode is entered — see showPractice()
 let practiceCurrentResponse = null;  // the response record currently being written
@@ -3109,7 +3209,9 @@ let practiceDragNoteRef = null;      // {pieceId, noteId} currently being dragge
 let practiceGhostEl = null;
 let practiceSaveTimer = null;
 let practicePickedQuestion = null;
+let practiceTimerInterval = null;
 const practiceCollapsedPieces = new Set();
+const practiceExpandedNotes = new Set(); // "pieceId|noteId" of note bubbles currently showing full text
 
 function findPracticeNote(pieceId, noteId){
   const piece = practicePieces.find(p=>p.id===pieceId);
@@ -3125,6 +3227,7 @@ function practiceShowList(){
   document.getElementById("practiceBackBtn").style.display = "none";
   document.getElementById("practiceExportBtn").style.display = "none";
   practiceCurrentResponse = null;
+  clearInterval(practiceTimerInterval);
   practiceRenderList();
 }
 function practiceShowPicker(){
@@ -3133,6 +3236,7 @@ function practiceShowPicker(){
   document.getElementById("practiceWriteView").classList.remove("active");
   document.getElementById("practiceBackBtn").style.display = "";
   document.getElementById("practiceExportBtn").style.display = "none";
+  clearInterval(practiceTimerInterval);
   practiceRenderPicker();
 }
 function practiceShowWrite(){
@@ -3162,7 +3266,7 @@ async function practiceRenderList(){
       <div class="project-card-top">
         <span class="practice-card-q">${escapeHtml(r.questionText)}</span>
       </div>
-      <div class="project-meta">${r.questionYear ? escapeHtml(r.questionYear) + " · " : ""}${new Date(r.updatedAt||r.createdAt).toLocaleDateString()}</div>
+      <div class="project-meta">${r.questionLevel ? escapeHtml(r.questionLevel) + " · " : ""}${r.questionYear ? escapeHtml(r.questionYear) + " · " : ""}${new Date(r.updatedAt||r.createdAt).toLocaleDateString()}</div>
     `;
     const delBtn = document.createElement("button");
     delBtn.className = "project-icon-btn del";
@@ -3184,21 +3288,61 @@ document.getElementById("practiceNewResponseBtn").addEventListener("click", prac
 document.getElementById("practicePickerCancelBtn").addEventListener("click", practiceShowList);
 
 // ---------- question picker ----------
+// Questions are grouped into per-year-level pools (see QUESTION_POOLS
+// above) — the level select narrows which pool the year/random controls
+// below it draw from. practiceSelectedLevel remembers the last level
+// chosen so re-opening the picker doesn't reset back to Year 12 each time.
+let practiceSelectedLevel = "year12";
+function practiceCurrentPoolQuestions(){
+  const pool = QUESTION_POOLS[practiceSelectedLevel];
+  return pool ? pool.questions : [];
+}
 function practiceRenderPicker(){
   practicePickedQuestion = null;
   document.getElementById("practicePickerStartBtn").disabled = true;
-  document.getElementById("practicePickerPreview").textContent = "Select a year, or click random, to preview a question here.";
-  const sel = document.getElementById("practiceYearSelect");
-  sel.innerHTML = '<option value="">— Select a year —</option>' +
-    QUESTION_POOL.map(q=> `<option value="${q.id}">${q.year}</option>`).join("");
+
+  const levelSel = document.getElementById("practiceLevelSelect");
+  if(!levelSel.options.length){
+    levelSel.innerHTML = Object.keys(QUESTION_POOLS)
+      .map(key => `<option value="${key}">${escapeHtml(QUESTION_POOLS[key].label)}</option>`).join("");
+  }
+  levelSel.value = practiceSelectedLevel;
+
+  practiceRenderYearOptions();
 }
+function practiceRenderYearOptions(){
+  const questions = practiceCurrentPoolQuestions();
+  const sel = document.getElementById("practiceYearSelect");
+  const randomBtn = document.getElementById("practiceRandomQBtn");
+  const preview = document.getElementById("practicePickerPreview");
+  practicePickedQuestion = null;
+  document.getElementById("practicePickerStartBtn").disabled = true;
+
+  if(questions.length === 0){
+    sel.innerHTML = '<option value="">— No questions added yet —</option>';
+    sel.disabled = true;
+    randomBtn.disabled = true;
+    preview.textContent = QUESTION_POOLS[practiceSelectedLevel].label + " doesn't have any practice questions added yet — check back soon.";
+    return;
+  }
+  sel.disabled = false;
+  randomBtn.disabled = false;
+  sel.innerHTML = '<option value="">— Select a question —</option>' +
+    questions.map(q=> `<option value="${q.id}">${escapeHtml(q.year)}</option>`).join("");
+  preview.textContent = "Select a question, or click random, to preview it here.";
+}
+document.getElementById("practiceLevelSelect").addEventListener("change", (e)=>{
+  practiceSelectedLevel = e.target.value;
+  practiceRenderYearOptions();
+});
 document.getElementById("practiceYearSelect").addEventListener("change", (e)=>{
-  const q = QUESTION_POOL.find(x=>x.id===e.target.value);
+  const q = practiceCurrentPoolQuestions().find(x=>x.id===e.target.value);
   if(q) practicePickQuestion(q);
 });
 document.getElementById("practiceRandomQBtn").addEventListener("click", ()=>{
-  if(QUESTION_POOL.length===0) return;
-  const q = QUESTION_POOL[Math.floor(Math.random()*QUESTION_POOL.length)];
+  const questions = practiceCurrentPoolQuestions();
+  if(questions.length===0) return;
+  const q = questions[Math.floor(Math.random()*questions.length)];
   document.getElementById("practiceYearSelect").value = q.id;
   practicePickQuestion(q);
 });
@@ -3214,12 +3358,14 @@ document.getElementById("practicePickerStartBtn").addEventListener("click", asyn
     questionId: practicePickedQuestion.id,
     questionText: practicePickedQuestion.text,
     questionYear: practicePickedQuestion.year,
+    questionLevel: QUESTION_POOLS[practiceSelectedLevel].label,
     createdAt: Date.now(), updatedAt: Date.now(),
     paragraphs: [
       { id: uid(), title:"Introduction", text:"", evidenceIds:[] },
       { id: uid(), title:"Body 1", text:"", evidenceIds:[] },
       { id: uid(), title:"Conclusion", text:"", evidenceIds:[] },
-    ]
+    ],
+    timer: { durationSec: 1200, remainingSec: 1200, endAt: null, running: false } // defaults to 20 min
   };
   await saveResponseRecord(practiceCurrentResponse);
   practiceShowWrite();
@@ -3234,10 +3380,119 @@ function practiceScheduleSave(){
 }
 function practiceRenderWrite(){
   document.getElementById("practiceQuestionBar").textContent =
+    (practiceCurrentResponse.questionLevel ? practiceCurrentResponse.questionLevel + " · " : "") +
     (practiceCurrentResponse.questionYear ? practiceCurrentResponse.questionYear + " — " : "") + practiceCurrentResponse.questionText;
   practiceRenderParagraphs();
   practiceRenderEvidencePanel();
+  practiceEnsureTimer();
+  practiceRenderTimer();
+  clearInterval(practiceTimerInterval);
+  practiceTimerInterval = setInterval(practiceTickTimer, 250);
 }
+
+// ---------- timed response (HSC exam-condition practice) ----------
+// Timer state lives on the response record itself (practiceCurrentResponse
+// .timer), so it's per-response, autosaves like everything else, and
+// survives a reload — implemented as an absolute end-time (`endAt`, epoch
+// ms) rather than a plain decrementing counter, so it can't drift and
+// still reads correctly even if the tab was backgrounded or the page was
+// reloaded mid-countdown.
+function practiceEnsureTimer(){
+  if(!practiceCurrentResponse.timer){
+    practiceCurrentResponse.timer = { durationSec: 1200, remainingSec: 1200, endAt: null, running: false };
+  }
+}
+function practiceTimerRemainingSec(){
+  const t = practiceCurrentResponse.timer;
+  if(!t) return 0;
+  if(t.running && t.endAt) return Math.max(0, Math.round((t.endAt - Date.now())/1000));
+  return t.remainingSec;
+}
+function practiceRenderTimer(){
+  const t = practiceCurrentResponse.timer;
+  const remaining = practiceTimerRemainingSec();
+  const mm = Math.floor(remaining/60), ss = remaining%60;
+  const display = document.getElementById("practiceTimerDisplay");
+  display.textContent = String(mm).padStart(2,"0") + ":" + String(ss).padStart(2,"0");
+  display.classList.toggle("timer-warning", remaining>0 && remaining<=120);
+  display.classList.toggle("timer-done", remaining===0);
+  document.getElementById("practiceTimerStatus").textContent = remaining===0 ? "⏰ Time's up!" : "";
+  const sel = document.getElementById("practiceTimerDurationSelect");
+  sel.value = String(t.durationSec/60);
+  // Duration can only be changed from a fresh/reset timer — once it's been
+  // started (even if since paused), reset it first rather than letting the
+  // duration and remaining time fall out of sync.
+  sel.disabled = t.running || t.remainingSec !== t.durationSec;
+  document.getElementById("practiceTimerStartBtn").style.display = t.running ? "none" : "";
+  document.getElementById("practiceTimerPauseBtn").style.display = t.running ? "" : "none";
+  document.getElementById("practiceTimerStartBtn").disabled = remaining<=0;
+}
+function practiceTickTimer(){
+  if(!practiceCurrentResponse || !practiceCurrentResponse.timer || !practiceCurrentResponse.timer.running) return;
+  const remaining = practiceTimerRemainingSec();
+  practiceRenderTimer();
+  if(remaining<=0){
+    practiceCurrentResponse.timer.running = false;
+    practiceCurrentResponse.timer.remainingSec = 0;
+    practiceCurrentResponse.timer.endAt = null;
+    practiceScheduleSave();
+    practiceRenderTimer();
+    practicePlayTimerAlert();
+  }
+}
+function practicePlayTimerAlert(){
+  // Three short beeps via the Web Audio API — no external sound file to
+  // fetch or ship, so this can never fail to load, only fail to play (e.g.
+  // audio blocked before any user interaction), in which case the visual
+  // red pulsing "Time's up!" state above is still there as the fallback.
+  try{
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if(!Ctx) return;
+    const ctx = new Ctx();
+    [0, 0.3, 0.6].forEach(offset=>{
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = "sine";
+      o.frequency.value = 880;
+      g.gain.setValueAtTime(0.0001, ctx.currentTime + offset);
+      g.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime + offset + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + offset + 0.25);
+      o.connect(g); g.connect(ctx.destination);
+      o.start(ctx.currentTime + offset);
+      o.stop(ctx.currentTime + offset + 0.3);
+    });
+  }catch(e){ /* ignore — visual state is the fallback */ }
+}
+document.getElementById("practiceTimerDurationSelect").addEventListener("change", (e)=>{
+  const mins = parseInt(e.target.value, 10) || 20;
+  practiceCurrentResponse.timer = { durationSec: mins*60, remainingSec: mins*60, endAt: null, running: false };
+  practiceScheduleSave();
+  practiceRenderTimer();
+});
+document.getElementById("practiceTimerStartBtn").addEventListener("click", ()=>{
+  const t = practiceCurrentResponse.timer;
+  if(t.remainingSec<=0) return;
+  t.endAt = Date.now() + t.remainingSec*1000;
+  t.running = true;
+  practiceScheduleSave();
+  practiceRenderTimer();
+});
+document.getElementById("practiceTimerPauseBtn").addEventListener("click", ()=>{
+  const t = practiceCurrentResponse.timer;
+  t.remainingSec = practiceTimerRemainingSec();
+  t.running = false;
+  t.endAt = null;
+  practiceScheduleSave();
+  practiceRenderTimer();
+});
+document.getElementById("practiceTimerResetBtn").addEventListener("click", ()=>{
+  const t = practiceCurrentResponse.timer;
+  t.remainingSec = t.durationSec;
+  t.running = false;
+  t.endAt = null;
+  practiceScheduleSave();
+  practiceRenderTimer();
+});
 function practiceRenderParagraphs(){
   const scroll = document.getElementById("practiceParagraphScroll");
   scroll.innerHTML = "";
@@ -3369,10 +3624,32 @@ function practiceRenderEvidencePanel(){
       body.innerHTML = '<div class="piece-empty">No notes in this piece yet.</div>';
     }else{
       pieceNotes.forEach(n=>{
+        const key = piece.id + "|" + n.id;
+        const full = n.what || "";
+        const isLong = full.length > 140;
+        const expanded = practiceExpandedNotes.has(key);
+        const shownText = (!isLong || expanded) ? full : full.slice(0,140) + "…";
+
         const bubble = document.createElement("div");
-        bubble.className = "note-bubble" + (usedRefs.has(piece.id+"|"+n.id) ? " used" : "");
-        bubble.innerHTML = `<div class="where">${escapeHtml(whereLabel(n))}</div><div class="snippet">${escapeHtml((n.what||"").slice(0,140))}${(n.what||"").length>140?"…":""}</div>`;
+        bubble.className = "note-bubble" + (usedRefs.has(key) ? " used" : "");
+        bubble.innerHTML = `<div class="where">${escapeHtml(whereLabel(n))}</div><div class="snippet">${escapeHtml(shownText)}</div>`;
         bubble.addEventListener("mousedown", (e)=> practiceStartDrag(e, piece.id, n.id, bubble));
+
+        if(isLong){
+          const toggle = document.createElement("button");
+          toggle.className = "note-toggle";
+          toggle.textContent = expanded ? "Show less" : "Show more";
+          // Must stop the mousedown from reaching the bubble's own listener
+          // above, or clicking the toggle would start a drag instead of
+          // (or as well as) expanding the text.
+          toggle.addEventListener("mousedown", (e)=> e.stopPropagation());
+          toggle.addEventListener("click", (e)=>{
+            e.stopPropagation();
+            if(expanded) practiceExpandedNotes.delete(key); else practiceExpandedNotes.add(key);
+            practiceRenderEvidencePanel();
+          });
+          bubble.appendChild(toggle);
+        }
         body.appendChild(bubble);
       });
     }
