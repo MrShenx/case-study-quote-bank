@@ -73,6 +73,11 @@
   #topbar h1{font-size:1.02rem;margin:0;white-space:nowrap;}
   .btn{padding:7px 14px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font-size:0.8rem;cursor:pointer;white-space:nowrap;text-decoration:none;display:inline-block;}
   .btn.primary{background:var(--accent);color:#fff;border-color:var(--accent);}
+  /* A second filled-button style, distinct from .primary's accent colour —
+     for actions that deserve the same visual weight as the page's main
+     action but shouldn't be mistaken for it (e.g. "+ Add heading" sitting
+     right next to "+ Add note"). */
+  .btn.secondary-fill{background:var(--good);color:#fff;border-color:var(--good);}
   .btn.active{background:var(--accent);color:#fff;border-color:var(--accent);}
   .btn:disabled{opacity:0.4;cursor:not-allowed;}
   .spacer{flex:1;}
@@ -361,11 +366,11 @@
   <div class="modal-box">
     <h2>Back this project up?</h2>
     <p style="font-size:0.85rem;color:var(--ink-soft);margin-top:-8px;">This project only lives in this browser right now. If you switch devices or this browser's data ever gets cleared, anything not backed up is gone for good.</p>
-    <div class="modal-actions" style="justify-content:flex-start;flex-wrap:wrap;">
+    <div class="modal-actions" style="justify-content:center;flex-wrap:wrap;">
       <button class="btn primary" id="leaveReminderCloudBtn">☁️ Save to Cloud</button>
       <button class="btn" id="leaveReminderExportBtn">⬇ Export JSON</button>
     </div>
-    <div class="modal-actions" style="margin-top:14px;">
+    <div class="modal-actions" style="justify-content:center;margin-top:14px;">
       <button class="btn" id="leaveReminderContinueBtn">Continue to Home</button>
     </div>
   </div>
@@ -446,7 +451,7 @@
       <div id="notesToolbar">
         <input type="text" id="noteSearch" placeholder="Search Where / What / Why…">
         <button class="btn" id="collapseAllBtn">▾ Collapse all</button>
-        <button class="btn" id="addHeadingBtn">+ Add heading</button>
+        <button class="btn secondary-fill" id="addHeadingBtn">+ Add heading</button>
         <button class="btn primary" id="addNoteBtn">+ Add note</button>
       </div>
       <div id="notesScroll">
