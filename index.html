@@ -6,24 +6,24 @@
 <title>Score Analysis Studio</title>
 <style>
   :root{
-    --bg:#faf9f7; --panel:#ffffff; --ink:#1f2328; --ink-soft:#5b6169; --line:#e6e3dd;
-    --accent:#7b5cff; --accent-soft:#efeaff; --good:#1f7a3f; --good-soft:#e6f5ee;
-    --bad:#a8341a; --bad-soft:#fbe8e3; --warn:#8a5a00; --warn-bg:#fff6e0;
-    --radius:12px;
+    --bg:#f5f6f8; --panel:#ffffff; --ink:#1b1f24; --ink-soft:#697079; --line:#e7e9ee;
+    --accent:#6c4cff; --accent-soft:#efeafe; --good:#1c7a44; --good-soft:#e5f4ec;
+    --bad:#b23a20; --bad-soft:#fce9e3; --warn:#8a5a00; --warn-bg:#fff5e0;
+    --radius:12px; --radius-lg:16px;
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   }
   /* system preference applies automatically, unless the student picks an explicit mode below */
   @media (prefers-color-scheme: dark){
     :root:not([data-theme="light"]){
-      --bg:#15171a;--panel:#1e2125;--ink:#e9eaec;--ink-soft:#a2a8b0;--line:#2c3036;
-      --accent:#a58bff;--accent-soft:#2a2440;--good:#6fd696;--good-soft:#173229;
-      --bad:#f0897a;--bad-soft:#3a1f18;--warn:#f0c56a;--warn-bg:#3a2f10;
+      --bg:#101216;--panel:#181b21;--ink:#e7e9ec;--ink-soft:#98a0ab;--line:#272b33;
+      --accent:#a78bfa;--accent-soft:#2b2547;--good:#5fd28c;--good-soft:#15311f;
+      --bad:#f08a75;--bad-soft:#3a1c15;--warn:#f0c56a;--warn-bg:#3a2f10;
     }
   }
   :root[data-theme="dark"]{
-    --bg:#15171a;--panel:#1e2125;--ink:#e9eaec;--ink-soft:#a2a8b0;--line:#2c3036;
-    --accent:#a58bff;--accent-soft:#2a2440;--good:#6fd696;--good-soft:#173229;
-    --bad:#f0897a;--bad-soft:#3a1f18;--warn:#f0c56a;--warn-bg:#3a2f10;
+    --bg:#101216;--panel:#181b21;--ink:#e7e9ec;--ink-soft:#98a0ab;--line:#272b33;
+    --accent:#a78bfa;--accent-soft:#2b2547;--good:#5fd28c;--good-soft:#15311f;
+    --bad:#f08a75;--bad-soft:#3a1c15;--warn:#f0c56a;--warn-bg:#3a2f10;
   }
   *{box-sizing:border-box;}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);overflow:hidden;}
@@ -252,10 +252,13 @@
   #practiceWriteView{flex:1;display:none;min-height:0;flex-direction:column;}
   #practiceWriteView.active{display:flex;}
   #practiceQuestionBar{padding:10px 16px;border-bottom:1px solid var(--line);background:var(--accent-soft);color:var(--accent);font-size:0.85rem;font-weight:600;}
-  #practiceTimerBar{padding:8px 16px;border-bottom:1px solid var(--line);background:var(--panel);display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
-  #practiceTimerBar .timer-label{font-size:0.8rem;font-weight:700;color:var(--ink-soft);}
-  #practiceTimerBar select{padding:5px 8px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit;font-size:0.8rem;}
-  #practiceTimerDisplay{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:1.1rem;font-weight:700;min-width:56px;text-align:center;}
+  /* Lives inline in #practiceTopbar (centred between two .spacer elements)
+     rather than as its own full-width row — a dedicated row ate into the
+     vertical space available for the writing/evidence panels below. */
+  #practiceTimerBar{align-items:center;gap:8px;}
+  #practiceTimerBar .timer-label{font-size:0.9rem;}
+  #practiceTimerBar select{padding:4px 6px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit;font-size:0.78rem;}
+  #practiceTimerDisplay{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:1rem;font-weight:700;min-width:50px;text-align:center;}
   #practiceTimerDisplay.timer-warning{color:var(--warn);}
   #practiceTimerDisplay.timer-done{color:var(--bad);animation:practiceTimerPulse 1s infinite;}
   #practiceTimerStatus{font-size:0.8rem;font-weight:700;color:var(--bad);}
@@ -295,10 +298,66 @@
 
   .drag-ghost{position:fixed;z-index:999;pointer-events:none;opacity:0.9;transform:translate(-50%,-50%);box-shadow:0 8px 24px rgba(0,0,0,0.25);}
 
+  /* "Check my response" preliminary self-check results modal */
+  .practice-check-box{width:620px;max-width:calc(100vw - 32px);max-height:86vh;display:flex;flex-direction:column;}
+  .practice-check-box h2{margin:0 0 8px;}
+  .pc-disclaimer{font-size:0.78rem;color:var(--ink);background:var(--warn-bg);border:1px solid var(--warn);border-radius:8px;padding:8px 10px;margin-bottom:12px;line-height:1.45;}
+  #practiceCheckResults{overflow:auto;flex:1;min-height:60px;}
+  .pc-group{margin-bottom:16px;}
+  .pc-group h3{margin:0 0 7px;font-size:0.78rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-soft);}
+  .pc-group ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px;}
+  .pc-item{display:flex;gap:8px;font-size:0.84rem;line-height:1.45;}
+  .pc-item .pc-icon{flex-shrink:0;font-weight:700;}
+  .pc-ok .pc-icon{color:var(--good);}
+  .pc-flag .pc-icon{color:var(--warn);}
+  .pc-info{color:var(--ink-soft);}
+  .pc-info .pc-icon{color:var(--ink-soft);}
+
   @media(max-width:860px){
     #practiceWriteMain{flex-direction:column;overflow:auto;}
     #practiceParagraphPanel,#practiceEvidencePanel{width:100%;border-right:none;border-bottom:1px solid var(--line);}
   }
+
+  /* =====================================================================
+     Modern polish layer — VISUAL ONLY. Appended last so it layers on top
+     of the base rules without touching any layout, IDs, classes or JS.
+     Only colours, elevation, radius, transitions and hover feedback.
+     ===================================================================== */
+  ::selection{background:var(--accent-soft);color:var(--accent);}
+  html{scroll-behavior:smooth;}
+
+  /* slim, unobtrusive scrollbars */
+  *{scrollbar-width:thin;scrollbar-color:var(--line) transparent;}
+  ::-webkit-scrollbar{width:10px;height:10px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+  ::-webkit-scrollbar-thumb{background:var(--line);border-radius:999px;}
+  ::-webkit-scrollbar-thumb:hover{background:var(--ink-soft);}
+
+  /* buttons — smoother, a hint of elevation on the filled ones */
+  .btn{transition:background .14s ease,border-color .14s ease,color .14s ease,box-shadow .14s ease,transform .05s ease,filter .14s ease;font-weight:600;}
+  .btn:hover:not(:disabled){border-color:var(--accent);}
+  .btn:active:not(:disabled){transform:translateY(1px);}
+  .btn.primary,.btn.secondary-fill,.btn.active{box-shadow:0 1px 2px rgba(0,0,0,0.14),0 6px 16px -8px rgba(0,0,0,0.30);}
+  .btn.primary:hover:not(:disabled),.btn.secondary-fill:hover:not(:disabled),.btn.active:hover:not(:disabled){filter:brightness(1.07);}
+
+  /* surface elevation — cards, panels, modals, dropdowns, the video widget */
+  .project-card,.note-card{box-shadow:0 1px 2px rgba(0,0,0,0.04),0 1px 3px rgba(0,0,0,0.06);}
+  .project-card{transition:border-color .16s ease,box-shadow .16s ease,transform .16s ease;}
+  .project-card:hover{border-color:var(--accent);box-shadow:0 10px 28px -8px rgba(0,0,0,0.16);transform:translateY(-2px);}
+  .paragraph-box,.note-bubble,.piece-header,.response-card{box-shadow:0 1px 2px rgba(0,0,0,0.04);}
+  .modal-box{border:1px solid var(--line);border-radius:var(--radius-lg);box-shadow:0 24px 64px -14px rgba(0,0,0,0.45),0 0 0 1px rgba(0,0,0,0.03);}
+  .modal-overlay{background:rgba(10,12,16,0.5);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);}
+  .dropdown-menu{border-radius:var(--radius-lg);box-shadow:0 18px 44px -10px rgba(0,0,0,0.30);}
+  #videoWidget{border-radius:var(--radius-lg);box-shadow:0 14px 40px -10px rgba(0,0,0,0.32);}
+
+  /* topbars — hairline + faint drop so they read as a surface above content */
+  #homeTopbar,#topbar,#practiceTopbar{box-shadow:0 1px 0 var(--line),0 6px 18px -14px rgba(0,0,0,0.28);}
+
+  /* headings — tighter, more contemporary */
+  h1,h2,.group-name{letter-spacing:-0.012em;}
+
+  /* inputs / textareas / selects — one consistent soft focus ring */
+  input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-soft);border-color:var(--accent);}
 </style>
 </head>
 <body>
@@ -490,6 +549,25 @@
     <button class="btn" id="practiceHomeBtn">🏠 Home</button>
     <h1>📝 Practice Response</h1>
     <div class="spacer"></div>
+    <div id="practiceTimerBar" style="display:none;">
+      <span class="timer-label">⏱</span>
+      <select id="practiceTimerDurationSelect">
+        <option value="10">10 min</option>
+        <option value="15">15 min</option>
+        <option value="20">20 min</option>
+        <option value="25">25 min</option>
+        <option value="30">30 min</option>
+        <option value="35">35 min</option>
+        <option value="40">40 min</option>
+        <option value="45">45 min</option>
+      </select>
+      <span id="practiceTimerDisplay">20:00</span>
+      <button class="btn primary" id="practiceTimerStartBtn">▶ Start</button>
+      <button class="btn" id="practiceTimerPauseBtn" style="display:none;">⏸ Pause</button>
+      <button class="btn" id="practiceTimerResetBtn">↺ Reset</button>
+      <span id="practiceTimerStatus"></span>
+    </div>
+    <div class="spacer"></div>
     <button class="btn" id="practiceBackBtn" style="display:none;">☰ My practice responses</button>
     <button class="btn primary" id="practiceExportBtn" style="display:none;">⬇ Export response (.docx)</button>
   </div>
@@ -521,28 +599,11 @@
 
   <div id="practiceWriteView">
     <div id="practiceQuestionBar"></div>
-    <div id="practiceTimerBar">
-      <span class="timer-label">⏱ Timed response</span>
-      <select id="practiceTimerDurationSelect">
-        <option value="10">10 min</option>
-        <option value="15">15 min</option>
-        <option value="20">20 min</option>
-        <option value="25">25 min</option>
-        <option value="30">30 min</option>
-        <option value="35">35 min</option>
-        <option value="40">40 min</option>
-        <option value="45">45 min</option>
-      </select>
-      <span id="practiceTimerDisplay">20:00</span>
-      <button class="btn primary" id="practiceTimerStartBtn">▶ Start</button>
-      <button class="btn" id="practiceTimerPauseBtn" style="display:none;">⏸ Pause</button>
-      <button class="btn" id="practiceTimerResetBtn">↺ Reset</button>
-      <span id="practiceTimerStatus"></span>
-    </div>
     <div id="practiceWriteMain">
       <div id="practiceParagraphPanel">
         <div id="practiceParagraphToolbar">
           <button class="btn" id="practiceAddParagraphBtn">+ Add paragraph</button>
+          <button class="btn" id="practiceCheckBtn">✓ Preliminary self-check</button>
           <span class="spacer"></span>
           <span style="font-size:0.72rem;color:var(--ink-soft);align-self:center;">Autosaves as you go</span>
         </div>
@@ -552,6 +613,21 @@
         <div id="practiceEvidenceToolbar">Your study notes, by piece — drag a note into a paragraph below to mark it as evidence for that paragraph. Dragging never inserts its text; you still write the sentence yourself.</div>
         <div id="practiceEvidenceScroll"></div>
       </div>
+    </div>
+  </div>
+</div>
+
+<div id="practiceCheckModal" class="modal-overlay" style="display:none;">
+  <div class="modal-box practice-check-box">
+    <h2>Preliminary self-check</h2>
+    <div class="pc-disclaimer">
+      Structure and language only. This does <strong>not</strong> check whether your analysis is correct or
+      good — a response can pass every check and still be weak, or flag several and still be strong. Always
+      take your writing to your teacher for real feedback.
+    </div>
+    <div id="practiceCheckResults"></div>
+    <div class="modal-actions" style="margin-top:12px;">
+      <button class="btn primary" id="practiceCheckCloseBtn">Close</button>
     </div>
   </div>
 </div>
@@ -3212,6 +3288,194 @@ const QUESTION_POOLS = {
   ] }
 };
 
+// =====================================================================
+// Practice Mode — "Check my response" preliminary self-check config.
+//
+// The self-check (practiceRunSelfCheck() further down) is pure client-side
+// pattern-matching: NO AI, NO score/grade. It reports a grouped checklist
+// of STRUCTURE and LANGUAGE observations only — it never judges whether the
+// analysis is correct or good, and that limit is stated at the top of every
+// result. Calibrated toward the "ideal" strong response (dense, concise,
+// tightly anchored to specific bars/sections), on the basis that a student
+// aiming there and falling a little short is the intent.
+//
+// EVERYTHING the checks key off lives here so it can be tuned by hand
+// without touching the logic: numeric thresholds first, then the word and
+// phrase lists. Add to the lists freely — longer lists = better recall.
+// =====================================================================
+const PRACTICE_CHECK_CONFIG = {
+  // ---------- numeric thresholds ----------
+  targetWordLow: 450,        // whole response shorter than this -> "short" flag
+  targetWordHigh: 800,       // longer than this -> "over-writing" flag
+  stubParagraphWords: 40,    // a non-empty body paragraph under this looks unfinished
+  briefIntroConcMax: 130,    // intro/conclusion longer than this -> gentle "keep it brief" note
+  longishSentenceWords: 38,  // sentences in the 38–48 band -> gentle "on the long side" note if several
+  veryLongSentenceWords: 48, // an individual sentence over this is a hard flag
+  longishSentenceCount: 4,   // that many longish sentences (or >35% of sentences) triggers the note
+  minTermsPer100Words: 4,    // musical-term hits per 100 body words below this -> "thin vocabulary"
+  minAnchoredSentenceRatio: 0.4,   // fraction of body sentences that should carry a time anchor
+  goodAnchoredSentenceRatio: 0.6,
+  minMediaSentenceRatio: 0.2,      // fraction of body sentences that should name a performer
+  minDetailSentenceRatio: 0.4,     // fraction of body sentences that should carry concrete detail
+  maxBareLabelSentences: 2,        // more than this many "uses X to do Y" (no detail) sentences -> flag
+
+  // ---------- the six concepts of music (for the intro/conclusion "names a concept" check) ----------
+  concepts: [
+    "pitch","duration","dynamics","expressive technique","tone colour","tone color","timbre",
+    "texture","structure","form","rhythm"
+  ],
+
+  // ---------- technical vocabulary across the six concepts (terminology-density check) ----------
+  musicTerms: [
+    "interval","semitone","minor second","major second","minor third","major third","perfect fourth",
+    "perfect fifth","octave","unison","tonic","dominant","subdominant","modulation","modulate",
+    "transposition","transpose","inversion","invert","sequence","diatonic","chromatic","chromaticism",
+    "pentatonic","whole tone","phrygian","dorian","lydian","mixolydian","aeolian","locrian","mode",
+    "modal","tonal","atonal","bitonal","polytonal","tonality","major key","minor key","parallel minor",
+    "relative minor","pedal point","drone","ostinato","riff","motif","motive","theme","subject",
+    "countermelody","counter-melody","melody","melodic","harmony","harmonic","chord","triad",
+    "seventh chord","suspension","suspended","cadence","perfect cadence","plagal cadence",
+    "interrupted cadence","imperfect cadence","picardy third","tone cluster","cluster","dissonance",
+    "dissonant","consonance","consonant","arpeggio","arpeggiated","broken chord","voice leading",
+    "parallel fifths","contour","conjunct","disjunct","scalic","stepwise","intervallic","register",
+    "tessitura","glissando","portamento","microtonal","quarter tone",
+    "beat","pulse","tempo","metre","meter","time signature","duple","triple","quadruple","compound time",
+    "simple time","syncopation","syncopated","cross-rhythm","cross rhythm","polyrhythm","hemiola","rubato",
+    "accelerando","ritardando","rallentando","augmentation","diminution","semiquaver","quaver","crotchet",
+    "minim","semibreve","triplet","duplet","quintuplet","septuplet","dotted rhythm","dotted note","tie",
+    "anacrusis","upbeat","downbeat","off-beat","on-beat","rhythmic displacement","rhythmic ostinato",
+    "phasing","additive rhythm","free time","phrase","phrasing","phrase structure",
+    "instrumentation","orchestration","doubling","tutti","soli","con sordino","muted","pizzicato","arco",
+    "tremolo","trill","harmonics","sul ponticello","sul tasto","col legno","flutter-tongue","brassy",
+    "reedy","nasal","resonant","percussive","strident","piercing","hollow","breathy","raspy","sonority",
+    "blend","extended technique","prepared piano","sampling","synthesised","distortion",
+    "monophonic","monophony","homophonic","homophony","polyphonic","polyphony","heterophonic",
+    "heterophony","contrapuntal","counterpoint","imitation","imitative","canon","canonic","fugue","fugal",
+    "layers","layered","density","melody and accompaniment","chordal","antiphonal","call and response",
+    "call-and-response","stratification",
+    "crescendo","decrescendo","diminuendo","forte","piano","mezzo forte","mezzo piano","fortissimo",
+    "pianissimo","sforzando","forte-piano","subito","accent","accented","marcato","tenuto","staccato",
+    "staccatissimo","legato","slur","slurred","non-legato","articulation","terraced dynamics",
+    "section","binary","ternary","rondo","sonata form","theme and variations","variation","through-composed",
+    "through composed","strophic","verse","chorus","bridge","introduction","coda","codetta","exposition",
+    "development","recapitulation","transition","episode","refrain","ritornello","movement","cyclic",
+    "cyclical","unity","contrast","repetition","climax","fragmentation","fragmented","extension",
+    "truncation","transform","transformation","motivic development","ground bass","chaconne","passacaglia"
+  ],
+
+  // ---------- performing media — instruments, voices, ensembles (the "who?" of a point) ----------
+  performingMedia: [
+    "violin","viola","cello","violoncello","double bass","contrabass","string quartet","strings",
+    "string section","harp","guitar","electric guitar","acoustic guitar","bass guitar","mandolin","ukulele",
+    "flute","piccolo","alto flute","oboe","cor anglais","english horn","clarinet","bass clarinet","bassoon",
+    "contrabassoon","saxophone","alto saxophone","tenor saxophone","soprano saxophone","baritone saxophone",
+    "recorder","woodwind","woodwinds",
+    "trumpet","cornet","flugelhorn","french horn","horn","trombone","bass trombone","tuba","euphonium",
+    "brass","brass section",
+    "percussion","timpani","snare drum","bass drum","cymbals","triangle","tambourine","tam-tam","gong",
+    "xylophone","marimba","vibraphone","glockenspiel","tubular bells","celesta","drum kit","drums","cowbell",
+    "congas","bongos","claves","maracas","piano","keyboard","organ","synthesiser","synth","harpsichord",
+    "whirlie","whirlies",
+    "soprano","mezzo-soprano","mezzo soprano","alto","contralto","tenor","baritone","bass voice","voice",
+    "voices","choir","chorus","satb","vocalist","vocalists","vocal","a cappella","solo voice",
+    "orchestra","orchestral","ensemble","band","concert band","marching band","big band","quartet","quintet",
+    "trio","chamber ensemble","rhythm section","tape","electronics","backing track"
+  ],
+
+  // ---------- principle-of-composition / effect phrasing (the "why?" half of a point) ----------
+  principlePhrases: [
+    "sustain interest","sustains interest","sustaining interest","sustained interest","maintain interest",
+    "maintains interest","maintaining interest","create interest","creates interest","creating interest",
+    "develop interest","develops interest","developing interest","add interest","adds interest",
+    "adding interest","musical interest","create contrast","creates contrast","creating contrast",
+    "provide contrast","provides contrast","providing contrast","contrasts with","contrasting","in contrast",
+    "achieve unity","achieves unity","achieving unity","sense of unity","unify","unifies","unifying",
+    "cohesion","cohesive","coherence","create tension","creates tension","creating tension","builds tension",
+    "building tension","tension and release","sense of tension","adds tension","release of tension",
+    "provide variety","provides variety","providing variety","sense of climax","climactic","reaches a climax",
+    "builds to a climax","conveys","convey","conveying","communicates","communicate","reflects","reflect",
+    "reflecting","expresses","express","expressing","evokes","evoke","establishes","establish",
+    "sense of style","distinctive style","stylistic","the style"
+  ],
+
+  // ---------- comparative connectives (only checked when two works are in play) ----------
+  comparativePhrases: [
+    "similarly","in contrast","by contrast","whereas","unlike","conversely","on the other hand",
+    "compared to","in comparison","by comparison","likewise","in the same way","differs from","differ from",
+    "this differs","both composers","both works","each composer","the other work","the second work",
+    "the first work"
+  ],
+
+  // ---------- emotive / personal-response / value-judgement CONSTRUCTIONS ----------
+  // Framing patterns, not lone adjectives — "eerie", "serene", "tension", "climactic" are fine
+  // as description and must NOT be flagged. This catches "how it makes a listener feel" and
+  // "is this piece good/bad".
+  emotivePatterns: [
+    /\bthe (listener|audience)\s+(feels?|is (left|made) to feel|is (put|placed) on edge|experiences?)\b/i,
+    /\bmakes? (you|the listener|us|the audience|one)\s+(feel|want to)\b/i,
+    /\b(you|we|one)\s+can(?:'?t| ?not)? (really )?feel\b/i,
+    /\bI\s+(think|feel|believe|find|reckon)\b/i,
+    /\bin my opinion\b/i,
+    /\b(personally|to me|for me),\b/i,
+    /\b(on|at) the edge of (their|your|the listener'?s|one'?s) seats?\b/i,
+    /\bsends? (a )?chills?\b/i,
+    /\bgoose ?bumps\b/i,
+    /\bgrips the (listener|audience)\b/i,
+    /\b(a|an|the|this|that)\s+(beautiful|gorgeous|stunning|breathtaking|wonderful|lovely|amazing|awesome|incredible|magnificent|boring|dull|tedious)\s+(piece|section|passage|melody|moment|part|work|movement|use|idea|theme)\b/i,
+    /\b(?:is|was|sounds?|feels?|seems?)\s+(?:really |quite |very |so |rather |truly |just |pretty )?(beautiful|gorgeous|stunning|boring|dull|tedious|amazing|wonderful|lovely|pleasant|nice|catchy|enjoyable|exciting|breathtaking)\b/i,
+    /\bscar(?:e|es|y|ing) the (listener|audience)\b/i,
+    /\bpleasing to the ear\b/i,
+    /\bcatchy\b/i
+  ],
+
+  // ---------- concrete-detail markers — signs the "what" of a point carries real specificity ----------
+  // Spread across all six concepts so tone colour / texture analysis isn't
+  // unfairly read as "no detail" just because it doesn't cite intervals or chords.
+  detailPatterns: [
+    /\bbb?\.?\s*\d+/i,
+    /\bbars?\s*\d+/i,
+    /\bbar\s*\d+\s*(?:-|–|—|to)\s*\d+/i,
+    /\b(minor|major|perfect|augmented|diminished)\s+(2nd|3rd|4th|5th|6th|7th|second|third|fourth|fifth|sixth|seventh|octave|ninth)\b/i,
+    /\b[A-G](?:#|b|♯|♭|\s*(?:sharp|flat))?\s+(?:major|minor|dominant|diminished|augmented|sus\s?[24]|maj7|min7|m7|7th)\b/,
+    /\b[A-G](?:#|♯|♭)\b/,
+    /\b(?:the )?(?:note|notes|pitches?)\s+[A-G]\b/i,
+    /\b[A-G]\s*(?:-|–|—|to|and)\s*[A-G](?:#|b|♯|♭)?\b/,
+    /\b(?:I{1,3}|IV|VI{0,2}|V)\s*[-–—]\s*(?:I{1,3}|IV|VI{0,2}|V)\b/,
+    /\((?:\s*[IViv]+\s*[-–—]\s*)+[IViv]+\s*\)/,
+    /\b(?:pp+|ff+|mf|mp|fff+|ppp+|pianissimo|fortissimo|mezzo[- ]?(?:piano|forte)|sforzando|forte[- ]?piano|crescendo|decrescendo|diminuendo)\b/i,
+    /\b(?:semiquaver|quaver|crotchet|minim|semibreve|triplet|duplet|quintuplet|septuplet|dotted)\b/i,
+    /\b(?:high|low|middle|upper|lower|extreme)\s+register\b/i,
+    /\b(?:ascending|descending|rising|falling|stepwise|conjunct|disjunct|scalic|arpeggiat)\w*/i,
+    /\b(?:phrygian|dorian|lydian|mixolydian|aeolian|locrian|pentatonic|whole[- ]tone)\b/i,
+    // tone colour / expressive & extended techniques
+    /\b(?:harmonics|glissand[io]|portamento|tremolo|pizzicato|arco|con sordino|sul ponticello|sul tasto|col legno|flutter[- ]?tongu\w*|mute[d]?|stopped horn|double stop\w*|slap[- ]?tongu\w*|multiphonics?)\b/i,
+    // articulation
+    /\b(?:staccato|staccatissimo|legato|non[- ]legato|marcato|tenuto|spiccato|détaché|detache|slurred)\b/i,
+    // specific texture types
+    /\b(?:monophon\w+|homophon\w+|polyphon\w+|heterophon\w+|contrapuntal|counterpoint|unison|octaves|canon|canonic|imitat\w+|antiphon\w+|fugal)\b/i,
+    // a timbre adjective bound to a tone-colour noun (specific, not a vague mood word)
+    /\b(?:reedy|brassy|nasal|metallic|hollow|breathy|raspy|strident|piercing|shrill|shimmering|velvety|warm|resonant|thin|transparent|rich|muddy|bright|dark|mellow|rounded)\s+(?:tone colour|tone color|timbre|sound|sonority|texture)\b/i,
+    // named tempo / metronome specifics
+    /\b(?:vivace|allegro|andante|adagio|largo|presto|moderato|lento|accelerando|ritardando|rallentando|rubato|metronome|♩\s*=|crotchet\s*=)\b/i
+  ],
+
+  // a technique named with a verb — combined with "no detail nearby + no performer" it reads as a bare label
+  bareLabelPattern: /\b(uses?|use of|using|features?|employ(?:s|ing)?|utilis[ez]e?s?|incorporat(?:es?|ing)|includes?|adds?|introduc(?:es?|ing))\b/i,
+
+  // time anchoring — any of the four valid forms (bar number, section name, begin/middle/end, time conjunction)
+  timeAnchorPatterns: [
+    /\bbb?\.?\s*\d+/i,
+    /\bbars?\s*\d+/i,
+    /\bsection\s+[A-Za-z0-9]/i,
+    /\bthe\s+(opening|introduction|intro|exposition|development|recapitulation|recap|coda|codetta|bridge|verse|chorus|refrain|montuno|outro|climax|ending|finale|first section|second section|final section|middle section|last section)\b/i,
+    /\b(?:at|from|near|towards?|by)\s+the\s+(start|beginning|opening|outset|end|close|middle)\b/i,
+    /\b(?:begins?|opens?|starts?|commences?|ends?|finishes?|concludes?|closes?)\s+(?:with|on|by|in)\b/i,
+    /\b(?:piece|work|excerpt|movement|section|passage)\s+(?:begins?|opens?|starts?|ends?|finishes?|concludes?)\b/i,
+    /^(?:then|next|finally|subsequently|afterwards?|later|following this|after this)\b/i,
+    /\b(?:throughout|later in the (?:piece|work|movement)|by the end|as the (?:piece|work|section) (?:progresses|develops|unfolds|continues))\b/i
+  ]
+};
+
 let practicePieces = [];             // all projects (with notes), refreshed each time Practice Mode is entered — see showPractice()
 let practiceCurrentResponse = null;  // the response record currently being written
 let practiceDragNoteRef = null;      // {pieceId, noteId} currently being dragged, or null
@@ -3235,6 +3499,7 @@ function practiceShowList(){
   document.getElementById("practiceWriteView").classList.remove("active");
   document.getElementById("practiceBackBtn").style.display = "none";
   document.getElementById("practiceExportBtn").style.display = "none";
+  document.getElementById("practiceTimerBar").style.display = "none";
   practiceCurrentResponse = null;
   clearInterval(practiceTimerInterval);
   practiceRenderList();
@@ -3245,6 +3510,7 @@ function practiceShowPicker(){
   document.getElementById("practiceWriteView").classList.remove("active");
   document.getElementById("practiceBackBtn").style.display = "";
   document.getElementById("practiceExportBtn").style.display = "none";
+  document.getElementById("practiceTimerBar").style.display = "none";
   clearInterval(practiceTimerInterval);
   practiceRenderPicker();
 }
@@ -3254,6 +3520,7 @@ function practiceShowWrite(){
   document.getElementById("practiceWriteView").classList.add("active");
   document.getElementById("practiceBackBtn").style.display = "";
   document.getElementById("practiceExportBtn").style.display = "";
+  document.getElementById("practiceTimerBar").style.display = "flex";
   practiceRenderWrite();
 }
 document.getElementById("practiceHomeBtn").addEventListener("click", showHome);
@@ -3754,6 +4021,374 @@ document.getElementById("practiceExportBtn").addEventListener("click", async ()=
   }finally{
     btn.disabled = false; btn.textContent = original;
   }
+});
+
+// =====================================================================
+// Practice Mode — "Check my response" preliminary self-check engine.
+// Pure string/pattern analysis over the paragraph boxes the student has
+// already labelled. Returns a grouped checklist; never a score. All the
+// word lists and thresholds it keys off live in PRACTICE_CHECK_CONFIG
+// near the top of this script so they can be tuned without touching this.
+// =====================================================================
+function practiceCountWords(s){
+  return (s || "").trim().split(/\s+/).filter(Boolean).length;
+}
+function practiceSplitSentences(text){
+  // Protect a few abbreviations (esp. "b." / "bb." bar refs) so they don't
+  // create spurious sentence breaks, then split on sentence punctuation.
+  const protectedText = (text || "")
+    .replace(/\s+/g, " ")
+    .replace(/\b(e\.g|i\.e|etc|vs|approx|no|fig|cf|mr|dr|st|b|bb)\.\s*/gi, "$1 ");
+  return protectedText
+    .split(/[.!?]+(?:\s+|$)/)
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+// distinct terms/phrases from `list` present in `text` (tolerates a trailing s/d/ed/ing)
+function practiceMatchList(text, list){
+  const low = text.toLowerCase();
+  const hits = new Set();
+  list.forEach(term => {
+    const esc = term.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp("(?:^|[^a-z])" + esc + "(?:s|d|ed|ing)?(?:[^a-z]|$)", "i");
+    if(re.test(low)) hits.add(term);
+  });
+  return [...hits];
+}
+// total occurrences (not distinct) — for density
+function practiceCountList(text, list){
+  const low = " " + text.toLowerCase().replace(/\s+/g, " ") + " ";
+  let n = 0;
+  list.forEach(term => {
+    const esc = term.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp("[^a-z]" + esc + "(?:s|d|ed|ing)?[^a-z]", "g");
+    const m = low.match(re);
+    if(m) n += m.length;
+  });
+  return n;
+}
+// case-study names to look for: linked pieces + titles quoted in the question + "by <Composer>"
+function practiceGetCaseStudyIdentifiers(response){
+  const ids = new Set();
+  const pieceNames = [];
+  const pieceIds = new Set();
+  (response.paragraphs || []).forEach(p => (p.evidenceIds || []).forEach(r => pieceIds.add(r.pieceId)));
+  pieceIds.forEach(pid => {
+    const piece = practicePieces.find(x => x.id === pid);
+    if(piece && piece.name){ pieceNames.push(piece.name); ids.add(piece.name); }
+  });
+  const q = response.questionText || "";
+  (q.match(/[‘’'"“”]([^‘’'"“”]{2,60})[‘’'"“”]/g) || []).forEach(m => {
+    const inner = m.replace(/[‘’'"“”]/g, "").trim();
+    if(inner.length > 2) ids.add(inner);
+  });
+  (q.match(/\bby\s+([A-Z][a-zÀ-ÿ'.\-]+(?:\s+[A-Z][a-zÀ-ÿ'.\-]+){0,2})/g) || []).forEach(m => {
+    ids.add(m.replace(/^by\s+/i, "").trim());
+  });
+  return { all: [...ids], pieceNames };
+}
+
+function practiceRunSelfCheck(response){
+  const CFG = PRACTICE_CHECK_CONFIG;
+  const paras = (response.paragraphs || []).map(p => ({
+    title: ((p.title || "").trim()) || "(untitled)",
+    text: (p.text || "").trim(),
+    words: practiceCountWords(p.text || "")
+  }));
+
+  // classify intro / conclusion / body by title, position as fallback
+  let introIdx = paras.findIndex(p => /intro/i.test(p.title));
+  if(introIdx === -1 && paras.length) introIdx = 0;
+  let concIdx = paras.findIndex(p => /concl|summary/i.test(p.title));
+  if(concIdx === -1 && paras.length > 1) concIdx = paras.length - 1;
+  const intro = introIdx >= 0 ? paras[introIdx] : null;
+  const conclusion = concIdx >= 0 ? paras[concIdx] : null;
+  const bodies = paras.filter((_, i) => i !== introIdx && i !== concIdx);
+
+  const allBodyText = bodies.map(b => b.text).join("\n\n");
+  const allText = paras.map(p => p.text).join("\n\n");
+  const totalWords = practiceCountWords(allText);
+  const bodyWords = practiceCountWords(allBodyText);
+
+  const ids = practiceGetCaseStudyIdentifiers(response);
+  const namesForMatch = [];
+  ids.all.forEach(n => {
+    namesForMatch.push(n);
+    const parts = n.split(/\s+/);
+    if(parts.length > 1) namesForMatch.push(parts[parts.length - 1]); // surname / last word
+  });
+  function mentionsCaseStudy(text){
+    if(!namesForMatch.length) return null; // unknown — can't check, so don't flag
+    const low = text.toLowerCase();
+    return namesForMatch.some(n => n.length >= 3 && low.includes(n.toLowerCase()));
+  }
+
+  const qLow = (response.questionText || "").toLowerCase();
+  const qPrinciples = ["interest","unity","contrast","style","variety","tension","development","cultural context","meaning","expressive"]
+    .filter(w => qLow.includes(w));
+  const qFocusLabel = qPrinciples.length ? qPrinciples.slice(0, 2).join(" / ") : "the question's focus";
+
+  const structure = [], points = [], style = [];
+  const trunc = (s, n) => s.length > n ? s.slice(0, n).trim() + "…" : s;
+
+  // ---------------- STRUCTURE ----------------
+  if(totalWords === 0){
+    structure.push({ status:"flag", text:"You haven't written anything yet." });
+  } else if(totalWords < CFG.targetWordLow){
+    structure.push({ status:"flag", text:"Your whole response is about " + totalWords + " words. A full timed HSC response usually runs around 600–650." });
+  } else if(totalWords > CFG.targetWordHigh){
+    structure.push({ status:"flag", text:"Your response is about " + totalWords + " words — longer than typical timed conditions. Check you're not over-writing (the where and the effect stay brief; detail belongs in the what)." });
+  } else {
+    structure.push({ status:"ok", text:"Length is about " + totalWords + " words — within range for a timed response." });
+  }
+
+  // A Music intro/conclusion "touches on concepts" if it names one of the six
+  // concepts, OR uses any technical term, OR uses the phrase "concepts/elements
+  // of music" — it does NOT have to name a specific concept (the 2004 and Epic
+  // Diva benchmarks both preview the *approach* instead, and still scored top).
+  function touchesConcepts(text){
+    if(/\b(concepts?|elements?)\s+of\s+music\b/i.test(text)) return true;
+    if(practiceMatchList(text, CFG.concepts).length) return true;
+    if(practiceMatchList(text, CFG.musicTerms).length) return true;
+    return false;
+  }
+
+  if(!intro || !intro.text){
+    structure.push({ status:"flag", text:"Your Introduction is empty. It only needs 2–4 sentences, but it must name your work(s), the concept(s) and the question's focus." });
+  } else {
+    const missing = [];
+    if(mentionsCaseStudy(intro.text) === false) missing.push("your case study/studies by name");
+    if(!touchesConcepts(intro.text)) missing.push("the concepts / your line of argument");
+    if(qPrinciples.length && !qPrinciples.some(w => intro.text.toLowerCase().includes(w))) missing.push("the question's focus (" + qFocusLabel + ")");
+    if(missing.length){
+      structure.push({ status:"flag", text:"Your Introduction doesn't clearly mention " + missing.join(", ") + ". A brief Music intro should still do all three." });
+    } else {
+      structure.push({ status:"ok", text:"Introduction names the work(s), a concept, and the question's focus." });
+    }
+    if(intro.words > CFG.briefIntroConcMax){
+      structure.push({ status:"info", text:"Your Introduction is fairly long (" + intro.words + " words). In Music, unlike English, a short intro is fine — 2–4 sentences is enough." });
+    }
+  }
+
+  if(paras.length > 1){
+    if(!conclusion || !conclusion.text){
+      structure.push({ status:"flag", text:"Your Conclusion is empty. One to three sentences restating the works, the approaches and the question is enough." });
+    } else {
+      const missing = [];
+      if(mentionsCaseStudy(conclusion.text) === false) missing.push("your case study/studies by name");
+      if(qPrinciples.length && !qPrinciples.some(w => conclusion.text.toLowerCase().includes(w))) missing.push("the question's focus");
+      if(missing.length){
+        structure.push({ status:"flag", text:"Your Conclusion doesn't clearly mention " + missing.join(" or ") + "." });
+      } else {
+        structure.push({ status:"ok", text:"Conclusion ties back to the works and the question." });
+      }
+      if(conclusion.words > CFG.briefIntroConcMax){
+        structure.push({ status:"info", text:"Your Conclusion is fairly long (" + conclusion.words + " words) — it can be brief." });
+      }
+    }
+  }
+
+  if(!bodies.length){
+    structure.push({ status:"flag", text:"You have no body paragraphs — this is where your marks come from." });
+  }
+  bodies.forEach(b => {
+    if(!b.text){
+      structure.push({ status:"flag", text:"‘" + b.title + "’ is empty." });
+    } else if(b.words < CFG.stubParagraphWords){
+      structure.push({ status:"flag", text:"‘" + b.title + "’ has only " + b.words + " words — it looks unfinished. Body paragraphs are where your marks come from." });
+    }
+  });
+
+  const nonEmptyBodies = bodies.filter(b => b.words > 0);
+  if(nonEmptyBodies.length >= 3 && bodyWords > 0){
+    const largest = nonEmptyBodies.reduce((a, b) => b.words > a.words ? b : a);
+    if(largest.words / bodyWords > 0.45){
+      structure.push({ status:"flag", text:"‘" + largest.title + "’ is " + Math.round(largest.words / bodyWords * 100) + "% of your body writing — much longer than the others. Aim for roughly even development across body paragraphs." });
+    }
+    const last = nonEmptyBodies[nonEmptyBodies.length - 1];
+    const others = nonEmptyBodies.slice(0, -1);
+    const avgOthers = others.reduce((s, b) => s + b.words, 0) / others.length;
+    if(last.words < avgOthers * 0.45){
+      structure.push({ status:"flag", text:"Your last body paragraph (‘" + last.title + "’) is much shorter than the others — often a sign of running out of time. A rushed-but-complete paragraph beats a stub." });
+    }
+  }
+
+  const looksComparative = /\btwo works\b|\bcompar/i.test(response.questionText || "") || ids.pieceNames.length >= 2;
+  if(looksComparative && allBodyText){
+    const comps = practiceMatchList(allBodyText, CFG.comparativePhrases);
+    if(!comps.length){
+      structure.push({ status:"flag", text:"You don't seem to directly compare the two works with each other — describing contrast *within* one work isn't the same thing. Link them across paragraphs or sentences: ‘similarly, Koehne…’, ‘whereas Leek…’, ‘in contrast to the first work…’." });
+    } else {
+      structure.push({ status:"ok", text:"You use comparative language (" + comps.slice(0, 3).join(", ") + ") to link the works." });
+    }
+  }
+
+  if(ids.pieceNames.length === 2){
+    const [nA, nB] = ids.pieceNames;
+    const lastWord = s => s.split(/\s+/).pop().toLowerCase();
+    const tagOf = sentence => {
+      const s = sentence.toLowerCase();
+      const a = s.includes(nA.toLowerCase()) || s.includes(lastWord(nA));
+      const b = s.includes(nB.toLowerCase()) || s.includes(lastWord(nB));
+      if(a && !b) return "A";
+      if(b && !a) return "B";
+      return null;
+    };
+    bodies.forEach(bd => {
+      const seq = practiceSplitSentences(bd.text).map(tagOf).filter(Boolean);
+      let switches = 0;
+      for(let i = 1; i < seq.length; i++) if(seq[i] !== seq[i - 1]) switches++;
+      if(switches >= 2){
+        structure.push({ status:"flag", text:"‘" + bd.title + "’ moves between " + nA + " and " + nB + " several times. Check the reader can always tell which work you're discussing — or split it so each work (or each concept) is handled together." });
+      }
+    });
+  }
+
+  // ---------------- MAKING YOUR POINTS (body paragraphs) ----------------
+  const bodySentences = bodies.flatMap(b => practiceSplitSentences(b.text).filter(s => practiceCountWords(s) >= 4));
+  if(!bodySentences.length){
+    points.push({ status:"info", text:"No body-paragraph sentences to analyse yet." });
+  } else {
+    const anchored = bodySentences.filter(s => CFG.timeAnchorPatterns.some(re => re.test(s)));
+    const anchorRatio = anchored.length / bodySentences.length;
+    bodies.forEach(bd => {
+      const sents = practiceSplitSentences(bd.text).filter(s => practiceCountWords(s) >= 4);
+      if(sents.length >= 2 && !sents.some(s => CFG.timeAnchorPatterns.some(re => re.test(s)))){
+        points.push({ status:"flag", text:"‘" + bd.title + "’ makes claims but never points to where in the music they happen. Anchor points with a bar number, a section name, or ‘at the opening’." });
+      }
+    });
+    if(anchorRatio < CFG.minAnchoredSentenceRatio){
+      const pct = Math.round(anchorRatio * 100);
+      points.push({ status:"flag", text:(pct < 1 ? "Almost none" : "Only about " + pct + "%") + " of your body sentences say where in the music something happens. Aim to anchor most points (bar, section, or beginning/middle/end)." });
+    } else if(anchorRatio >= CFG.goodAnchoredSentenceRatio){
+      points.push({ status:"ok", text:"Most of your points are anchored to a specific place in the music (" + Math.round(anchorRatio * 100) + "%)." });
+    } else {
+      points.push({ status:"info", text:"About " + Math.round(anchorRatio * 100) + "% of your body sentences are anchored to a place in the music — push this higher." });
+    }
+
+    const withMedia = bodySentences.filter(s => practiceMatchList(s, CFG.performingMedia).length);
+    if(withMedia.length / bodySentences.length < CFG.minMediaSentenceRatio){
+      points.push({ status:"flag", text:"You often describe a technique without saying who plays it. Name the instrument or voice — ‘the solo trumpet’, ‘soprano and tenor’, ‘the piano in octaves’." });
+    } else {
+      points.push({ status:"ok", text:"You name the performing media (instruments / voices) regularly." });
+    }
+
+    const termHits = practiceCountList(allBodyText, CFG.musicTerms);
+    const distinctTerms = practiceMatchList(allBodyText, CFG.musicTerms);
+    const per100 = bodyWords ? (termHits / bodyWords * 100) : 0;
+    if(per100 < CFG.minTermsPer100Words){
+      points.push({ status:"flag", text:"Your body paragraphs use few specific musical terms for their length (~" + per100.toFixed(1) + " per 100 words). Check for general words doing a technical job — ‘the tune’ (melody?), ‘the beat’ (a rhythmic value?), ‘gets louder’ (crescendo?)." });
+    } else {
+      points.push({ status:"ok", text:"Good technical vocabulary — " + distinctTerms.length + " different musical terms used." });
+    }
+
+    const unlinked = bodies.filter(bd => bd.text
+      && !practiceMatchList(bd.text, CFG.principlePhrases).length
+      && !(qPrinciples.length && qPrinciples.some(w => bd.text.toLowerCase().includes(w))));
+    if(unlinked.length){
+      points.push({ status:"flag", text:"These body paragraphs describe music but don't connect it back to " + qFocusLabel + ": " + unlinked.map(b => "‘" + b.title + "’").join(", ") + ". End points with ‘which sustains interest’, ‘creating contrast’, etc." });
+    } else if(bodies.some(b => b.text)){
+      points.push({ status:"ok", text:"Every body paragraph links its observations back to the question." });
+    }
+
+    // The "does the WHAT carry detail" check runs on EVIDENCE sentences only —
+    // each body paragraph's opening/topic sentence is allowed to be a general
+    // signpost ("Hindson uses pitch to create interest…") without it counting
+    // as a weak point.
+    const bodyEvidenceSentences = bodies.flatMap(b =>
+      practiceSplitSentences(b.text).filter(s => practiceCountWords(s) >= 4).slice(1));
+    if(bodyEvidenceSentences.length){
+      const detailSents = bodyEvidenceSentences.filter(s => CFG.detailPatterns.some(re => re.test(s)));
+      const detailRatio = detailSents.length / bodyEvidenceSentences.length;
+      const bareLabelSents = bodyEvidenceSentences.filter(s =>
+        CFG.bareLabelPattern.test(s)
+        && !CFG.detailPatterns.some(re => re.test(s))
+        && !practiceMatchList(s, CFG.performingMedia).length);
+      if(bareLabelSents.length > CFG.maxBareLabelSentences || detailRatio < CFG.minDetailSentenceRatio){
+        const eg = bareLabelSents.slice(0, 2).map(s => "“" + trunc(s, 90) + "”");
+        points.push({ status:"flag", text:"Several points name a technique without describing it in detail" + (eg.length ? " — e.g. " + eg.join("; ") : "") + ". The ‘what’ is where your marks are: say who's playing and be specific (intervals, chords, rhythmic values, dynamics, register, how the material changes)." });
+      } else {
+        points.push({ status:"ok", text:"Your points generally back techniques up with specific musical detail (" + Math.round(detailRatio * 100) + "% of evidence sentences)." });
+      }
+    }
+  }
+
+  // ---------------- STYLE & CLARITY ----------------
+  const styleSentences = practiceSplitSentences(allText).filter(s => practiceCountWords(s) >= 3);
+  if(styleSentences.length){
+    const veryLong = styleSentences.filter(s => practiceCountWords(s) > CFG.veryLongSentenceWords);
+    const longish = styleSentences.filter(s => {
+      const w = practiceCountWords(s);
+      return w > CFG.longishSentenceWords && w <= CFG.veryLongSentenceWords;
+    });
+    if(veryLong.length){
+      style.push({ status:"flag", text:veryLong.length + " sentence(s) run past " + CFG.veryLongSentenceWords + " words — too long to follow in one go. Split into separate sentences, one idea each. e.g. “" + trunc(veryLong[0], 120) + "”" });
+    }
+    if(longish.length >= CFG.longishSentenceCount || longish.length / styleSentences.length > 0.35){
+      style.push({ status:"info", text:longish.length + " sentences are on the long side (" + CFG.longishSentenceWords + "–" + CFG.veryLongSentenceWords + " words). A long sentence packed with specific musical detail is fine; split it where the length comes from framing or several ideas at once." });
+    }
+    if(!veryLong.length && longish.length < CFG.longishSentenceCount && longish.length / styleSentences.length <= 0.35){
+      const avg = styleSentences.reduce((s, x) => s + practiceCountWords(x), 0) / styleSentences.length;
+      style.push({ status:"ok", text:"Sentence length is controlled (average ~" + Math.round(avg) + " words)." });
+    }
+  }
+
+  const emotiveHits = styleSentences.filter(s => CFG.emotivePatterns.some(re => re.test(s)));
+  if(emotiveHits.length){
+    const eg = emotiveHits.slice(0, 3).map(s => "“" + trunc(s, 90) + "”");
+    style.push({ status:"flag", text:emotiveHits.length + " place(s) read as a personal reaction or value judgement rather than analysis: " + eg.join("; ") + ". Rephrase as a neutral technical observation linked to a principle of composition (tension, contrast, interest)." });
+  } else if(styleSentences.length){
+    style.push({ status:"ok", text:"No personal-reaction or value-judgement phrasing detected." });
+  }
+
+  return {
+    groups: [
+      { title:"Structure", items:structure },
+      { title:"Making your points (body paragraphs)", items:points },
+      { title:"Style & clarity", items:style }
+    ]
+  };
+}
+
+function practiceRenderCheckResults(result){
+  const box = document.getElementById("practiceCheckResults");
+  box.innerHTML = "";
+  result.groups.forEach(g => {
+    if(!g.items.length) return;
+    const sec = document.createElement("div");
+    sec.className = "pc-group";
+    const h = document.createElement("h3");
+    h.textContent = g.title;
+    sec.appendChild(h);
+    const ul = document.createElement("ul");
+    g.items.forEach(it => {
+      const li = document.createElement("li");
+      li.className = "pc-item pc-" + it.status;
+      const icon = it.status === "ok" ? "✓" : it.status === "flag" ? "⚠" : "•";
+      const iconSpan = document.createElement("span");
+      iconSpan.className = "pc-icon";
+      iconSpan.textContent = icon;
+      const textSpan = document.createElement("span");
+      textSpan.textContent = it.text;
+      li.appendChild(iconSpan);
+      li.appendChild(textSpan);
+      ul.appendChild(li);
+    });
+    sec.appendChild(ul);
+    box.appendChild(sec);
+  });
+}
+
+document.getElementById("practiceCheckBtn").addEventListener("click", () => {
+  if(!practiceCurrentResponse) return;
+  practiceRenderCheckResults(practiceRunSelfCheck(practiceCurrentResponse));
+  document.getElementById("practiceCheckModal").style.display = "flex";
+});
+document.getElementById("practiceCheckCloseBtn").addEventListener("click", () => {
+  document.getElementById("practiceCheckModal").style.display = "none";
+});
+document.getElementById("practiceCheckModal").addEventListener("click", (e) => {
+  if(e.target.id === "practiceCheckModal") document.getElementById("practiceCheckModal").style.display = "none";
 });
 
 // =====================================================================
