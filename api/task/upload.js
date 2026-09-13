@@ -35,6 +35,11 @@ export default async function handler(request, response) {
     });
     response.status(200).json(jsonResponse);
   } catch (error) {
+    // The @vercel/blob/client upload() helper wraps ANY non-2xx response
+    // from this endpoint in its own generic "Failed to retrieve the client
+    // token" message and does not surface this response body back to the
+    // caller — so the real cause only shows up here, in server logs.
+    console.error('Blob upload token request failed:', error);
     response.status(400).json({ error: error.message });
   }
 }
