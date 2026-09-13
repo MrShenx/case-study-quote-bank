@@ -5360,9 +5360,12 @@ document.getElementById("newTaskModal").addEventListener("click", (e)=>{
 // export via its documented +esm subpath feature) rather than an npm
 // import, matching this file's existing no-build-step convention for
 // browser-side npm packages (see the docx/fflate dynamic imports above).
+// uploadPresigned (not upload) — matches api/task/upload.js's use of
+// handleUploadPresigned, needed because this project's Blob store is
+// OIDC-connected rather than issued a static BLOB_READ_WRITE_TOKEN.
 async function uploadTaskPdf(file, teacherCode){
-  const { upload } = await import("https://cdn.jsdelivr.net/npm/@vercel/blob@2.8.0/client/+esm");
-  const blob = await upload(file.name, file, {
+  const { uploadPresigned } = await import("https://cdn.jsdelivr.net/npm/@vercel/blob@2.8.0/client/+esm");
+  const blob = await uploadPresigned(file.name, file, {
     access: "public",
     handleUploadUrl: "/api/task/upload",
     clientPayload: JSON.stringify({ teacherCode })
