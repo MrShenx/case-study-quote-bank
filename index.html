@@ -117,6 +117,8 @@
   .marker-line:hover{opacity:1;width:3px;margin-left:-1.5px;}
   .marker-line.linked{background:var(--good);}
   .marker-line.selected{background:var(--bad);width:3px;}
+  body.tag-mode .marker-line{cursor:grab;}
+  .marker-line.dragging{opacity:1;width:3px;margin-left:-1.5px;box-shadow:0 0 0 3px var(--accent-soft);cursor:grabbing;}
   .marker-cluster{position:absolute;transform:translate(-50%,-100%);top:0;display:flex;align-items:center;gap:4px;z-index:6;}
   .marker-badge{
     background:var(--accent);color:#fff;font-size:10.5px;font-weight:700;line-height:1;
@@ -312,11 +314,40 @@
   .pc-flag .pc-icon{color:var(--warn);}
   .pc-info{color:var(--ink-soft);}
   .pc-info .pc-icon{color:var(--ink-soft);}
+  .pc-band{background:var(--accent-soft);border:1px solid var(--accent);border-radius:10px;padding:10px 12px;margin-bottom:16px;}
+  .pc-band-label{font-size:0.92rem;color:var(--accent);margin-bottom:4px;}
+  .pc-band-note{font-size:0.74rem;color:var(--ink-soft);line-height:1.4;margin-bottom:6px;}
+  .pc-band-missing{font-size:0.8rem;color:var(--ink);line-height:1.4;}
+  .pc-next{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:16px;font-size:0.84rem;line-height:1.45;color:var(--ink);}
 
   @media(max-width:860px){
     #practiceWriteMain{flex-direction:column;overflow:auto;}
     #practiceParagraphPanel,#practiceEvidencePanel{width:100%;border-right:none;border-bottom:1px solid var(--line);}
   }
+
+  /* ---------- Teacher mode + "submit to teacher" ---------- */
+  #teacherView{display:none;flex-direction:column;height:100%;}
+  #teacherTopbar{padding:16px 20px;border-bottom:1px solid var(--line);background:var(--panel);display:flex;align-items:center;gap:12px;}
+  #teacherTopbar h1{font-size:1.1rem;margin:0;}
+  #teacherClassListPanel{flex:1;overflow:auto;padding:24px;}
+  #teacherClassGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;max-width:1000px;margin:0 auto;}
+  #teacherClassDetailTopbar{padding:12px 20px;border-bottom:1px solid var(--line);background:var(--panel);display:flex;align-items:center;gap:12px;}
+  #teacherJoinCodeBanner{padding:10px 20px;background:var(--accent-soft);color:var(--accent);font-size:0.85rem;display:flex;align-items:center;gap:10px;}
+  #teacherJoinCodeBanner strong{font-size:1.05rem;letter-spacing:0.06em;}
+  #teacherJoinCodeBanner span{color:var(--ink-soft);}
+  #teacherTaskGrid{flex:1;overflow:auto;padding:24px;display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;}
+  .modal-box textarea{width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);margin-bottom:14px;box-sizing:border-box;resize:vertical;}
+  .modal-box input[type=file]{width:100%;margin-bottom:14px;font-size:0.8rem;}
+  #newTaskBox,#submissionsBox{width:480px;}
+  #newTaskStatus{margin-top:-8px;margin-bottom:8px;}
+  #practiceSubmitBox input[type=text]{margin-bottom:8px;}
+  .submission-card{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:10px;}
+  .submission-card .sc-top{display:flex;align-items:center;gap:8px;font-weight:700;font-size:0.88rem;}
+  .submission-card .sc-band{background:var(--accent-soft);color:var(--accent);border-radius:999px;padding:2px 9px;font-size:0.74rem;font-weight:700;}
+  .submission-card .sc-meta{font-size:0.74rem;color:var(--ink-soft);margin:2px 0 6px;}
+  .submission-card .sc-text{font-size:0.82rem;line-height:1.5;white-space:pre-wrap;display:none;}
+  .submission-card.expanded .sc-text{display:block;}
+  .submission-card .sc-toggle{background:none;border:none;color:var(--accent);cursor:pointer;font-size:0.76rem;font-weight:700;padding:0;}
 
   /* =====================================================================
      Modern polish layer — VISUAL ONLY. Appended last so it layers on top
@@ -365,6 +396,8 @@
 <div id="homeView">
   <div id="homeTopbar">
     <button class="btn" id="practiceNavBtn">📝 Practice Response</button>
+    <button class="btn" id="teacherNavBtn">🧑‍🏫 Teacher</button>
+    <button class="btn" id="joinClassBtn">🔑 Join a class</button>
     <h1>🎼 Score Analysis Studio — Projects</h1>
     <div class="spacer"></div>
     <div id="themePicker"><span class="theme-label">Theme</span></div>
@@ -383,6 +416,19 @@
       <button class="btn" id="newProjectCancelBtn">Cancel</button>
       <button class="btn primary" id="newProjectCreateBtn">Create</button>
     </div>
+  </div>
+</div>
+
+<div id="joinClassModal" class="modal-overlay" style="display:none;">
+  <div class="modal-box">
+    <h2>Join a class</h2>
+    <p style="font-size:0.85rem;color:var(--ink-soft);margin-top:-8px;">Enter the class code your teacher gave you.</p>
+    <input type="text" id="joinClassCodeInput" placeholder="e.g. AB12CD" style="text-transform:uppercase;">
+    <div class="modal-actions">
+      <button class="btn" id="joinClassCancelBtn">Cancel</button>
+      <button class="btn primary" id="joinClassConfirmBtn">Find class</button>
+    </div>
+    <div id="joinClassTaskList"></div>
   </div>
 </div>
 
@@ -440,6 +486,7 @@
   <div id="topbar">
     <button class="btn" id="homeBtn">🏠 Home</button>
     <span class="project-name-label" id="projectNameLabel"></span>
+    <button class="btn primary" id="taskWriteBtn" style="display:none;">📝 Write about this task</button>
     <button class="btn primary" id="uploadBtn">⬆ Upload PDF score</button>
     <input type="file" id="pdfFile" accept="application/pdf" style="display:none;">
     <button class="btn" id="detectBtn" disabled>🔍 Auto-detect bars</button>
@@ -457,6 +504,8 @@
         <div class="dropdown-section-label">Cloud backup</div>
         <button class="btn" id="cloudSaveBtn">☁️ Save to Cloud</button>
         <button class="btn" id="cloudLoadBtn">☁️ Load from Cloud</button>
+        <div class="dropdown-section-label" id="publishTaskSection" style="display:none;">Class task</div>
+        <button class="btn" id="publishTaskBtn" style="display:none;">📤 Publish tags to class</button>
         <div class="dropdown-section-label">Study notes (.docx)</div>
         <button class="btn" id="exportDocxBtn">📄 Export Study Notes</button>
         <button class="btn" id="importDocxBtn">📥 Import Study Notes</button>
@@ -621,13 +670,88 @@
   <div class="modal-box practice-check-box">
     <h2>Preliminary self-check</h2>
     <div class="pc-disclaimer">
-      Structure and language only. This does <strong>not</strong> check whether your analysis is correct or
-      good — a response can pass every check and still be weak, or flag several and still be strong. Always
-      take your writing to your teacher for real feedback.
+      Structure and language only, including the indicative mark range below. This does <strong>not</strong>
+      check whether your analysis is correct or good — a response can pass every check and still be weak, or
+      flag several and still be strong. Always take your writing to your teacher for real feedback.
     </div>
     <div id="practiceCheckResults"></div>
+    <div id="practiceSubmitBox" style="display:none;">
+      <div class="divider" style="margin:14px 0;"></div>
+      <label style="font-size:0.8rem;color:var(--ink-soft);">Your name (shown to your teacher)</label>
+      <input type="text" id="practiceSubmitNameInput" placeholder="e.g. Jordan L">
+      <div class="modal-actions" style="justify-content:flex-start;">
+        <button class="btn primary" id="practiceSubmitBtn">📤 Submit to teacher</button>
+        <span id="practiceSubmitStatus" style="font-size:0.78rem;color:var(--ink-soft);"></span>
+      </div>
+    </div>
     <div class="modal-actions" style="margin-top:12px;">
       <button class="btn primary" id="practiceCheckCloseBtn">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="teacherView">
+  <div id="teacherTopbar">
+    <button class="btn" id="teacherHomeBtn">🏠 Home</button>
+    <h1>🧑‍🏫 Teacher — Classes</h1>
+    <div class="spacer"></div>
+    <button class="btn primary" id="newClassBtn">+ New class</button>
+  </div>
+  <div id="teacherClassListPanel">
+    <div id="teacherClassGrid"></div>
+  </div>
+  <div id="teacherClassDetailPanel" style="display:none;">
+    <div id="teacherClassDetailTopbar">
+      <button class="btn" id="teacherBackToClassesBtn">‹ All classes</button>
+      <span class="project-name-label" id="teacherClassNameLabel"></span>
+      <div class="spacer"></div>
+      <button class="btn primary" id="newTaskBtn">+ New task</button>
+    </div>
+    <div id="teacherJoinCodeBanner">
+      Class code: <strong id="teacherJoinCodeDisplay"></strong>
+      <button class="btn" id="teacherCopyJoinCodeBtn">Copy</button>
+      <span style="color:var(--ink-soft);">— give this to your students so they can join.</span>
+    </div>
+    <div id="teacherTaskGrid"></div>
+  </div>
+</div>
+
+<div id="newClassModal" class="modal-overlay" style="display:none;">
+  <div class="modal-box">
+    <h2>New class</h2>
+    <input type="text" id="newClassNameInput" placeholder="e.g. Year 12 Music 2">
+    <div class="modal-actions">
+      <button class="btn" id="newClassCancelBtn">Cancel</button>
+      <button class="btn primary" id="newClassCreateBtn">Create</button>
+    </div>
+  </div>
+</div>
+
+<div id="newTaskModal" class="modal-overlay" style="display:none;">
+  <div class="modal-box" id="newTaskBox">
+    <h2>New task</h2>
+    <label style="font-size:0.8rem;color:var(--ink-soft);">Title</label>
+    <input type="text" id="newTaskTitleInput" placeholder="e.g. Epic Diva — tone colour">
+    <label style="font-size:0.8rem;color:var(--ink-soft);">Question</label>
+    <textarea id="newTaskQuestionInput" rows="3" placeholder="Paste or write the essay question students will answer…"></textarea>
+    <label style="font-size:0.8rem;color:var(--ink-soft);">YouTube video link (optional)</label>
+    <input type="text" id="newTaskVideoInput" placeholder="Paste a YouTube link…">
+    <label style="font-size:0.8rem;color:var(--ink-soft);">Score PDF (chord chart, lead sheet, full score — any type)</label>
+    <input type="file" id="newTaskPdfInput" accept="application/pdf">
+    <div class="modal-actions">
+      <button class="btn" id="newTaskCancelBtn">Cancel</button>
+      <button class="btn primary" id="newTaskCreateBtn">Create task</button>
+    </div>
+    <div id="newTaskStatus" style="font-size:0.78rem;color:var(--ink-soft);"></div>
+  </div>
+</div>
+
+<div id="submissionsModal" class="modal-overlay" style="display:none;">
+  <div class="modal-box" id="submissionsBox">
+    <h2>Submissions</h2>
+    <div id="submissionsList"></div>
+    <div class="modal-actions">
+      <button class="btn primary" id="submissionsCloseBtn">Close</button>
     </div>
   </div>
 </div>
@@ -736,6 +860,14 @@ let notes = [];           // {id, groupId|null, startBarId|null, startPage, star
 let groups = [];          // {id, name, collapsed} — student-created sub-headings notes can be dragged into
 let ungroupedCollapsed = false;
 let cloudId = null; // this project's cloud-backup code, once one exists (see saveToCloud())
+// Set only for a project that came from a teacher-authored class task (see
+// "Teacher mode" below) — null for every ordinary student-created project.
+// taskRole distinguishes the teacher's own authoring copy ("teacher", shows
+// a "Publish tags to class" button in Studio) from a student's copy
+// ("student", shows a "Submit to teacher" button in Practice Mode).
+let currentTaskId = null;
+let currentClassId = null;
+let currentTaskRole = null;
 let barCounter = 0;
 let dragNoteId = null;    // note.id currently being dragged, or null
 let selectedMarkerId = null;
@@ -885,6 +1017,9 @@ function normalizeProjectRecord(rec){
   rec.videoId = rec.videoId || null;
   rec.ungroupedCollapsed = rec.ungroupedCollapsed || false;
   rec.cloudId = rec.cloudId || null;
+  rec.taskId = rec.taskId || null;
+  rec.classId = rec.classId || null;
+  rec.taskRole = rec.taskRole || null;
   Object.values(rec.markersByPage).forEach(list=>{
     (list||[]).forEach(m=>{ if(m.manual===undefined) m.manual = false; });
   });
@@ -902,7 +1037,8 @@ function persist(){
     createdAt: currentProjectMeta.createdAt,
     updatedAt: Date.now(),
     pdfName: currentProjectPdfName,
-    markersByPage, pageSystems, notes, groups, barCounter, videoId, ungroupedCollapsed, cloudId
+    markersByPage, pageSystems, notes, groups, barCounter, videoId, ungroupedCollapsed, cloudId,
+    taskId: currentTaskId, classId: currentClassId, taskRole: currentTaskRole
   });
 }
 function persistPdfBlob(blob){
@@ -917,12 +1053,19 @@ async function listProjects(){
   const all = await dbGetAll(META_STORE);
   return all.map(normalizeProjectRecord).sort((a,b)=> (b.updatedAt||0) - (a.updatedAt||0));
 }
-async function createProject(name){
+// extra: optional {taskId, classId, taskRole} to tag a project as coming
+// from a teacher-authored class task (see "Teacher mode" below) — omitted
+// entirely for a normal student-created project, matching normalizeProjectRecord's
+// defaults exactly so old and new project records read identically.
+async function createProject(name, extra){
   const id = uid();
   const now = Date.now();
   await dbPut(META_STORE, {
     id, name, createdAt: now, updatedAt: now, pdfName: null,
-    markersByPage: {}, pageSystems: {}, notes: [], groups: [], barCounter: 0, videoId: null
+    markersByPage: {}, pageSystems: {}, notes: [], groups: [], barCounter: 0, videoId: null,
+    taskId: (extra && extra.taskId) || null,
+    classId: (extra && extra.classId) || null,
+    taskRole: (extra && extra.taskRole) || null
   });
   return id;
 }
@@ -965,6 +1108,7 @@ function showHome(){
   document.getElementById("homeView").style.display = "flex";
   document.getElementById("studioView").style.display = "none";
   document.getElementById("practiceView").style.display = "none";
+  document.getElementById("teacherView").style.display = "none";
   renderHomeGrid();
 }
 
@@ -1101,6 +1245,7 @@ async function showStudio(id){
   document.getElementById("homeView").style.display = "none";
   document.getElementById("studioView").style.display = "flex";
   document.getElementById("practiceView").style.display = "none";
+  document.getElementById("teacherView").style.display = "none";
   await openProject(id);
 }
 
@@ -1108,6 +1253,7 @@ async function showPractice(){
   document.getElementById("homeView").style.display = "none";
   document.getElementById("studioView").style.display = "none";
   document.getElementById("practiceView").style.display = "flex";
+  document.getElementById("teacherView").style.display = "none";
   // Refreshed every time Practice Mode is entered (rather than once at page
   // load) so a note added in Studio moments ago shows up immediately here —
   // no stale cache, no page reload needed.
@@ -1115,6 +1261,16 @@ async function showPractice(){
   practiceShowList();
 }
 document.getElementById("practiceNavBtn").addEventListener("click", showPractice);
+
+function showTeacher(){
+  document.getElementById("homeView").style.display = "none";
+  document.getElementById("studioView").style.display = "none";
+  document.getElementById("practiceView").style.display = "none";
+  document.getElementById("teacherView").style.display = "flex";
+  teacherShowClassList();
+}
+document.getElementById("teacherNavBtn").addEventListener("click", showTeacher);
+document.getElementById("teacherHomeBtn").addEventListener("click", showHome);
 
 function resetVideoPlayer(){
   if(ytPlayer && ytPlayer.destroy){ try{ ytPlayer.destroy(); }catch(e){ /* already gone */ } }
@@ -1141,6 +1297,12 @@ async function openProject(id){
   videoId = rec.videoId;
   ungroupedCollapsed = rec.ungroupedCollapsed;
   cloudId = rec.cloudId;
+  currentTaskId = rec.taskId;
+  currentClassId = rec.classId;
+  currentTaskRole = rec.taskRole;
+  document.getElementById("publishTaskBtn").style.display = currentTaskRole === "teacher" ? "" : "none";
+  document.getElementById("publishTaskSection").style.display = currentTaskRole === "teacher" ? "" : "none";
+  document.getElementById("taskWriteBtn").style.display = currentTaskRole === "student" ? "" : "none";
 
   pendingRenderPageNum = null; // abandon any queued render from the project we're leaving
   pdfDoc = null; numPages = 0; currentPage = 1; selectedMarkerId = null;
@@ -1763,12 +1925,26 @@ function renderMarkerOverlay(){
     line.style.top = (m.yTopFrac*dispH) + "px";
     line.style.height = ((m.yBotFrac-m.yTopFrac)*dispH) + "px";
     line.dataset.id = m.id;
-    line.title = "Bar " + m.number + (tagMode ? " — click to delete" : " — click to jump to its note");
-    line.addEventListener("click", (e)=>{ e.stopPropagation(); onMarkerClick(m.id); });
+    line.title = "Bar " + m.number + (tagMode ? " — drag to move, or use the ✕ to delete" : " — click to jump to its note");
+    // In tag mode the line is now a drag handle (see startMarkerLineDrag
+    // below) rather than a click-to-delete target — deletion has its own
+    // dedicated ✕ button in the cluster so it can't happen by accident.
+    line.addEventListener("mousedown", (e)=>{
+      if(!tagMode) return;
+      e.stopPropagation();
+      e.preventDefault();
+      startMarkerLineDrag(m.id);
+    });
+    line.addEventListener("click", (e)=>{
+      e.stopPropagation();
+      if(tagMode) return; // dragging is the tag-mode interaction now
+      onMarkerClick(m.id);
+    });
     wrap.appendChild(line);
 
     const cluster = document.createElement("div");
     cluster.className = "marker-cluster";
+    cluster.dataset.id = m.id;
     cluster.style.left = (m.xFrac*dispW) + "px";
     cluster.style.top = (m.yTopFrac*dispH) + "px";
     wrap.appendChild(cluster);
@@ -1875,6 +2051,50 @@ document.addEventListener("mouseup", (e)=>{
   pageSystems[currentPage].sort((a,b)=> a.yTopFrac-b.yTopFrac);
   persist();
   renderMarkerOverlay();
+});
+
+// ---------- dragging a bar marker line left/right within its system row ----------
+let markerDragId = null;
+function startMarkerLineDrag(id){
+  markerDragId = id;
+  const line = document.querySelector('.marker-line[data-id="'+id+'"]');
+  const cluster = document.querySelector('.marker-cluster[data-id="'+id+'"]');
+  if(line) line.classList.add("dragging");
+  if(cluster) cluster.classList.add("dragging");
+}
+document.addEventListener("mousemove", (e)=>{
+  if(markerDragId==null) return;
+  const canvas = document.getElementById("pdfCanvas");
+  if(!canvas) return;
+  const rect = canvas.getBoundingClientRect();
+  const xFrac = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+  const xPx = xFrac * canvas.clientWidth;
+  const line = document.querySelector('.marker-line[data-id="'+markerDragId+'"]');
+  const cluster = document.querySelector('.marker-cluster[data-id="'+markerDragId+'"]');
+  if(line) line.style.left = xPx + "px";
+  if(cluster) cluster.style.left = xPx + "px";
+});
+document.addEventListener("mouseup", (e)=>{
+  if(markerDragId==null) return;
+  const id = markerDragId;
+  markerDragId = null;
+  const line = document.querySelector('.marker-line[data-id="'+id+'"]');
+  const cluster = document.querySelector('.marker-cluster[data-id="'+id+'"]');
+  if(line) line.classList.remove("dragging");
+  if(cluster) cluster.classList.remove("dragging");
+  const canvas = document.getElementById("pdfCanvas");
+  if(!canvas) return;
+  const rect = canvas.getBoundingClientRect();
+  const xFrac = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+  const m = (markersByPage[currentPage]||[]).find(x=>x.id===id);
+  if(!m) return;
+  m.xFrac = xFrac;
+  // re-sort by row then left-to-right, same ordering renumberAllBars expects
+  markersByPage[currentPage].sort((a,b)=> a.yTopFrac-b.yTopFrac || a.xFrac-b.xFrac);
+  renumberAllBars();
+  persist();
+  renderMarkerOverlay();
+  renderNotes();
 });
 
 function deleteMarker(id){
@@ -3303,10 +3523,20 @@ const QUESTION_POOLS = {
 // without touching the logic: numeric thresholds first, then the word and
 // phrase lists. Add to the lists freely — longer lists = better recall.
 // =====================================================================
+// Matches an already-named interval or note-to-note motion (e.g. "minor 2nd",
+// "perfect 5th", "G to D") — used to exempt "goes up"/"goes down" from the
+// vague-wording check when the interval has, in fact, already been named.
+const CFG_INTERVAL_NAME_PATTERN = /\b(?:minor|major|perfect|augmented|diminished)\s+(?:2nd|3rd|4th|5th|6th|7th|8th|9th|unison|octave|second|third|fourth|fifth|sixth|seventh|ninth)\b|\b[A-G](?:#|♯|b|♭)?\s*(?:to|-|–)\s*[A-G](?:#|♯|b|♭)?\b/i;
 const PRACTICE_CHECK_CONFIG = {
   // ---------- numeric thresholds ----------
-  targetWordLow: 450,        // whole response shorter than this -> "short" flag
-  targetWordHigh: 800,       // longer than this -> "over-writing" flag
+  // Real timed HSC responses run ~600–650 words, with ~700 as a rare-but-
+  // acceptable outlier. Banded (not a single low/high cutoff) so a genuinely
+  // short response (e.g. 450 words) is flagged rather than waved through —
+  // 450 is well under the 600 floor and should read as underdeveloped.
+  wordVeryShort: 400,   // below this: clearly too short, likely incomplete
+  wordTarget: 600,      // the real floor for "meets the typical length" — under this = flag
+  wordTargetHigh: 700,  // 600–700 is the OK band
+  wordVeryLong: 850,    // 700–850: gentle "a bit long" info; above this: flag
   stubParagraphWords: 40,    // a non-empty body paragraph under this looks unfinished
   briefIntroConcMax: 130,    // intro/conclusion longer than this -> gentle "keep it brief" note
   longishSentenceWords: 38,  // sentences in the 38–48 band -> gentle "on the long side" note if several
@@ -3314,16 +3544,55 @@ const PRACTICE_CHECK_CONFIG = {
   longishSentenceCount: 4,   // that many longish sentences (or >35% of sentences) triggers the note
   minTermsPer100Words: 4,    // musical-term hits per 100 body words below this -> "thin vocabulary"
   minAnchoredSentenceRatio: 0.4,   // fraction of body sentences that should carry a time anchor
-  goodAnchoredSentenceRatio: 0.6,
+  // Measured directly against the real 2011 Q4 Band 6 (9/10) script (anchorRatio
+  // 0.457) and "Epic Diva" (0.615) — 0.45 is the real ground floor for "well
+  // anchored", not an abstract ideal; the old 0.6 sat above what the actual
+  // Band 6 response achieves.
+  goodAnchoredSentenceRatio: 0.45,
   minMediaSentenceRatio: 0.2,      // fraction of body sentences that should name a performer
   minDetailSentenceRatio: 0.4,     // fraction of body sentences that should carry concrete detail
+  // Same measured-ground-truth basis as goodAnchoredSentenceRatio: the real
+  // Band 6 script's detailRatio is 0.556, Diva's is 0.727 — 0.5 is the real
+  // floor for "consistently detailed", not the old, stricter 0.6.
+  goodDetailSentenceRatio: 0.5,
   maxBareLabelSentences: 2,        // more than this many "uses X to do Y" (no detail) sentences -> flag
+  bareEffectSentenceMaxWords: 12,  // a sentence this short containing a generic effect phrase has no room to describe the actual outcome
+  minBareEffectSentences: 2,       // this many bare generic-effect sentences (even unrepeated) -> flag
 
   // ---------- the six concepts of music (for the intro/conclusion "names a concept" check) ----------
   concepts: [
     "pitch","duration","dynamics","expressive technique","tone colour","tone color","timbre",
     "texture","structure","form","rhythm"
   ],
+
+  // ---------- concept-breadth buckets (which of the six is the body actually touching?) ----------
+  // A compact representative subset per concept — doesn't need to be
+  // exhaustive, just enough to reliably detect whether that concept is
+  // touched at all anywhere in the body.
+  minConceptsForBreadth: 3, // when the question doesn't restrict focus, expect at least this many touched
+  conceptTermBuckets: {
+    "pitch": ["interval","semitone","tonic","dominant","modulat","chromatic","diatonic","pentatonic",
+      "mode","phrygian","dorian","lydian","mixolydian","melody","melodic","harmony","harmonic","chord",
+      "cadence","dissonan","consonan","pedal point","drone","ostinato","motif","theme","glissando",
+      "register","contour","ascend","descend","tonal","atonal","key\\b"],
+    "duration": ["rhythm","tempo","metre","meter","syncopat","polyrhythm","hemiola","rubato",
+      "semiquaver","quaver","crotchet","minim","triplet","dotted","anacrusis","\\bbeat\\b","pulse",
+      "augmentation","diminution","\\bphrase\\b"],
+    "texture": ["monophon","homophon","polyphon","heterophon","contrapuntal","counterpoint","canon",
+      "imitat","unison","layers","density","texture"],
+    "tone colour": ["tone colour","tone color","timbre","instrumentation","orchestrat","pizzicato",
+      "arco","tremolo","harmonics","\\bmute","con sordino","reedy","brassy","metallic","sonority"],
+    // NOTE: deliberately excludes bare "forte"/"piano" — both are ambiguous
+    // with the piano/forte-piano INSTRUMENT names, which would otherwise
+    // make "dynamics" false-trigger in almost every response (any mention
+    // of "the piano plays..." is about the instrument, not the marking).
+    "dynamics": ["dynamic","crescendo","decrescendo","diminuendo","fortissimo","pianissimo",
+      "mezzo[- ]?forte","mezzo[- ]?piano","sforzando","forte-piano","\\baccent","staccato","legato",
+      "articulation","expressive technique","terraced dynamics"],
+    "structure": ["structure","\\bsection","binary","ternary","rondo","sonata form","variation",
+      "through-composed","strophic","\\bverse\\b","\\bchorus\\b","introduction","\\bcoda\\b",
+      "development","recapitulation","transition","\\bform\\b"]
+  },
 
   // ---------- technical vocabulary across the six concepts (terminology-density check) ----------
   musicTerms: [
@@ -3395,7 +3664,14 @@ const PRACTICE_CHECK_CONFIG = {
     "provide variety","provides variety","providing variety","sense of climax","climactic","reaches a climax",
     "builds to a climax","conveys","convey","conveying","communicates","communicate","reflects","reflect",
     "reflecting","expresses","express","expressing","evokes","evoke","establishes","establish",
-    "sense of style","distinctive style","stylistic","the style"
+    "sense of style","distinctive style","stylistic","the style",
+    // Effect/interpretive vocabulary for tone-colour, texture and mood-focused
+    "creating dissonance","creates dissonance","create dissonance","harmonic ambiguity","tonal ambiguity",
+    "ambiguous tonal","sense of vastness","sense of emptiness","sense of isolation","sense of unease",
+    "sense of atmosphere","creates atmosphere","creating atmosphere","immersive","paradox","word painting",
+    "word-painting","depicts","depict","depicting","portrays","portray","portraying","representing",
+    "represents","represent","imagery","juxtaposition","juxtaposes","juxtapose","destabilises","destabilise",
+    "destabilising","unresolved","unsettling","unsettles"
   ],
 
   // ---------- comparative connectives (only checked when two works are in play) ----------
@@ -3473,6 +3749,66 @@ const PRACTICE_CHECK_CONFIG = {
     /\b(?:piece|work|excerpt|movement|section|passage)\s+(?:begins?|opens?|starts?|ends?|finishes?|concludes?)\b/i,
     /^(?:then|next|finally|subsequently|afterwards?|later|following this|after this)\b/i,
     /\b(?:throughout|later in the (?:piece|work|movement)|by the end|as the (?:piece|work|section) (?:progresses|develops|unfolds|continues))\b/i
+  ],
+
+  // ---------- proofreading: vague/generic words standing in for a technical term ----------
+  // Each is reported by name with a concrete suggested replacement — this is
+  // the main lever for "specific things to improve" rather than a percentage.
+  vagueTerms: [
+    { re:/\bthe tune\b/i, label:"the tune", suggest:"the melody" },
+    { re:/\bthe beat\b/i, label:"the beat", suggest:"a specific rhythmic value (e.g. crotchet, quaver) or 'the pulse'" },
+    { re:/\bgets?\s+louder\b/i, label:"gets louder", suggest:"a crescendo" },
+    { re:/\bgets?\s+(?:softer|quieter)\b/i, label:"gets softer/quieter", suggest:"a decrescendo / diminuendo" },
+    // "goes up"/"goes down" are only vague when no interval is named — a
+    // sentence like "modulation going up a minor 2nd (G to D)" has already
+    // done exactly what the suggestion asks, so it must not be flagged.
+    { re:/\bgo(?:es|ing)?\s+up\b/i, label:"goes up", suggest:"ascends / rises (name the interval if you can)",
+      exempt:CFG_INTERVAL_NAME_PATTERN },
+    { re:/\bgo(?:es|ing)?\s+down\b/i, label:"goes down", suggest:"descends / falls",
+      exempt:CFG_INTERVAL_NAME_PATTERN },
+    { re:/\bdifferent\s+(?:sounds|instruments)\b/i, label:"different sounds/instruments", suggest:"name the actual instruments or voices" },
+    { re:/\ba\s+lot\s+of\b/i, label:"a lot of", suggest:"a precise amount, or just name what there's more of" },
+    { re:/\bkind\s+of\b/i, label:"kind of", suggest:"remove — be precise instead of hedging" },
+    { re:/\bsort\s+of\b/i, label:"sort of", suggest:"remove — be precise instead of hedging" },
+    { re:/\bstuff\b/i, label:"stuff", suggest:"name the specific musical material" },
+    { re:/\bthe music\s+(?:changes|is different)\b/i, label:"the music changes", suggest:"name what changes — the texture, dynamic, tonality, tempo…" }
+  ],
+
+  // ---------- proofreading: informal contractions (formal register expected) ----------
+  // Deliberately excludes possessive 's ("Grandage's", "the composer's") —
+  // only genuine contractions are matched.
+  contractionPatterns: [
+    /\b\w+n't\b/i,
+    /\bit's\b/i,
+    /\b(?:they|we|you)'re\b/i,
+    /\b(?:they|we|I)'ve\b/i,
+    /\bI'm\b/i,
+    /\b(?:it|that|this|there|he|she)'ll\b/i
+  ],
+
+  // ---------- proofreading: weak sentence openers (padding, not analysis) ----------
+  weakOpenerPatterns: [
+    /^there\s+(?:is|are|was|were)\b/i,
+    /^it\s+(?:is|was)\b/i
+  ],
+
+  // ---------- proofreading: common misspellings of Music 2 vocabulary ----------
+  misspellings: [
+    ["rythm","rhythm"], ["rythem","rhythm"], ["ryhthm","rhythm"], ["rhythem","rhythm"],
+    ["melodie","melody"], ["harmany","harmony"], ["harminy","harmony"],
+    ["dinamics","dynamics"], ["dynamnics","dynamics"], ["texure","texture"], ["textrue","texture"],
+    ["ostanato","ostinato"], ["ostinatto","ostinato"], ["ostinado","ostinato"],
+    ["sycopation","syncopation"], ["syncopasion","syncopation"], ["syncropation","syncopation"],
+    ["accompanyment","accompaniment"], ["acompaniment","accompaniment"], ["accompanyed","accompanied"],
+    ["cresendo","crescendo"], ["chrescendo","crescendo"], ["decrescando","decrescendo"],
+    ["decend","descend"], ["decending","descending"], ["assending","ascending"], ["accending","ascending"],
+    ["compasition","composition"], ["compostion","composition"], ["composision","composition"],
+    ["intrument","instrument"], ["intruments","instruments"], ["instrumnet","instrument"],
+    ["orchestal","orchestral"], ["percusion","percussion"], ["percussian","percussion"],
+    ["definately","definitely"], ["seperate","separate"], ["seperately","separately"],
+    ["recieve","receive"], ["occured","occurred"], ["begining","beginning"], ["untill","until"],
+    ["wich","which"], ["thier","their"], ["timber","timbre"],
+    ["polyphany","polyphony"], ["hetrophony","heterophony"], ["cadance","cadence"], ["cadanza","cadenza"]
   ]
 };
 
@@ -4082,10 +4418,54 @@ function practiceGetCaseStudyIdentifiers(response){
     const inner = m.replace(/[‘’'"“”]/g, "").trim();
     if(inner.length > 2) ids.add(inner);
   });
-  (q.match(/\bby\s+([A-Z][a-zÀ-ÿ'.\-]+(?:\s+[A-Z][a-zÀ-ÿ'.\-]+){0,2})/g) || []).forEach(m => {
+  // No "." in the word class — including it let a name swallow its own
+  // sentence-ending period and bleed into the next sentence's capitalised
+  // first word (e.g. "by Alfred Schnittke. How" instead of stopping at
+  // "Alfred Schnittke").
+  (q.match(/\bby\s+([A-Z][a-zÀ-ÿ'\-]+(?:\s+[A-Z][a-zÀ-ÿ'\-]+){0,2})/g) || []).forEach(m => {
     ids.add(m.replace(/^by\s+/i, "").trim());
   });
   return { all: [...ids], pieceNames };
+}
+
+// Some HSC Q4 papers name one COMPULSORY given work in the question itself
+// ("Based on 'Overture' from Gogol Suite by Alfred Schnittke...") — missing
+// that work entirely is a much bigger, more specific gap than any of the
+// generic checks above catch, since a real chunk of the marks are tied to
+// discussing that exact piece. Only fires when the question phrasing
+// actually signals a compulsory given work — most Q4 papers don't.
+function practiceExtractRequiredTitle(questionText){
+  const q = questionText || "";
+  let m = q.match(/(?:based on|refer(?:ring)? to)\s+[‘’'"“”]([^‘’'"“”]{2,60})[‘’'"“”]/i);
+  if(m) return m[1].trim();
+  m = q.match(/[‘’'"“”]([^‘’'"“”]{2,60})[‘’'"“”]\s+(?:from|by)\s+[A-Z]/);
+  if(m) return m[1].trim();
+  return null;
+}
+// how many total works the question expects (the required one + "ONE/TWO other(s)")
+// — used only to phrase roughly what fraction of marks a missing work costs.
+function practiceEstimateRequiredWorkCount(questionText){
+  const q = questionText || "";
+  if(/\btwo other\b|\bat least two\b/i.test(q)) return 3;
+  if(/\bone other\b|\bat least one\b/i.test(q)) return 2;
+  return 2;
+}
+// Some Q4 papers ask about a SINGLE work only ("...with reference to ONE work
+// you have studied...") — comparison between two works isn't just unnecessary
+// there, it's not what's being asked. An explicit "ONE work" with no "other
+// work(s)" mentioned anywhere is treated as authoritative and overrides any
+// other comparative-sounding signal (e.g. multiple pieces linked as evidence).
+// Returns 1, 2, or null when the phrasing doesn't clearly say either way —
+// callers should fall back to their own heuristic in that case.
+function practiceDetectExpectedWorks(questionText){
+  const q = questionText || "";
+  // Must actually say "other" — a lone "at least one work must be
+  // Australian" is a constraint on WHICH work, not a second work, and must
+  // not be read as "at least one [other] work".
+  const mentionsOther = /\bone other\b|\banother work\b|\btwo other\b|\bat least (?:one|two) other\b/i.test(q);
+  if(/\bone work\b/i.test(q) && !mentionsOther) return 1;
+  if(/\btwo works\b|\btwo or more works\b|\bcompar/i.test(q) || mentionsOther) return 2;
+  return null;
 }
 
 function practiceRunSelfCheck(response){
@@ -4124,22 +4504,89 @@ function practiceRunSelfCheck(response){
   }
 
   const qLow = (response.questionText || "").toLowerCase();
-  const qPrinciples = ["interest","unity","contrast","style","variety","tension","development","cultural context","meaning","expressive"]
+  // Broad on purpose — Q4 questions focus on all sorts of things, not just
+  // "interest"/"tension"/"unity"-style principle language. Without the
+  // concept/technique words here, a tone-colour- or texture-focused question
+  // (very common) gets zero focus-word matches, silently disabling half of
+  // the "does this connect back to the question" logic below.
+  const qPrinciples = ["interest","unity","contrast","style","variety","tension","development","cultural context",
+    "meaning","expressive","expressive technique","performing technique","tone colour","tone color","timbre",
+    "texture","pitch","dynamics","duration","rhythm","structure","form","mood","atmosphere","imagery"]
     .filter(w => qLow.includes(w));
   const qFocusLabel = qPrinciples.length ? qPrinciples.slice(0, 2).join(" / ") : "the question's focus";
 
-  const structure = [], points = [], style = [];
+  // Whether this response is expected to discuss one work or two — an
+  // explicit "ONE work" in the question overrides everything else, since
+  // demanding a comparison the question never asked for is actively wrong
+  // advice, not just unhelpful. When phrasing is ambiguous, fall back to
+  // the previous signals (explicit "compare"/"two works" wording, or two or
+  // more distinct pieces actually linked as evidence).
+  const expectedWorks = practiceDetectExpectedWorks(response.questionText);
+  // Plural "composers"/"works" ("How HAVE COMPOSERS manipulated... in their
+  // WORKS?") is common Q4 phrasing for a two-work question that never says
+  // "compare" or "two works" outright — missing this left genuinely
+  // comparative responses never checked for comparative language at all.
+  // Safe to add unconditionally here: an explicit "ONE work" question is
+  // already caught and short-circuited above before this line is reached.
+  const qTextForComparative = response.questionText || "";
+  const pluralComposersAndWorks = /\bcomposers\b/i.test(qTextForComparative) && /\bworks\b/i.test(qTextForComparative);
+  const looksComparative = expectedWorks === 1 ? false :
+    (expectedWorks === 2 || /\btwo works\b|\bcompar/i.test(qTextForComparative) || pluralComposersAndWorks || ids.pieceNames.length >= 2);
+
+  const structure = [], points = [], style = [], proof = [];
+  // raw signals collected as each check below runs, used only for the
+  // indicative band-range estimate at the very end of this function
+  const signals = { totalWords, hasIntro:false, hasConclusion:false, stubCount:0, bodyCount:0,
+    anchorRatio:0, mediaOk:false, per100:0, detailRatio:1, unlinkedCount:0, emotiveCount:0,
+    veryLongCount:0, comparativeNeeded:false, comparativeOk:true };
   const trunc = (s, n) => s.length > n ? s.slice(0, n).trim() + "…" : s;
+  // Set by whichever single highest-priority issue is found below, in a
+  // fixed priority order — surfaced as the one "Next" action in the UI
+  // rather than making the student weigh a whole list themselves.
+  let nextAction = null;
+  const setNextAction = (text) => { if(!nextAction) nextAction = text; };
 
   // ---------------- STRUCTURE ----------------
+  // Highest-priority, most specific check first: some HSC Q4 papers name one
+  // COMPULSORY given work in the question itself. Missing it entirely is a
+  // much bigger and more concrete gap than anything else below — a real
+  // chunk of the marks are tied to that exact piece.
+  const requiredTitle = practiceExtractRequiredTitle(response.questionText);
+  if(requiredTitle && allBodyText){
+    const mentioned = allBodyText.toLowerCase().includes(requiredTitle.toLowerCase());
+    if(!mentioned){
+      const n = practiceEstimateRequiredWorkCount(response.questionText);
+      structure.push({ status:"flag", text:"The question requires you to discuss ‘" + requiredTitle + "’ specifically — you haven't mentioned it anywhere in your body paragraphs. Roughly 1/" + n + " of the marks are tied to that work alone." });
+      setNextAction("Rewrite so that ‘" + requiredTitle + "’ is properly discussed — name it, and give at least one bar-specific point about it in a body paragraph.");
+    } else {
+      structure.push({ status:"ok", text:"You discuss the required work (‘" + requiredTitle + "’) named in the question." });
+    }
+  }
+
+  // Real timed HSC responses run ~600–650 words (up to ~700 is a rare-but-
+  // acceptable outlier) — but that figure is calibrated against a TWO-work
+  // comparative Q4. A single-work question demands roughly a quarter less
+  // content in the same handful of marks, so holding it to the two-work
+  // band flags a properly-sized response as "too short". Scale the whole
+  // band down for a detected single-work question instead.
+  const wordBands = expectedWorks === 1
+    ? { veryShort: Math.round(CFG.wordVeryShort * 0.75), target: Math.round(CFG.wordTarget * 0.75),
+        targetHigh: Math.round(CFG.wordTargetHigh * 0.75), veryLong: Math.round(CFG.wordVeryLong * 0.75) }
+    : { veryShort: CFG.wordVeryShort, target: CFG.wordTarget, targetHigh: CFG.wordTargetHigh, veryLong: CFG.wordVeryLong };
+  const lengthRangeLabel = wordBands.target + "–" + wordBands.targetHigh;
+  signals.wordBands = wordBands;
   if(totalWords === 0){
     structure.push({ status:"flag", text:"You haven't written anything yet." });
-  } else if(totalWords < CFG.targetWordLow){
-    structure.push({ status:"flag", text:"Your whole response is about " + totalWords + " words. A full timed HSC response usually runs around 600–650." });
-  } else if(totalWords > CFG.targetWordHigh){
-    structure.push({ status:"flag", text:"Your response is about " + totalWords + " words — longer than typical timed conditions. Check you're not over-writing (the where and the effect stay brief; detail belongs in the what)." });
+  } else if(totalWords < wordBands.veryShort){
+    structure.push({ status:"flag", text:"Your whole response is about " + totalWords + " words — well short of the ~" + lengthRangeLabel + " a real timed response runs to. This almost always means your body paragraphs need more musical detail (specific bars, techniques, and how the material changes), not just more sentences." });
+  } else if(totalWords < wordBands.target){
+    structure.push({ status:"flag", text:"Your whole response is about " + totalWords + " words — under the ~" + lengthRangeLabel + " typical length. Look at each body paragraph and ask: have I fully unpacked every technique I've named, with a specific example and how it changes?" });
+  } else if(totalWords <= wordBands.targetHigh){
+    structure.push({ status:"ok", text:"Length is about " + totalWords + " words — squarely in the typical " + lengthRangeLabel + " range for a timed response." });
+  } else if(totalWords <= wordBands.veryLong){
+    structure.push({ status:"info", text:"Your response is about " + totalWords + " words — a little past the typical " + lengthRangeLabel + " (a little more is fine but rare). Make sure this length is earning marks (more musical detail), not padding (longer framing or effect sentences)." });
   } else {
-    structure.push({ status:"ok", text:"Length is about " + totalWords + " words — within range for a timed response." });
+    structure.push({ status:"flag", text:"Your response is about " + totalWords + " words — longer than timed conditions realistically allow. Check you're not over-writing: keep the where and the effect brief, and trim any repeated framing." });
   }
 
   // A Music intro/conclusion "touches on concepts" if it names one of the six
@@ -4160,10 +4607,28 @@ function practiceRunSelfCheck(response){
     if(mentionsCaseStudy(intro.text) === false) missing.push("your case study/studies by name");
     if(!touchesConcepts(intro.text)) missing.push("the concepts / your line of argument");
     if(qPrinciples.length && !qPrinciples.some(w => intro.text.toLowerCase().includes(w))) missing.push("the question's focus (" + qFocusLabel + ")");
+    // Naming the works and concepts isn't the same as stating an argument —
+    // a thesis needs a principle-of-composition or comparative clause too,
+    // or it reads as a list ("Both X and Y use the concepts of music")
+    // rather than a claim about HOW they do. A single-work response won't
+    // ever use comparative language, but it still needs to say HOW its one
+    // work achieves the effect — a causal "explores/creates X through/by Y"
+    // clause is the single-work equivalent of a thesis.
+    const causalThesisPattern = /\b(?:through|via|by (?:using|utilising|utilizing|employing|means of))\b/i;
+    const hasThesisClause = practiceMatchList(intro.text, CFG.principlePhrases).length
+      || practiceMatchList(intro.text, CFG.comparativePhrases).length
+      || (!looksComparative && causalThesisPattern.test(intro.text));
+    if(!hasThesisClause) missing.push("an actual thesis (not just a list of names — state HOW " + (looksComparative ? "each" : "the composer") + " achieves the effect)");
     if(missing.length){
-      structure.push({ status:"flag", text:"Your Introduction doesn't clearly mention " + missing.join(", ") + ". A brief Music intro should still do all three." });
+      structure.push({ status:"flag", text:"Your Introduction doesn't clearly mention " + missing.join(", ") + ". A brief Music intro should still do all of this." });
+      if(missing.some(m => m.includes("thesis"))){
+        setNextAction(looksComparative
+          ? "Open with a thesis, not just a list of names — e.g. ‘Both composers sustain interest by manipulating one concept as the primary agent of change, but through different means.’"
+          : "Open with a thesis that states HOW the composer achieves the effect, not just what's being discussed — e.g. ‘Grandage creates a sense of dissonance and ambiguity through the unconventional use of tone colour and non-functional harmony.’");
+      }
     } else {
-      structure.push({ status:"ok", text:"Introduction names the work(s), a concept, and the question's focus." });
+      structure.push({ status:"ok", text:"Introduction names the work(s), a concept, and states an actual thesis." });
+      signals.hasIntro = true;
     }
     if(intro.words > CFG.briefIntroConcMax){
       structure.push({ status:"info", text:"Your Introduction is fairly long (" + intro.words + " words). In Music, unlike English, a short intro is fine — 2–4 sentences is enough." });
@@ -4181,6 +4646,7 @@ function practiceRunSelfCheck(response){
         structure.push({ status:"flag", text:"Your Conclusion doesn't clearly mention " + missing.join(" or ") + "." });
       } else {
         structure.push({ status:"ok", text:"Conclusion ties back to the works and the question." });
+        signals.hasConclusion = true;
       }
       if(conclusion.words > CFG.briefIntroConcMax){
         structure.push({ status:"info", text:"Your Conclusion is fairly long (" + conclusion.words + " words) — it can be brief." });
@@ -4191,11 +4657,14 @@ function practiceRunSelfCheck(response){
   if(!bodies.length){
     structure.push({ status:"flag", text:"You have no body paragraphs — this is where your marks come from." });
   }
+  signals.bodyCount = bodies.length;
   bodies.forEach(b => {
     if(!b.text){
       structure.push({ status:"flag", text:"‘" + b.title + "’ is empty." });
+      signals.stubCount++;
     } else if(b.words < CFG.stubParagraphWords){
       structure.push({ status:"flag", text:"‘" + b.title + "’ has only " + b.words + " words — it looks unfinished. Body paragraphs are where your marks come from." });
+      signals.stubCount++;
     }
   });
 
@@ -4213,13 +4682,41 @@ function practiceRunSelfCheck(response){
     }
   }
 
-  const looksComparative = /\btwo works\b|\bcompar/i.test(response.questionText || "") || ids.pieceNames.length >= 2;
   if(looksComparative && allBodyText){
+    signals.comparativeNeeded = true;
     const comps = practiceMatchList(allBodyText, CFG.comparativePhrases);
     if(!comps.length){
       structure.push({ status:"flag", text:"You don't seem to directly compare the two works with each other — describing contrast *within* one work isn't the same thing. Link them across paragraphs or sentences: ‘similarly, Koehne…’, ‘whereas Leek…’, ‘in contrast to the first work…’." });
+      signals.comparativeOk = false;
+      setNextAction("Add explicit comparative language linking the two works — ‘similarly’, ‘whereas’, ‘in contrast to the first work’ — rather than discussing them side by side without connecting them.");
     } else {
       structure.push({ status:"ok", text:"You use comparative language (" + comps.slice(0, 3).join(", ") + ") to link the works." });
+    }
+  }
+
+  // Concept breadth: does the question restrict focus to named concept(s), or
+  // does it invite breadth across "the concepts of music" generally? Only
+  // check breadth in the latter case — a question that already names its
+  // focus (e.g. "with reference to pitch and duration") shouldn't be
+  // penalised for not also covering texture and dynamics.
+  if(allBodyText){
+    const questionNamesConcepts = practiceMatchList(response.questionText || "", CFG.concepts).length > 0;
+    if(!questionNamesConcepts){
+      // Require >=2 DISTINCT terms from a bucket, not just one incidental
+      // word — a single ambiguous hit ("register", "tremolo") shouldn't
+      // count as genuine coverage of that concept.
+      const touched = Object.keys(CFG.conceptTermBuckets).filter(concept =>
+        CFG.conceptTermBuckets[concept].filter(term => new RegExp(term, "i").test(allBodyText)).length >= 2);
+      if(touched.length < CFG.minConceptsForBreadth){
+        const untouched = Object.keys(CFG.conceptTermBuckets).filter(c => !touched.includes(c));
+        const msg = "You focus almost entirely on " + (touched.length ? touched.join(" and ") : "one concept") +
+          " — the question invites breadth across the concepts of music. Add coverage of at least " +
+          untouched.slice(0, 2).join(" and/or ") + ", saying what each does for the effect the question asks about.";
+        structure.push({ status:"flag", text:msg });
+        setNextAction("Add at least " + Math.max(1, CFG.minConceptsForBreadth - touched.length) + " more concept(s) of music to your body paragraphs — currently only " + (touched.join(", ") || "one") + " is covered.");
+      } else {
+        structure.push({ status:"ok", text:"You cover breadth across the concepts of music (" + touched.join(", ") + ")." });
+      }
     }
   }
 
@@ -4244,6 +4741,27 @@ function practiceRunSelfCheck(response){
     });
   }
 
+  // ---------------- WHAT'S WORKING WELL ----------------
+  // Rather than only reporting aggregate ratios, surface the actual best
+  // sentences as evidence — a sentence that is simultaneously anchored to a
+  // place in the music, names a performer, carries concrete detail, and
+  // states an effect is about as strong as a single sentence gets. Shown
+  // first, before anything else, so the report doesn't read as pure
+  // criticism — this is exactly what's already working and worth repeating.
+  const strengths = [];
+  {
+    const allSentencesWithPara = bodies.flatMap(b =>
+      practiceSplitSentences(b.text).filter(s => practiceCountWords(s) >= 6).map(s => ({ title:b.title, s })));
+    const strong = allSentencesWithPara.filter(({s}) =>
+      CFG.timeAnchorPatterns.some(re => re.test(s))
+      && practiceMatchList(s, CFG.performingMedia).length
+      && CFG.detailPatterns.some(re => re.test(s)));
+    const labels = ["Precise, evidence-anchored detail", "A well-supported observation", "Clear technique tied to a specific place in the score"];
+    strong.slice(0, 3).forEach(({title, s}, i) => {
+      strengths.push({ status:"ok", text:labels[i % labels.length] + " in ‘" + title + "’: “" + trunc(s, 140) + "”" });
+    });
+  }
+
   // ---------------- MAKING YOUR POINTS (body paragraphs) ----------------
   const bodySentences = bodies.flatMap(b => practiceSplitSentences(b.text).filter(s => practiceCountWords(s) >= 4));
   if(!bodySentences.length){
@@ -4251,33 +4769,54 @@ function practiceRunSelfCheck(response){
   } else {
     const anchored = bodySentences.filter(s => CFG.timeAnchorPatterns.some(re => re.test(s)));
     const anchorRatio = anchored.length / bodySentences.length;
+    signals.anchorRatio = anchorRatio;
+    // per-paragraph drill-down: name the specific paragraph AND quote one of
+    // its unanchored sentences, rather than only reporting a global ratio
+    const weakAnchorParas = [];
     bodies.forEach(bd => {
       const sents = practiceSplitSentences(bd.text).filter(s => practiceCountWords(s) >= 4);
-      if(sents.length >= 2 && !sents.some(s => CFG.timeAnchorPatterns.some(re => re.test(s)))){
-        points.push({ status:"flag", text:"‘" + bd.title + "’ makes claims but never points to where in the music they happen. Anchor points with a bar number, a section name, or ‘at the opening’." });
+      if(!sents.length) return;
+      const unanchored = sents.filter(s => !CFG.timeAnchorPatterns.some(re => re.test(s)));
+      if(sents.length >= 2 && unanchored.length === sents.length){
+        points.push({ status:"flag", text:"‘" + bd.title + "’ makes claims but never points to where in the music they happen — e.g. “" + trunc(unanchored[0], 90) + "”. Add a bar number, section name, or ‘at the opening’ to this sentence." });
+      } else if(sents.length >= 3 && unanchored.length / sents.length > 0.6){
+        weakAnchorParas.push({ title:bd.title, example:unanchored[0] });
       }
     });
+    if(weakAnchorParas.length){
+      points.push({ status:"info", text:"Weakly anchored: " + weakAnchorParas.map(p=>"‘"+p.title+"’").join(", ") + ". e.g. in ‘" + weakAnchorParas[0].title + "’: “" + trunc(weakAnchorParas[0].example, 90) + "” — add where this happens." });
+    }
     if(anchorRatio < CFG.minAnchoredSentenceRatio){
       const pct = Math.round(anchorRatio * 100);
-      points.push({ status:"flag", text:(pct < 1 ? "Almost none" : "Only about " + pct + "%") + " of your body sentences say where in the music something happens. Aim to anchor most points (bar, section, or beginning/middle/end)." });
+      points.push({ status:"flag", text:(pct < 1 ? "Almost none" : "Only about " + pct + "%") + " of your body sentences say where in the music something happens. Go through each body paragraph and add a bar/section reference to every unanchored claim." });
     } else if(anchorRatio >= CFG.goodAnchoredSentenceRatio){
       points.push({ status:"ok", text:"Most of your points are anchored to a specific place in the music (" + Math.round(anchorRatio * 100) + "%)." });
     } else {
       points.push({ status:"info", text:"About " + Math.round(anchorRatio * 100) + "% of your body sentences are anchored to a place in the music — push this higher." });
     }
 
+    const noMediaParas = [];
+    bodies.forEach(bd => {
+      const sents = practiceSplitSentences(bd.text).filter(s => practiceCountWords(s) >= 4);
+      if(sents.length < 2) return;
+      const noMedia = sents.filter(s => !practiceMatchList(s, CFG.performingMedia).length);
+      if(noMedia.length === sents.length) noMediaParas.push({ title:bd.title, example:noMedia[0] });
+    });
     const withMedia = bodySentences.filter(s => practiceMatchList(s, CFG.performingMedia).length);
     if(withMedia.length / bodySentences.length < CFG.minMediaSentenceRatio){
-      points.push({ status:"flag", text:"You often describe a technique without saying who plays it. Name the instrument or voice — ‘the solo trumpet’, ‘soprano and tenor’, ‘the piano in octaves’." });
+      const eg = noMediaParas.length ? " e.g. ‘" + noMediaParas[0].title + "’: “" + trunc(noMediaParas[0].example, 90) + "” — whose instrument or voice is this?" : "";
+      points.push({ status:"flag", text:"You often describe a technique without saying who plays it." + eg + " Name the instrument or voice — ‘the solo trumpet’, ‘soprano and tenor’, ‘the piano in octaves’." });
     } else {
       points.push({ status:"ok", text:"You name the performing media (instruments / voices) regularly." });
+      signals.mediaOk = true;
     }
 
     const termHits = practiceCountList(allBodyText, CFG.musicTerms);
     const distinctTerms = practiceMatchList(allBodyText, CFG.musicTerms);
     const per100 = bodyWords ? (termHits / bodyWords * 100) : 0;
+    signals.per100 = per100;
     if(per100 < CFG.minTermsPer100Words){
-      points.push({ status:"flag", text:"Your body paragraphs use few specific musical terms for their length (~" + per100.toFixed(1) + " per 100 words). Check for general words doing a technical job — ‘the tune’ (melody?), ‘the beat’ (a rhythmic value?), ‘gets louder’ (crescendo?)." });
+      points.push({ status:"flag", text:"Your body paragraphs use few specific musical terms for their length (~" + per100.toFixed(1) + " per 100 words). See ‘Word choice & proofreading’ below for the exact vague phrases found and what to replace them with." });
     } else {
       points.push({ status:"ok", text:"Good technical vocabulary — " + distinctTerms.length + " different musical terms used." });
     }
@@ -4285,8 +4824,9 @@ function practiceRunSelfCheck(response){
     const unlinked = bodies.filter(bd => bd.text
       && !practiceMatchList(bd.text, CFG.principlePhrases).length
       && !(qPrinciples.length && qPrinciples.some(w => bd.text.toLowerCase().includes(w))));
+    signals.unlinkedCount = unlinked.length;
     if(unlinked.length){
-      points.push({ status:"flag", text:"These body paragraphs describe music but don't connect it back to " + qFocusLabel + ": " + unlinked.map(b => "‘" + b.title + "’").join(", ") + ". End points with ‘which sustains interest’, ‘creating contrast’, etc." });
+      points.push({ status:"flag", text:"These body paragraphs describe music but don't connect it back to " + qFocusLabel + ": " + unlinked.map(b => "‘" + b.title + "’").join(", ") + ". Add a closing clause to each — ‘…which sustains interest’, ‘…creating contrast’ — naming the actual effect." });
     } else if(bodies.some(b => b.text)){
       points.push({ status:"ok", text:"Every body paragraph links its observations back to the question." });
     }
@@ -4295,18 +4835,39 @@ function practiceRunSelfCheck(response){
     // each body paragraph's opening/topic sentence is allowed to be a general
     // signpost ("Hindson uses pitch to create interest…") without it counting
     // as a weak point.
-    const bodyEvidenceSentences = bodies.flatMap(b =>
-      practiceSplitSentences(b.text).filter(s => practiceCountWords(s) >= 4).slice(1));
+    const bodyEvidenceByPara = bodies.map(b => ({
+      title:b.title,
+      sents: practiceSplitSentences(b.text).filter(s => practiceCountWords(s) >= 4).slice(1)
+    }));
+    const bodyEvidenceSentences = bodyEvidenceByPara.flatMap(b => b.sents);
     if(bodyEvidenceSentences.length){
+      const isBareLabel = s => CFG.bareLabelPattern.test(s)
+        && !CFG.detailPatterns.some(re => re.test(s))
+        && !practiceMatchList(s, CFG.performingMedia).length;
       const detailSents = bodyEvidenceSentences.filter(s => CFG.detailPatterns.some(re => re.test(s)));
       const detailRatio = detailSents.length / bodyEvidenceSentences.length;
-      const bareLabelSents = bodyEvidenceSentences.filter(s =>
-        CFG.bareLabelPattern.test(s)
-        && !CFG.detailPatterns.some(re => re.test(s))
-        && !practiceMatchList(s, CFG.performingMedia).length);
+      signals.detailRatio = detailRatio;
+      const bareLabelSents = bodyEvidenceSentences.filter(isBareLabel);
       if(bareLabelSents.length > CFG.maxBareLabelSentences || detailRatio < CFG.minDetailSentenceRatio){
-        const eg = bareLabelSents.slice(0, 2).map(s => "“" + trunc(s, 90) + "”");
-        points.push({ status:"flag", text:"Several points name a technique without describing it in detail" + (eg.length ? " — e.g. " + eg.join("; ") : "") + ". The ‘what’ is where your marks are: say who's playing and be specific (intervals, chords, rhythmic values, dynamics, register, how the material changes)." });
+        // attribute examples to their actual paragraph, up to 3, so the
+        // student knows exactly where to add the missing detail
+        const attributed = [];
+        bodyEvidenceByPara.forEach(b => {
+          const hit = b.sents.find(isBareLabel);
+          if(hit) attributed.push({ title:b.title, sentence:hit });
+        });
+        if(!attributed.length){
+          // flag fired on the ratio, not the bare-label count — fall back to
+          // the least-detailed evidence sentence per paragraph so there's
+          // still something concrete to point at
+          bodyEvidenceByPara.forEach(b => {
+            const hit = b.sents.find(s => !CFG.detailPatterns.some(re => re.test(s)));
+            if(hit) attributed.push({ title:b.title, sentence:hit });
+          });
+        }
+        const eg = attributed.slice(0, 3).map(a => "‘" + a.title + "’: “" + trunc(a.sentence, 90) + "”");
+        const egClause = eg.length ? " — " + eg.join("; ") + "." : "";
+        points.push({ status:"flag", text:"These points name a technique without describing it in detail" + egClause + " The ‘what’ is where your marks are: add who's playing and be specific (an interval, a chord, a rhythmic value, a dynamic, a register, or exactly how the material changes)." });
       } else {
         points.push({ status:"ok", text:"Your points generally back techniques up with specific musical detail (" + Math.round(detailRatio * 100) + "% of evidence sentences)." });
       }
@@ -4317,6 +4878,7 @@ function practiceRunSelfCheck(response){
   const styleSentences = practiceSplitSentences(allText).filter(s => practiceCountWords(s) >= 3);
   if(styleSentences.length){
     const veryLong = styleSentences.filter(s => practiceCountWords(s) > CFG.veryLongSentenceWords);
+    signals.veryLongCount = veryLong.length;
     const longish = styleSentences.filter(s => {
       const w = practiceCountWords(s);
       return w > CFG.longishSentenceWords && w <= CFG.veryLongSentenceWords;
@@ -4334,6 +4896,7 @@ function practiceRunSelfCheck(response){
   }
 
   const emotiveHits = styleSentences.filter(s => CFG.emotivePatterns.some(re => re.test(s)));
+  signals.emotiveCount = emotiveHits.length;
   if(emotiveHits.length){
     const eg = emotiveHits.slice(0, 3).map(s => "“" + trunc(s, 90) + "”");
     style.push({ status:"flag", text:emotiveHits.length + " place(s) read as a personal reaction or value judgement rather than analysis: " + eg.join("; ") + ". Rephrase as a neutral technical observation linked to a principle of composition (tension, contrast, interest)." });
@@ -4341,18 +4904,226 @@ function practiceRunSelfCheck(response){
     style.push({ status:"ok", text:"No personal-reaction or value-judgement phrasing detected." });
   }
 
+  // Generic effect language. Two distinct tells, either one enough to flag:
+  // (a) the exact same short phrase ("creates interest") repeated far more
+  //     times than there are paragraphs — a filler refrain rather than a
+  //     described outcome each time; and
+  // (b) the phrase sitting alone in a short, bare sentence with nothing
+  //     else in it — even used only once or twice, a sentence that short
+  //     has no room to actually describe the outcome for the listener
+  //     ("...creates musical interest." vs "...blurs the downbeat, so the
+  //     listener loses their sense of metre, creating musical interest.").
+  // Using it roughly once per paragraph inside a fuller sentence (the
+  // benchmark responses' refrain pattern) is fine and is NOT flagged.
+  if(allBodyText && bodies.length){
+    const genericEffectPhrases = ["creates interest","creating interest","create interest","creates musical interest",
+      "creating musical interest","sustains interest","sustaining interest","creates contrast","creating contrast",
+      "creates tension","creating tension","creates variety","creating variety","creates unity","creating unity",
+      "adds interest","adding interest"];
+    const phraseRegexes = genericEffectPhrases.map(p => new RegExp("\\b" + p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i"));
+    let worst = null;
+    genericEffectPhrases.forEach(p => {
+      const n = practiceCountList(allBodyText, [p]);
+      if(n > 0 && (!worst || n > worst.n)) worst = { phrase:p, n };
+    });
+    const nonEmptyBodyCount = bodies.filter(b => b.text).length || 1;
+    const bareEffectSents = practiceSplitSentences(allBodyText)
+      .filter(s => practiceCountWords(s) <= CFG.bareEffectSentenceMaxWords && phraseRegexes.some(re => re.test(s)));
+    if(worst && worst.n > nonEmptyBodyCount + 2){
+      style.push({ status:"flag", text:"The phrase ‘" + worst.phrase + "’ is repeated " + worst.n + " times without much variation. Vary the wording and, each time, name the specific outcome for the listener — e.g. ‘the overlapping entries blur the downbeat, so the listener loses their sense of metre’ instead of a generic ‘creates interest’." });
+    } else if(bareEffectSents.length >= CFG.minBareEffectSentences){
+      const eg = bareEffectSents.slice(0, 3).map(s => "“" + trunc(s, 80) + "”");
+      style.push({ status:"flag", text:"Some effect statements are generic — " + eg.join("; ") + " — without describing the specific musical result for the listener. Name the precise outcome each time: e.g. ‘the overlapping entries blur the downbeat, so the listener loses their sense of metre’ instead of ‘creates musical interest’." });
+    }
+  }
+
+  // ---------------- WORD CHOICE & PROOFREADING ----------------
+  // The most concrete, actionable layer: named instances with a specific fix,
+  // not a percentage. Pure pattern-matching (no AI) — this is deliberately
+  // pushed further than a normal spell-checker since there's no API to lean
+  // on: a curated vague-term list, a music-vocabulary misspelling list,
+  // contraction detection, and weak-opener detection.
+  if(allText.trim()){
+    const vagueHits = [];
+    const allSentencesForVague = practiceSplitSentences(allText);
+    CFG.vagueTerms.forEach(v => {
+      if(v.exempt){
+        // exempted terms are only vague if the SAME sentence doesn't already
+        // do the thing being asked for (e.g. "goes up" is fine once the
+        // interval is named right there — "going up a minor 2nd (G to D)").
+        for(const sent of allSentencesForVague){
+          const m = sent.match(v.re);
+          if(m && !v.exempt.test(sent)){ vagueHits.push({ quote:m[0], suggest:v.suggest }); break; }
+        }
+      } else {
+        const m = allText.match(v.re);
+        if(m) vagueHits.push({ quote:m[0], suggest:v.suggest });
+      }
+    });
+    if(vagueHits.length){
+      const eg = vagueHits.slice(0, 5).map(v => "‘" + v.quote + "’ → " + v.suggest);
+      proof.push({ status:"flag", text:"Vague wording standing in for a technical term — " + eg.join("; ") + "." });
+    } else {
+      proof.push({ status:"ok", text:"No vague stand-ins for a technical term detected." });
+    }
+
+    const contractionHits = [];
+    CFG.contractionPatterns.forEach(re => {
+      const m = allText.match(re);
+      if(m) contractionHits.push(m[0]);
+    });
+    if(contractionHits.length){
+      proof.push({ status:"flag", text:"Informal contraction(s) found: " + [...new Set(contractionHits)].slice(0, 6).join(", ") + ". Write them in full for a formal academic register — ‘doesn't’ → ‘does not’, ‘it's’ → ‘it is’." });
+    } else {
+      proof.push({ status:"ok", text:"No informal contractions detected." });
+    }
+
+    const misspellHits = [];
+    CFG.misspellings.forEach(([wrong, right]) => {
+      if(new RegExp("\\b" + wrong + "\\b", "i").test(allText)) misspellHits.push(wrong + " → " + right);
+    });
+    if(misspellHits.length){
+      proof.push({ status:"flag", text:"Possible misspelling(s) of music vocabulary: " + misspellHits.join(", ") + "." });
+    } else {
+      proof.push({ status:"ok", text:"No common misspellings of music vocabulary detected." });
+    }
+
+    const weakOpeners = practiceSplitSentences(allText).filter(s => CFG.weakOpenerPatterns.some(re => re.test(s)));
+    if(weakOpeners.length){
+      const eg = weakOpeners.slice(0, 2).map(s => "“" + trunc(s, 80) + "”");
+      proof.push({ status:"info", text:weakOpeners.length + " sentence(s) open with a weak filler (‘There is/are…’, ‘It is…’) — " + eg.join("; ") + ". Start with the composer, the technique, or where it happens instead." });
+    }
+  }
+
+  // Fallback: if none of the specific high-priority checks above set a
+  // headline action, use the first structural flag found (stub/empty
+  // paragraphs matter more than style polish), then the first flag anywhere.
+  if(!nextAction){
+    const firstStructureFlag = structure.find(i => i.status === "flag" && /unfinished|empty/.test(i.text));
+    const firstFlagAnywhere = [...structure, ...points, ...style, ...proof].find(i => i.status === "flag");
+    const pick = firstStructureFlag || firstFlagAnywhere;
+    if(pick) setNextAction(pick.text);
+  }
+
   return {
+    bandEstimate: practiceEstimateBand(signals),
+    nextAction,
     groups: [
+      { title:"What's working well", items:strengths },
       { title:"Structure", items:structure },
       { title:"Making your points (body paragraphs)", items:points },
-      { title:"Style & clarity", items:style }
+      { title:"Style & clarity", items:style },
+      { title:"Word choice & proofreading", items:proof }
     ]
   };
+}
+
+// =====================================================================
+// Indicative band-range estimate — NOT a mark. Pure pattern-matching
+// against the same signals the checks above already computed, mapped to
+// the language of the NESA Question 4 marking-criteria bands (9–10 / 7–8 /
+// 5–6 / 3–4 / 1–2). Works from the top band down and returns the highest
+// one whose pattern criteria are met, plus what's missing to reach the
+// band above — that "what's missing" list doubles as concrete next steps.
+// This can NEVER see whether the musical analysis is actually correct or
+// insightful, which is most of what a real mark depends on — it only sees
+// whether the writing has the surface patterns real Band X responses have.
+// =====================================================================
+function practiceEstimateBand(s){
+  if(s.totalWords < 60){
+    return { range:"—", note:"Too little written yet to estimate anything.", missing:[] };
+  }
+  const wb = s.wordBands || { target: PRACTICE_CHECK_CONFIG.wordTarget, veryLong: PRACTICE_CHECK_CONFIG.wordVeryLong, veryShort: PRACTICE_CHECK_CONFIG.wordVeryShort };
+  // Running long is a TIME-MANAGEMENT problem, not a writing-quality one —
+  // real Band 6 exemplars (measured directly: the 2011 Q4 9/10 script runs
+  // to ~1020 words, "Epic Diva" to ~1085) are legitimately over the typical
+  // timed length precisely because they're untimed practice pushed toward
+  // an ideal. The separate Structure-section message above already tells a
+  // student when they've run long for real exam conditions; the band
+  // estimate itself should only ever penalise running SHORT, which is a
+  // genuine sign of underdeveloped content.
+  const lengthOk = s.totalWords >= wb.target;
+  const lengthClose = s.totalWords >= wb.veryShort;
+  const noStubs = s.stubCount === 0 && s.bodyCount > 0;
+  const fewStubs = s.stubCount <= 1 && s.bodyCount > 0;
+  const comparativeFine = !s.comparativeNeeded || s.comparativeOk;
+
+  const bands = [
+    { range:"9–10", need:[
+        ["complete structure with no unfinished paragraphs", noStubs],
+        ["most points anchored to a specific place in the music", s.anchorRatio >= PRACTICE_CHECK_CONFIG.goodAnchoredSentenceRatio],
+        ["consistently detailed explanations, not bare labels", s.detailRatio >= PRACTICE_CHECK_CONFIG.goodDetailSentenceRatio],
+        ["dense, accurate technical vocabulary", s.per100 >= PRACTICE_CHECK_CONFIG.minTermsPer100Words * 1.4],
+        ["performing media named regularly", s.mediaOk],
+        ["every body paragraph linked back to the question", s.unlinkedCount === 0],
+        ["no personal-reaction / value-judgement language", s.emotiveCount === 0],
+        ["length in the typical timed range", lengthOk],
+        ["the two works directly compared, where the question needs it", comparativeFine]
+      ] },
+    { range:"7–8", need:[
+        ["mostly complete structure", fewStubs],
+        ["a fair share of points anchored to the music", s.anchorRatio >= PRACTICE_CHECK_CONFIG.minAnchoredSentenceRatio],
+        ["reasonably detailed explanations", s.detailRatio >= PRACTICE_CHECK_CONFIG.minDetailSentenceRatio],
+        ["adequate technical vocabulary", s.per100 >= PRACTICE_CHECK_CONFIG.minTermsPer100Words],
+        ["at most one paragraph not linked back to the question", s.unlinkedCount <= 1],
+        ["little to no personal-reaction language", s.emotiveCount <= 1],
+        ["length not drastically short", lengthClose]
+      ] },
+    { range:"5–6", need:[
+        ["at least one developed body paragraph", s.bodyCount - s.stubCount >= 1],
+        ["some anchoring to the music", s.anchorRatio > 0],
+        ["some technical vocabulary present", s.per100 > 0],
+        ["length not close to empty", s.totalWords >= 150]
+      ] },
+    { range:"3–4", need:[
+        ["a complete introduction (names the works, a concept and the question) and at least one body paragraph", s.hasIntro && s.bodyCount > 0],
+        ["at least a little written", s.totalWords >= 60]
+      ] }
+  ];
+
+  for(let i = 0; i < bands.length; i++){
+    const failed = bands[i].need.filter(([,ok]) => !ok).map(([label]) => label);
+    if(!failed.length){
+      const above = i > 0 ? bands[i - 1] : null;
+      const missing = above ? above.need.filter(([,ok]) => !ok).map(([label]) => label) : [];
+      return { range:bands[i].range, missing, nextRange: above ? above.range : null };
+    }
+  }
+  const bottom = bands[bands.length - 1];
+  const missingBottom = bottom.need.filter(([,ok]) => !ok).map(([label]) => label);
+  return { range:"1–2", missing:missingBottom, nextRange:"3–4" };
 }
 
 function practiceRenderCheckResults(result){
   const box = document.getElementById("practiceCheckResults");
   box.innerHTML = "";
+
+  const be = result.bandEstimate;
+  if(be && be.range !== "—"){
+    const band = document.createElement("div");
+    band.className = "pc-band";
+    const missingLine = be.missing && be.missing.length
+      ? "To move toward the " + be.nextRange + " mark range: " + be.missing.join("; ") + "."
+      : (be.nextRange ? "Already showing the surface patterns for the " + be.nextRange + " mark range and above." : "");
+    band.innerHTML =
+      '<div class="pc-band-label">Indicative pattern match: <strong>' + be.range + ' marks</strong></div>' +
+      '<div class="pc-band-note">Based only on which structural/language patterns above are present — NOT a real mark. ' +
+      'It cannot see whether your musical analysis is actually correct or insightful, which is most of what a real mark depends on. ' +
+      'Only your teacher can tell you your actual mark.</div>' +
+      (missingLine ? '<div class="pc-band-missing">' + missingLine + '</div>' : '');
+    box.appendChild(band);
+  }
+
+  if(result.nextAction){
+    const next = document.createElement("div");
+    next.className = "pc-next";
+    const label = document.createElement("strong");
+    label.textContent = "Next: ";
+    next.appendChild(label);
+    next.appendChild(document.createTextNode(result.nextAction));
+    box.appendChild(next);
+  }
+
   result.groups.forEach(g => {
     if(!g.items.length) return;
     const sec = document.createElement("div");
@@ -4379,9 +5150,17 @@ function practiceRenderCheckResults(result){
   });
 }
 
+let practiceLastCheckResult = null;
 document.getElementById("practiceCheckBtn").addEventListener("click", () => {
   if(!practiceCurrentResponse) return;
-  practiceRenderCheckResults(practiceRunSelfCheck(practiceCurrentResponse));
+  practiceLastCheckResult = practiceRunSelfCheck(practiceCurrentResponse);
+  practiceRenderCheckResults(practiceLastCheckResult);
+  // "Submit to teacher" only makes sense for a response written against a
+  // class task (see Teacher mode below) — an ordinary practice response
+  // picked from QUESTION_POOLS has nowhere to submit to.
+  const submitBox = document.getElementById("practiceSubmitBox");
+  submitBox.style.display = practiceCurrentResponse.taskId ? "block" : "none";
+  document.getElementById("practiceSubmitStatus").textContent = "";
   document.getElementById("practiceCheckModal").style.display = "flex";
 });
 document.getElementById("practiceCheckCloseBtn").addEventListener("click", () => {
@@ -4390,6 +5169,428 @@ document.getElementById("practiceCheckCloseBtn").addEventListener("click", () =>
 document.getElementById("practiceCheckModal").addEventListener("click", (e) => {
   if(e.target.id === "practiceCheckModal") document.getElementById("practiceCheckModal").style.display = "none";
 });
+document.getElementById("practiceSubmitBtn").addEventListener("click", async ()=>{
+  if(!practiceCurrentResponse || !practiceCurrentResponse.taskId) return;
+  const btn = document.getElementById("practiceSubmitBtn");
+  const status = document.getElementById("practiceSubmitStatus");
+  const displayName = document.getElementById("practiceSubmitNameInput").value.trim();
+  btn.disabled = true;
+  status.textContent = "Submitting…";
+  try{
+    const resp = await fetch("/api/task/" + encodeURIComponent(practiceCurrentResponse.taskId) + "/submissions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        displayName,
+        questionText: practiceCurrentResponse.questionText,
+        paragraphs: practiceCurrentResponse.paragraphs,
+        selfCheckResult: practiceLastCheckResult
+      })
+    });
+    if(!resp.ok){
+      const err = await resp.json().catch(()=>({}));
+      throw new Error(err.error || ("Server responded with " + resp.status));
+    }
+    status.textContent = "✓ Submitted to your teacher.";
+  }catch(err){
+    console.error("Submission failed:", err);
+    status.textContent = "Couldn't submit: " + err.message;
+  }finally{
+    btn.disabled = false;
+  }
+});
+
+// =====================================================================
+// Teacher mode — a teacher authors a class task (score PDF + video +
+// question) once, students join with a short code and get it hydrated into
+// a normal local project (same Studio/Practice Mode/self-check as every
+// other project — see openProject()/applyImportedProjectData() reuse
+// below). Auth is code-based throughout, matching the rest of this app: no
+// accounts, no passwords — see api/_lib/kv.js for the server-side rationale.
+// =====================================================================
+function getTeacherCode(){
+  let code = localStorage.getItem("score_studio_teacher_code");
+  if(!code){
+    code = uid() + uid() + uid();
+    localStorage.setItem("score_studio_teacher_code", code);
+  }
+  return code;
+}
+
+let teacherClasses = [];
+let teacherSelectedClass = null; // {id, name, joinCode, taskCount, createdAt}
+let teacherSelectedClassTasks = [];
+
+async function teacherShowClassList(){
+  document.getElementById("teacherClassListPanel").style.display = "block";
+  document.getElementById("teacherClassDetailPanel").style.display = "none";
+  document.getElementById("teacherClassGrid").innerHTML = "<div style=\"color:var(--ink-soft);\">Loading your classes…</div>";
+  try{
+    const resp = await fetch("/api/class?teacherCode=" + encodeURIComponent(getTeacherCode()));
+    if(!resp.ok) throw new Error((await resp.json().catch(()=>({}))).error || "Server error");
+    const data = await resp.json();
+    teacherClasses = data.classes || [];
+  }catch(err){
+    console.error("Could not load classes:", err);
+    document.getElementById("teacherClassGrid").innerHTML =
+      "<div style=\"color:var(--bad);\">Couldn't load your classes: " + escapeHtml(err.message) +
+      "<br>This feature only works when this page is hosted on your Vercel deployment with a database connected.</div>";
+    return;
+  }
+  const grid = document.getElementById("teacherClassGrid");
+  grid.innerHTML = "";
+  if(teacherClasses.length === 0){
+    grid.innerHTML = '<div id="homeEmpty">No classes yet — click "+ New class" to start one.</div>';
+    return;
+  }
+  teacherClasses.forEach(c=>{
+    const card = document.createElement("div");
+    card.className = "project-card";
+    card.innerHTML =
+      '<div class="project-card-top"><span class="project-name">' + escapeHtml(c.name) + '</span></div>' +
+      '<div class="project-meta">Code ' + escapeHtml(c.joinCode) + ' · ' + c.taskCount + ' task' + (c.taskCount===1?"":"s") + '</div>';
+    card.addEventListener("click", ()=> teacherOpenClass(c));
+    grid.appendChild(card);
+  });
+}
+
+async function teacherOpenClass(c){
+  teacherSelectedClass = c;
+  document.getElementById("teacherClassListPanel").style.display = "none";
+  document.getElementById("teacherClassDetailPanel").style.display = "block";
+  document.getElementById("teacherClassNameLabel").textContent = c.name;
+  document.getElementById("teacherJoinCodeDisplay").textContent = c.joinCode;
+  await teacherRenderTaskGrid();
+}
+document.getElementById("teacherBackToClassesBtn").addEventListener("click", teacherShowClassList);
+document.getElementById("teacherCopyJoinCodeBtn").addEventListener("click", ()=>{
+  const code = document.getElementById("teacherJoinCodeDisplay").textContent;
+  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(code).catch(()=>{});
+});
+
+async function teacherRenderTaskGrid(){
+  const grid = document.getElementById("teacherTaskGrid");
+  grid.innerHTML = "<div style=\"color:var(--ink-soft);\">Loading tasks…</div>";
+  try{
+    const resp = await fetch("/api/class/" + encodeURIComponent(teacherSelectedClass.joinCode));
+    if(!resp.ok) throw new Error((await resp.json().catch(()=>({}))).error || "Server error");
+    const data = await resp.json();
+    teacherSelectedClassTasks = data.tasks || [];
+  }catch(err){
+    grid.innerHTML = "<div style=\"color:var(--bad);\">Couldn't load tasks: " + escapeHtml(err.message) + "</div>";
+    return;
+  }
+  grid.innerHTML = "";
+  if(teacherSelectedClassTasks.length === 0){
+    grid.innerHTML = '<div id="homeEmpty">No tasks yet — click "+ New task" to add a score, video and question for this class.</div>';
+    return;
+  }
+  teacherSelectedClassTasks.forEach(t=>{
+    const card = document.createElement("div");
+    card.className = "project-card";
+    card.innerHTML =
+      '<div class="project-card-top"><span class="project-name">' + escapeHtml(t.title) + '</span></div>' +
+      '<div class="project-meta">' + escapeHtml((t.questionText||"").slice(0,90)) + (t.questionText && t.questionText.length>90 ? "…" : "") + '</div>';
+    const viewBtn = document.createElement("button");
+    viewBtn.className = "btn";
+    viewBtn.style.marginTop = "6px";
+    viewBtn.textContent = "View submissions";
+    viewBtn.addEventListener("click", (e)=>{ e.stopPropagation(); teacherOpenSubmissions(t); });
+    card.appendChild(viewBtn);
+    grid.appendChild(card);
+  });
+}
+
+document.getElementById("newClassBtn").addEventListener("click", ()=>{
+  document.getElementById("newClassNameInput").value = "";
+  document.getElementById("newClassModal").style.display = "flex";
+  document.getElementById("newClassNameInput").focus();
+});
+document.getElementById("newClassCancelBtn").addEventListener("click", ()=>{
+  document.getElementById("newClassModal").style.display = "none";
+});
+document.getElementById("newClassModal").addEventListener("click", (e)=>{
+  if(e.target.id === "newClassModal") document.getElementById("newClassModal").style.display = "none";
+});
+document.getElementById("newClassCreateBtn").addEventListener("click", async ()=>{
+  const name = document.getElementById("newClassNameInput").value.trim();
+  if(!name) return;
+  const btn = document.getElementById("newClassCreateBtn");
+  btn.disabled = true;
+  try{
+    const resp = await fetch("/api/class", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ teacherCode: getTeacherCode(), name })
+    });
+    if(!resp.ok) throw new Error((await resp.json().catch(()=>({}))).error || "Server error");
+    document.getElementById("newClassModal").style.display = "none";
+    await teacherShowClassList();
+  }catch(err){
+    alert("Couldn't create the class: " + err.message);
+  }finally{
+    btn.disabled = false;
+  }
+});
+document.getElementById("newClassNameInput").addEventListener("keydown", (e)=>{
+  if(e.key==="Enter") document.getElementById("newClassCreateBtn").click();
+  if(e.key==="Escape") document.getElementById("newClassModal").style.display = "none";
+});
+
+// ---------- new task (score PDF + video + question) ----------
+document.getElementById("newTaskBtn").addEventListener("click", ()=>{
+  document.getElementById("newTaskTitleInput").value = "";
+  document.getElementById("newTaskQuestionInput").value = "";
+  document.getElementById("newTaskVideoInput").value = "";
+  document.getElementById("newTaskPdfInput").value = "";
+  document.getElementById("newTaskStatus").textContent = "";
+  document.getElementById("newTaskModal").style.display = "flex";
+  document.getElementById("newTaskTitleInput").focus();
+});
+document.getElementById("newTaskCancelBtn").addEventListener("click", ()=>{
+  document.getElementById("newTaskModal").style.display = "none";
+});
+document.getElementById("newTaskModal").addEventListener("click", (e)=>{
+  if(e.target.id === "newTaskModal") document.getElementById("newTaskModal").style.display = "none";
+});
+
+// Uploads the score PDF straight from this browser to Vercel Blob storage —
+// see api/task/upload.js for the token-issuing half of this handshake.
+// Loaded as a CDN ESM module (jsdelivr resolves the package's "./client"
+// export via its documented +esm subpath feature) rather than an npm
+// import, matching this file's existing no-build-step convention for
+// browser-side npm packages (see the docx/fflate dynamic imports above).
+async function uploadTaskPdf(file, teacherCode){
+  const { upload } = await import("https://cdn.jsdelivr.net/npm/@vercel/blob@2.8.0/client/+esm");
+  const blob = await upload(file.name, file, {
+    access: "public",
+    handleUploadUrl: "/api/task/upload",
+    clientPayload: JSON.stringify({ teacherCode })
+  });
+  return blob.url;
+}
+
+document.getElementById("newTaskCreateBtn").addEventListener("click", async ()=>{
+  const title = document.getElementById("newTaskTitleInput").value.trim();
+  const questionText = document.getElementById("newTaskQuestionInput").value.trim();
+  const videoRaw = document.getElementById("newTaskVideoInput").value.trim();
+  const pdfFile = document.getElementById("newTaskPdfInput").files[0];
+  if(!title){ alert("A task title is required."); return; }
+  if(!pdfFile){ alert("Choose a score PDF for this task."); return; }
+  const videoIdParsed = videoRaw ? parseYouTubeId(videoRaw) : null;
+  if(videoRaw && !videoIdParsed){ alert("Couldn't parse a YouTube video ID from that link."); return; }
+
+  const btn = document.getElementById("newTaskCreateBtn");
+  const status = document.getElementById("newTaskStatus");
+  btn.disabled = true;
+  const teacherCode = getTeacherCode();
+  try{
+    status.textContent = "Uploading score PDF…";
+    const pdfBlobUrl = await uploadTaskPdf(pdfFile, teacherCode);
+
+    status.textContent = "Saving task…";
+    const resp = await fetch("/api/task", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        teacherCode, classId: teacherSelectedClass.id, title, questionText,
+        videoId: videoIdParsed, pdfBlobUrl, pdfName: pdfFile.name,
+        markersByPage: {}, pageSystems: {}, groups: [], barCounter: 0
+      })
+    });
+    if(!resp.ok) throw new Error((await resp.json().catch(()=>({}))).error || "Server error");
+    const { taskId } = await resp.json();
+
+    // Give the teacher their own local copy to open straight into Studio —
+    // lets them pre-tag bars with the existing tagging UI right away if they
+    // want to; entirely optional, students never see this copy. Order
+    // matters here: showStudio()/openProject() must run first so
+    // currentProjectId actually points at this new project before
+    // loadPdfBlob() persists the PDF blob under it.
+    const localId = await createProject(title, { taskId, classId: teacherSelectedClass.id, taskRole: "teacher" });
+    document.getElementById("newTaskModal").style.display = "none";
+    await showStudio(localId);
+    loadPdfBlob(pdfFile, pdfFile.name, false, false);
+    if(videoIdParsed){ videoId = videoIdParsed; loadVideo(videoIdParsed, true); persist(); }
+  }catch(err){
+    console.error("Task creation failed:", err);
+    status.textContent = "Couldn't create task: " + err.message;
+  }finally{
+    btn.disabled = false;
+  }
+});
+
+document.getElementById("publishTaskBtn").addEventListener("click", async ()=>{
+  if(!currentTaskId || currentTaskRole !== "teacher") return;
+  const btn = document.getElementById("publishTaskBtn");
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Publishing…";
+  try{
+    const putResp = await fetch("/api/task/" + encodeURIComponent(currentTaskId), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        teacherCode: getTeacherCode(), videoId, markersByPage, pageSystems, groups, barCounter
+      })
+    });
+    if(!putResp.ok) throw new Error((await putResp.json().catch(()=>({}))).error || "Server error");
+    alert("Tags published to the class task. Students who already joined will see the update next time they open this piece.");
+  }catch(err){
+    alert("Couldn't publish: " + err.message);
+  }finally{
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+});
+
+document.getElementById("taskWriteBtn").addEventListener("click", async ()=>{
+  if(!currentTaskId) return;
+  let task;
+  try{
+    const resp = await fetch("/api/task/" + encodeURIComponent(currentTaskId));
+    if(!resp.ok) throw new Error((await resp.json().catch(()=>({}))).error || "Server error");
+    task = await resp.json();
+  }catch(err){
+    alert("Couldn't load this task's question: " + err.message);
+    return;
+  }
+  practiceCurrentResponse = {
+    id: uid(),
+    questionId: "task:" + currentTaskId,
+    questionText: task.questionText || "",
+    questionYear: "Class task",
+    questionLevel: task.title || "",
+    taskId: currentTaskId,
+    classId: currentClassId,
+    createdAt: Date.now(), updatedAt: Date.now(),
+    paragraphs: [
+      { id: uid(), title:"Introduction", text:"", evidenceIds:[] },
+      { id: uid(), title:"Body 1", text:"", evidenceIds:[] },
+      { id: uid(), title:"Conclusion", text:"", evidenceIds:[] },
+    ],
+    timer: { durationSec: 1200, remainingSec: 1200, endAt: null, running: false }
+  };
+  await saveResponseRecord(practiceCurrentResponse);
+  await showPractice();
+  practiceShowWrite();
+});
+
+// ---------- submissions viewer (teacher-only, gated by teacherCode) ----------
+async function teacherOpenSubmissions(task){
+  document.getElementById("submissionsList").innerHTML = "<div style=\"color:var(--ink-soft);\">Loading submissions…</div>";
+  document.getElementById("submissionsModal").style.display = "flex";
+  let submissions;
+  try{
+    const resp = await fetch("/api/task/" + encodeURIComponent(task.id) + "/submissions?teacherCode=" + encodeURIComponent(getTeacherCode()));
+    if(!resp.ok) throw new Error((await resp.json().catch(()=>({}))).error || "Server error");
+    submissions = (await resp.json()).submissions || [];
+  }catch(err){
+    document.getElementById("submissionsList").innerHTML = "<div style=\"color:var(--bad);\">Couldn't load submissions: " + escapeHtml(err.message) + "</div>";
+    return;
+  }
+  const list = document.getElementById("submissionsList");
+  list.innerHTML = "";
+  if(submissions.length === 0){
+    list.innerHTML = '<div style="color:var(--ink-soft);">No submissions yet for "' + escapeHtml(task.title) + '".</div>';
+    return;
+  }
+  submissions.forEach(s=>{
+    const card = document.createElement("div");
+    card.className = "submission-card";
+    const band = s.selfCheckResult && s.selfCheckResult.bandEstimate ? s.selfCheckResult.bandEstimate.range : "—";
+    const fullText = (s.paragraphs||[]).map(p => (p.title||"") + "\n" + (p.text||"")).join("\n\n");
+    card.innerHTML =
+      '<div class="sc-top">' + escapeHtml(s.displayName) + '<span class="sc-band">' + escapeHtml(band) + ' marks</span></div>' +
+      '<div class="sc-meta">' + new Date(s.submittedAt).toLocaleString() + '</div>' +
+      '<button class="sc-toggle">Show response ▾</button>' +
+      '<div class="sc-text">' + escapeHtml(fullText) + '</div>';
+    card.querySelector(".sc-toggle").addEventListener("click", ()=>{
+      card.classList.toggle("expanded");
+      card.querySelector(".sc-toggle").textContent = card.classList.contains("expanded") ? "Hide response ▴" : "Show response ▾";
+    });
+    list.appendChild(card);
+  });
+}
+document.getElementById("submissionsCloseBtn").addEventListener("click", ()=>{
+  document.getElementById("submissionsModal").style.display = "none";
+});
+document.getElementById("submissionsModal").addEventListener("click", (e)=>{
+  if(e.target.id === "submissionsModal") document.getElementById("submissionsModal").style.display = "none";
+});
+
+// =====================================================================
+// Join a class (student side) — resolves a short join code to a class's
+// task list, then hydrates the chosen task into a normal local project via
+// the same applyImportedProjectData() used by JSON import/cloud load, just
+// sourced from the task's Blob PDF URL instead of an embedded data URL.
+// =====================================================================
+document.getElementById("joinClassBtn").addEventListener("click", ()=>{
+  document.getElementById("joinClassCodeInput").value = "";
+  document.getElementById("joinClassTaskList").innerHTML = "";
+  document.getElementById("joinClassModal").style.display = "flex";
+  document.getElementById("joinClassCodeInput").focus();
+});
+document.getElementById("joinClassCancelBtn").addEventListener("click", ()=>{
+  document.getElementById("joinClassModal").style.display = "none";
+});
+document.getElementById("joinClassModal").addEventListener("click", (e)=>{
+  if(e.target.id === "joinClassModal") document.getElementById("joinClassModal").style.display = "none";
+});
+async function joinClassLookup(){
+  const code = document.getElementById("joinClassCodeInput").value.trim();
+  if(!code) return;
+  const list = document.getElementById("joinClassTaskList");
+  list.innerHTML = "Looking up class…";
+  try{
+    const resp = await fetch("/api/class/" + encodeURIComponent(code));
+    if(!resp.ok) throw new Error((await resp.json().catch(()=>({}))).error || "Server error");
+    const data = await resp.json();
+    list.innerHTML = '<div class="project-meta" style="margin-bottom:8px;">' + escapeHtml(data.className) + '</div>';
+    if((data.tasks||[]).length === 0){
+      list.innerHTML += '<div style="color:var(--ink-soft);">No tasks yet — check back later.</div>';
+      return;
+    }
+    data.tasks.forEach(t=>{
+      const item = document.createElement("button");
+      item.className = "btn";
+      item.style.cssText = "display:block;width:100%;text-align:left;margin-bottom:6px;white-space:normal;";
+      item.textContent = t.title;
+      item.addEventListener("click", ()=> joinTask(t.id));
+      list.appendChild(item);
+    });
+  }catch(err){
+    list.innerHTML = "<div style=\"color:var(--bad);\">" + escapeHtml(err.message) + "</div>";
+  }
+}
+document.getElementById("joinClassConfirmBtn").addEventListener("click", joinClassLookup);
+document.getElementById("joinClassCodeInput").addEventListener("keydown", (e)=>{
+  if(e.key==="Enter") joinClassLookup();
+  if(e.key==="Escape") document.getElementById("joinClassModal").style.display = "none";
+});
+
+async function joinTask(taskId){
+  const list = document.getElementById("joinClassTaskList");
+  list.innerHTML = "Loading task…";
+  try{
+    const resp = await fetch("/api/task/" + encodeURIComponent(taskId));
+    if(!resp.ok) throw new Error((await resp.json().catch(()=>({}))).error || "Server error");
+    const task = await resp.json();
+    const localId = await createProject(task.title, { taskId: task.id, classId: task.classId, taskRole: "student" });
+    document.getElementById("joinClassModal").style.display = "none";
+    await showStudio(localId);
+    // Reuses the exact same import path a JSON project file takes — the
+    // score PDF just happens to come from a Blob URL instead of an
+    // embedded data: URL. See applyImportedProjectData() above.
+    applyImportedProjectData({
+      markersByPage: task.markersByPage, pageSystems: task.pageSystems, notes: [],
+      groups: task.groups, barCounter: task.barCounter, videoId: task.videoId,
+      pdfDataUrl: task.pdfBlobUrl, pdfName: task.pdfName
+    });
+  }catch(err){
+    list.innerHTML = "<div style=\"color:var(--bad);\">Couldn't join that task: " + escapeHtml(err.message) + "</div>";
+  }
+}
 
 // =====================================================================
 // init
