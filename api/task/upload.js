@@ -9,7 +9,7 @@
 // comment at the top of api/project/[id].js).
 
 import { handleUpload } from '@vercel/blob/client';
-import { ID_RE } from '../_lib/kv.js';
+import { ID_RE, resolveEnvVar } from '../_lib/kv.js';
 
 export default async function handler(request, response) {
   const body = request.body;
@@ -17,6 +17,13 @@ export default async function handler(request, response) {
     const jsonResponse = await handleUpload({
       body,
       request,
+      // @vercel/blob only checks the exact env var name BLOB_READ_WRITE_TOKEN
+      // by default. A marketplace-connected store whose name isn't the
+      // default can get a prefixed var instead (e.g. "mystore_BLOB_READ_
+      // WRITE_TOKEN") — same issue already handled for KV in resolveEnvVar,
+      // see api/project/[id].js. Passing token explicitly here makes this
+      // resilient to that regardless of what the store happens to be named.
+      token: resolveEnvVar('BLOB_READ_WRITE_TOKEN'),
       onBeforeGenerateToken: async (pathname, clientPayload) => {
         let teacherCode = null;
         try { teacherCode = JSON.parse(clientPayload || '{}').teacherCode; } catch { /* ignore */ }
