@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/task/upload.js": {
+      "includeFiles": "node_modules/@vercel/blob/**"
+    }
+  }
+}
