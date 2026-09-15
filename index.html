@@ -707,6 +707,7 @@
         <div id="practiceParagraphToolbar">
           <button class="btn" id="practiceAddParagraphBtn">+ Add paragraph</button>
           <button class="btn" id="practiceCheckBtn">✓ Preliminary self-check</button>
+          <button class="btn primary" id="practiceWriteSubmitBtn" style="display:none;">📤 Submit to teacher</button>
           <span class="spacer"></span>
           <span style="font-size:0.72rem;color:var(--ink-soft);align-self:center;">Autosaves as you go</span>
         </div>
@@ -1060,9 +1061,11 @@ function migrateNote(n){
   if(n.startBarId===undefined) n.startBarId = n.barId!==undefined ? n.barId : null;
   if(n.startPage===undefined) n.startPage = n.page!==undefined ? n.page : null;
   if(n.startBarNumber===undefined) n.startBarNumber = n.barNumber!==undefined ? n.barNumber : null;
+  if(n.startBarLabel===undefined) n.startBarLabel = null;
   if(n.endBarId===undefined) n.endBarId = null;
   if(n.endPage===undefined) n.endPage = null;
   if(n.endBarNumber===undefined) n.endBarNumber = null;
+  if(n.endBarLabel===undefined) n.endBarLabel = null;
   if(n.startSec===undefined) n.startSec = n.timestampSec!==undefined ? n.timestampSec : null;
   if(n.endSec===undefined) n.endSec = null;
   if(n.groupId===undefined) n.groupId = null;
@@ -1096,7 +1099,10 @@ function normalizeProjectRecord(rec){
   rec.taskRole = rec.taskRole || null;
   rec.taskQuestionText = rec.taskQuestionText || null;
   Object.values(rec.markersByPage).forEach(list=>{
-    (list||[]).forEach(m=>{ if(m.manual===undefined) m.manual = false; });
+    (list||[]).forEach(m=>{
+      if(m.manual===undefined) m.manual = false;
+      if(m.label===undefined) m.label = null;
+    });
   });
   return rec;
 }
@@ -1942,7 +1948,7 @@ function renumberAllBars(){
   notes.forEach(n=>{
     if(n.startBarId){
       const m = findMarkerById(n.startBarId);
-      if(m) n.startBarNumber = m.number;
+      if(m){ n.startBarNumber = m.number; n.startBarLabel = m.label; }
     } else if(n.startBarNumber!=null){
       // a bar number with no marker yet (e.g. imported from Word before the
       // score was tagged) — link up automatically as soon as that bar exists
@@ -1951,7 +1957,7 @@ function renumberAllBars(){
     }
     if(n.endBarId){
       const m = findMarkerById(n.endBarId);
-      if(m) n.endBarNumber = m.number;
+      if(m){ n.endBarNumber = m.number; n.endBarLabel = m.label; }
     } else if(n.endBarNumber!=null){
       const found = findMarkerByNumber(n.endBarNumber);
       if(found){ n.endBarId = found.marker.id; n.endPage = found.page; }
@@ -2034,7 +2040,7 @@ function renderMarkerOverlay(){
     line.style.top = (m.yTopFrac*dispH) + "px";
     line.style.height = ((m.yBotFrac-m.yTopFrac)*dispH) + "px";
     line.dataset.id = m.id;
-    line.title = "Bar " + m.number + (tagMode ? " — drag to move, or use the ✕ to delete" : " — click to jump to its note");
+    line.title = (m.label || ("Bar " + m.number)) + (tagMode ? " — drag to move, or use the ✕ to delete" : " — click to jump to its note");
     // In tag mode the line is now a drag handle (see startMarkerLineDrag
     // below) rather than a click-to-delete target — deletion has its own
     // dedicated ✕ button in the cluster so it can't happen by accident.
@@ -2069,7 +2075,7 @@ function renderMarkerOverlay(){
 
     const badge = document.createElement("div");
     badge.className = "marker-badge" + (linked?" linked":"") + (m.id===selectedMarkerId?" selected":"");
-    badge.textContent = m.number;
+    badge.textContent = m.label || m.number;
     badge.dataset.id = m.id;
     badge.addEventListener("click", (e)=>{
       e.stopPropagation();
@@ -2082,22 +2088,37 @@ function renderMarkerOverlay(){
     badge.addEventListener("blur", ()=>{
       if(badge.isContentEditable){
         badge.contentEditable = "false";
-        const n = parseInt(badge.textContent.trim(),10);
-        if(!isNaN(n) && n!==m.number){
+        const typed = badge.textContent.trim();
+        const n = parseInt(typed,10);
+        // A number renames the bar exactly as before. Anything else non-empty
+        // is a text label instead — for a score with no bar numbers at all
+        // (a lead sheet, a chord chart), a student names the location
+        // ("Chorus 1") rather than being forced into a number that doesn't
+        // mean anything on that kind of score. The auto-assigned sequence
+        // number underneath is untouched either way — it only matters for
+        // internal ordering, never shown once a label is set.
+        if(!isNaN(n) && String(n)===typed && n!==m.number){
           m.number = n;
+          m.label = null;
           m.manual = true; // hand-typed — renumbering leaves this one alone from now on
           renumberAllBars();
           persist();
           renderMarkerOverlay();
           renderNotes();
+        } else if(isNaN(n) && typed && typed!==m.label){
+          m.label = typed;
+          renumberAllBars();
+          persist();
+          renderMarkerOverlay();
+          renderNotes();
         } else {
-          badge.textContent = m.number;
+          badge.textContent = m.label || m.number;
         }
       }
     });
     badge.addEventListener("keydown", (e)=>{
       if(e.key==="Enter"){ e.preventDefault(); badge.blur(); }
-      if(e.key==="Escape"){ badge.textContent = m.number; badge.blur(); }
+      if(e.key==="Escape"){ badge.textContent = m.label || m.number; badge.blur(); }
     });
     cluster.appendChild(badge);
   });
@@ -2111,7 +2132,7 @@ document.getElementById("canvasWrap").addEventListener("click", (e)=>{
   const yFrac = (e.clientY - rect.top) / rect.height;
   let sys = (pageSystems[currentPage]||[]).find(s=> yFrac >= s.yTopFrac-0.01 && yFrac <= s.yBotFrac+0.01);
   if(!sys) sys = { yTopFrac: 0, yBotFrac: 1 };
-  const marker = { id: uid(), xFrac, yTopFrac: sys.yTopFrac, yBotFrac: sys.yBotFrac, number: 0, manual: false };
+  const marker = { id: uid(), xFrac, yTopFrac: sys.yTopFrac, yBotFrac: sys.yBotFrac, number: 0, manual: false, label: null };
   if(!markersByPage[currentPage]) markersByPage[currentPage] = [];
   markersByPage[currentPage].push(marker);
   markersByPage[currentPage].sort((a,b)=> a.yTopFrac-b.yTopFrac || a.xFrac-b.xFrac);
@@ -2253,7 +2274,8 @@ function openAddNoteFor(marker){
     startBarId: marker ? marker.id : null,
     startPage: marker ? currentPage : null,
     startBarNumber: marker ? marker.number : null,
-    endBarId: null, endPage: null, endBarNumber: null,
+    startBarLabel: marker ? marker.label : null,
+    endBarId: null, endPage: null, endBarNumber: null, endBarLabel: null,
     section: "",
     what: "",
     why: "",
@@ -2296,9 +2318,17 @@ function jumpToBar(page, barId){
 function whereLabel(note){
   if(note.startBarId){
     const sec = note.section ? note.section + " · " : "";
-    const barPart = (note.endBarId && note.endBarNumber!==note.startBarNumber)
-      ? "bar " + note.startBarNumber + "–" + note.endBarNumber
-      : "bar " + note.startBarNumber;
+    // A labelled marker (e.g. "Chorus 1" — see the badge-rename handler
+    // above) is named directly, with no "bar" prefix; a plain numbered one
+    // reads exactly as before. Each end of a range is resolved
+    // independently so a range spanning a labelled and a numbered marker
+    // still reads sensibly (rare, but not disallowed).
+    const startText = note.startBarLabel || ("bar " + note.startBarNumber);
+    let barPart = startText;
+    if(note.endBarId && note.endBarNumber!==note.startBarNumber){
+      const endText = note.endBarLabel || ("bar " + note.endBarNumber);
+      barPart = startText + "–" + endText;
+    }
     return sec + barPart;
   }
   if(note.startBarNumber!=null){
@@ -2637,10 +2667,12 @@ function buildNoteCard(n){
         n.endBarNumber = num;
         n.endBarId = found ? found.marker.id : null;
         n.endPage = found ? found.page : null;
+        n.endBarLabel = found ? found.marker.label : null;
       } else {
         n.startBarNumber = num;
         n.startBarId = found ? found.marker.id : null;
         n.startPage = found ? found.page : null;
+        n.startBarLabel = found ? found.marker.label : null;
       }
       persist(); renderNotes(); renderMarkerOverlay();
     }
@@ -3970,6 +4002,13 @@ function practiceShowWrite(){
   // to — an ordinary practice response (picked from QUESTION_POOLS) has no
   // linked project at all.
   document.getElementById("practiceBackToScoreBtn").style.display = (practiceCurrentResponse && practiceCurrentResponse.taskId) ? "" : "none";
+  // The real submit action lives inside the self-check modal (submitting
+  // without ever seeing your own check results isn't the point of this
+  // tool) — but a student scanning this toolbar for something literally
+  // labelled "submit" wouldn't find one there, since it's not visible
+  // until after clicking self-check. This button is a same-destination
+  // shortcut so "submit" is never hidden behind an unlabelled first step.
+  document.getElementById("practiceWriteSubmitBtn").style.display = (practiceCurrentResponse && practiceCurrentResponse.taskId) ? "" : "none";
   practiceRenderWrite();
 }
 document.getElementById("practiceHomeBtn").addEventListener("click", showHome);
@@ -5271,7 +5310,7 @@ function practiceRenderCheckResults(result){
 }
 
 let practiceLastCheckResult = null;
-document.getElementById("practiceCheckBtn").addEventListener("click", () => {
+function openSelfCheckModal(){
   if(!practiceCurrentResponse) return;
   practiceLastCheckResult = practiceRunSelfCheck(practiceCurrentResponse);
   practiceRenderCheckResults(practiceLastCheckResult);
@@ -5282,7 +5321,13 @@ document.getElementById("practiceCheckBtn").addEventListener("click", () => {
   submitBox.style.display = practiceCurrentResponse.taskId ? "block" : "none";
   document.getElementById("practiceSubmitStatus").textContent = "";
   document.getElementById("practiceCheckModal").style.display = "flex";
-});
+}
+// Both buttons open the same modal — self-check always runs first (seeing
+// your own feedback before it goes to your teacher is the point), but
+// "Submit to teacher" is also its own toolbar button, not only reachable
+// via one that never mentions submitting.
+document.getElementById("practiceCheckBtn").addEventListener("click", openSelfCheckModal);
+document.getElementById("practiceWriteSubmitBtn").addEventListener("click", openSelfCheckModal);
 document.getElementById("practiceCheckCloseBtn").addEventListener("click", () => {
   document.getElementById("practiceCheckModal").style.display = "none";
 });
