@@ -254,6 +254,7 @@
   #practiceWriteView{flex:1;display:none;min-height:0;flex-direction:column;}
   #practiceWriteView.active{display:flex;}
   #practiceQuestionBar{padding:10px 16px;border-bottom:1px solid var(--line);background:var(--accent-soft);color:var(--accent);font-size:0.85rem;font-weight:600;}
+  #taskQuestionBanner{padding:10px 16px;border-bottom:1px solid var(--line);background:var(--accent-soft);color:var(--accent);font-size:0.85rem;font-weight:600;}
   /* Lives inline in #practiceTopbar (centred between two .spacer elements)
      rather than as its own full-width row — a dedicated row ate into the
      vertical space available for the writing/evidence panels below. */
@@ -336,6 +337,16 @@
   #teacherJoinCodeBanner strong{font-size:1.05rem;letter-spacing:0.06em;}
   #teacherJoinCodeBanner span{color:var(--ink-soft);}
   #teacherTaskGrid{flex:1;overflow:auto;padding:24px;display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;}
+  #myClassesView{display:none;flex-direction:column;height:100%;}
+  #myClassesTopbar{padding:16px 20px;border-bottom:1px solid var(--line);background:var(--panel);display:flex;align-items:center;gap:12px;}
+  #myClassesTopbar h1{font-size:1.1rem;margin:0;}
+  #myClassesListPanel{flex:1;overflow:auto;padding:24px;}
+  #myClassesGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;max-width:1000px;margin:0 auto;}
+  #myClassesDetailTopbar{padding:12px 20px;border-bottom:1px solid var(--line);background:var(--panel);display:flex;align-items:center;gap:12px;}
+  #myClassesTaskGrid{flex:1;overflow:auto;padding:24px;display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;}
+  .task-card-status{display:inline-block;border-radius:999px;padding:2px 9px;font-size:0.72rem;font-weight:700;margin-top:6px;}
+  .task-card-status.continue{background:var(--good-soft);color:var(--good);}
+  .task-card-status.start{background:var(--accent-soft);color:var(--accent);}
   .modal-box textarea{width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);margin-bottom:14px;box-sizing:border-box;resize:vertical;}
   .modal-box input[type=file]{width:100%;margin-bottom:14px;font-size:0.8rem;}
   #newTaskBox,#submissionsBox{width:480px;}
@@ -397,7 +408,7 @@
   <div id="homeTopbar">
     <button class="btn" id="practiceNavBtn">📝 Practice Response</button>
     <button class="btn" id="teacherNavBtn">🧑‍🏫 Teacher</button>
-    <button class="btn" id="joinClassBtn">🔑 Join a class</button>
+    <button class="btn" id="joinClassBtn">🏫 My Classes</button>
     <h1>🎼 Score Analysis Studio — Projects</h1>
     <div class="spacer"></div>
     <div id="themePicker"><span class="theme-label">Theme</span></div>
@@ -483,6 +494,7 @@
 
 <div id="studioView">
 
+  <div id="taskQuestionBanner" style="display:none;"></div>
   <div id="topbar">
     <button class="btn" id="homeBtn">🏠 Home</button>
     <span class="project-name-label" id="projectNameLabel"></span>
@@ -575,7 +587,7 @@
       <button class="vw-toggle" id="vwToggleBtn">▾</button>
     </div>
     <div class="vw-body">
-      <div class="vw-urlrow">
+      <div class="vw-urlrow" id="vwUrlRow">
         <input type="text" id="vwUrlInput" placeholder="Paste YouTube link…">
         <button id="vwLoadBtn">Load</button>
       </div>
@@ -713,6 +725,25 @@
       <span style="color:var(--ink-soft);">— give this to your students so they can join.</span>
     </div>
     <div id="teacherTaskGrid"></div>
+  </div>
+</div>
+
+<div id="myClassesView">
+  <div id="myClassesTopbar">
+    <button class="btn" id="myClassesHomeBtn">🏠 Home</button>
+    <h1 id="myClassesTitle">🏫 My Classes</h1>
+    <div class="spacer"></div>
+    <button class="btn primary" id="myClassesJoinBtn">+ Join a class</button>
+  </div>
+  <div id="myClassesListPanel">
+    <div id="myClassesGrid"></div>
+  </div>
+  <div id="myClassesDetailPanel" style="display:none;">
+    <div id="myClassesDetailTopbar">
+      <button class="btn" id="myClassesBackBtn">‹ All classes</button>
+      <span class="project-name-label" id="myClassesNameLabel"></span>
+    </div>
+    <div id="myClassesTaskGrid"></div>
   </div>
 </div>
 
@@ -868,6 +899,7 @@ let cloudId = null; // this project's cloud-backup code, once one exists (see sa
 let currentTaskId = null;
 let currentClassId = null;
 let currentTaskRole = null;
+let currentTaskQuestionText = null; // shown read-only in Studio for taskRole "student"
 let barCounter = 0;
 let dragNoteId = null;    // note.id currently being dragged, or null
 let selectedMarkerId = null;
@@ -1020,6 +1052,7 @@ function normalizeProjectRecord(rec){
   rec.taskId = rec.taskId || null;
   rec.classId = rec.classId || null;
   rec.taskRole = rec.taskRole || null;
+  rec.taskQuestionText = rec.taskQuestionText || null;
   Object.values(rec.markersByPage).forEach(list=>{
     (list||[]).forEach(m=>{ if(m.manual===undefined) m.manual = false; });
   });
@@ -1038,7 +1071,8 @@ function persist(){
     updatedAt: Date.now(),
     pdfName: currentProjectPdfName,
     markersByPage, pageSystems, notes, groups, barCounter, videoId, ungroupedCollapsed, cloudId,
-    taskId: currentTaskId, classId: currentClassId, taskRole: currentTaskRole
+    taskId: currentTaskId, classId: currentClassId, taskRole: currentTaskRole,
+    taskQuestionText: currentTaskQuestionText
   });
 }
 function persistPdfBlob(blob){
@@ -1065,7 +1099,8 @@ async function createProject(name, extra){
     markersByPage: {}, pageSystems: {}, notes: [], groups: [], barCounter: 0, videoId: null,
     taskId: (extra && extra.taskId) || null,
     classId: (extra && extra.classId) || null,
-    taskRole: (extra && extra.taskRole) || null
+    taskRole: (extra && extra.taskRole) || null,
+    taskQuestionText: (extra && extra.taskQuestionText) || null
   });
   return id;
 }
@@ -1109,12 +1144,17 @@ function showHome(){
   document.getElementById("studioView").style.display = "none";
   document.getElementById("practiceView").style.display = "none";
   document.getElementById("teacherView").style.display = "none";
+  document.getElementById("myClassesView").style.display = "none";
   renderHomeGrid();
 }
 
 async function renderHomeGrid(){
   const grid = document.getElementById("homeGrid");
-  const projects = await listProjects();
+  // Class-task projects a student joined live on the My Classes page only
+  // (see myClassesRenderTaskGrid) — keeps class work visibly separate from
+  // personal study notes. A teacher's own task-drafting copy still shows
+  // here as before; they rely on it to resume tagging.
+  const projects = (await listProjects()).filter(p => p.taskRole !== "student");
   grid.innerHTML = "";
   if(projects.length===0){
     grid.innerHTML = '<div id="homeEmpty">No projects yet — click "+ New project" to start one.</div>';
@@ -1246,6 +1286,7 @@ async function showStudio(id){
   document.getElementById("studioView").style.display = "flex";
   document.getElementById("practiceView").style.display = "none";
   document.getElementById("teacherView").style.display = "none";
+  document.getElementById("myClassesView").style.display = "none";
   await openProject(id);
 }
 
@@ -1254,6 +1295,7 @@ async function showPractice(){
   document.getElementById("studioView").style.display = "none";
   document.getElementById("practiceView").style.display = "flex";
   document.getElementById("teacherView").style.display = "none";
+  document.getElementById("myClassesView").style.display = "none";
   // Refreshed every time Practice Mode is entered (rather than once at page
   // load) so a note added in Studio moments ago shows up immediately here —
   // no stale cache, no page reload needed.
@@ -1267,9 +1309,20 @@ function showTeacher(){
   document.getElementById("studioView").style.display = "none";
   document.getElementById("practiceView").style.display = "none";
   document.getElementById("teacherView").style.display = "flex";
+  document.getElementById("myClassesView").style.display = "none";
   teacherShowClassList();
 }
 document.getElementById("teacherNavBtn").addEventListener("click", showTeacher);
+
+function showMyClasses(){
+  document.getElementById("homeView").style.display = "none";
+  document.getElementById("studioView").style.display = "none";
+  document.getElementById("practiceView").style.display = "none";
+  document.getElementById("teacherView").style.display = "none";
+  document.getElementById("myClassesView").style.display = "flex";
+  myClassesShowList();
+}
+document.getElementById("joinClassBtn").addEventListener("click", showMyClasses);
 document.getElementById("teacherHomeBtn").addEventListener("click", showHome);
 
 function resetVideoPlayer(){
@@ -1300,9 +1353,19 @@ async function openProject(id){
   currentTaskId = rec.taskId;
   currentClassId = rec.classId;
   currentTaskRole = rec.taskRole;
+  currentTaskQuestionText = rec.taskQuestionText;
   document.getElementById("publishTaskBtn").style.display = currentTaskRole === "teacher" ? "" : "none";
   document.getElementById("publishTaskSection").style.display = currentTaskRole === "teacher" ? "" : "none";
   document.getElementById("taskWriteBtn").style.display = currentTaskRole === "student" ? "" : "none";
+  // A student can tag/annotate a class task freely, but the score PDF and
+  // video link are the teacher's to set — only those two are locked, and
+  // the question they're meant to be answering is shown read-only instead
+  // of being buried inside Practice Mode's write view.
+  const isStudentTask = currentTaskRole === "student";
+  document.getElementById("taskQuestionBanner").style.display = isStudentTask ? "" : "none";
+  document.getElementById("taskQuestionBanner").textContent = isStudentTask ? ("Assigned question: " + (currentTaskQuestionText || "")) : "";
+  document.getElementById("uploadBtn").style.display = isStudentTask ? "none" : "";
+  document.getElementById("vwUrlRow").style.display = isStudentTask ? "none" : "";
 
   pendingRenderPageNum = null; // abandon any queued render from the project we're leaving
   pdfDoc = null; numPages = 0; currentPage = 1; selectedMarkerId = null;
@@ -1403,6 +1466,10 @@ scoreScrollEl.addEventListener("drop", (e)=>{
 
 function loadPdfFile(file){
   if(!currentProjectId) return;
+  if(currentTaskRole === "student"){
+    alert("Your teacher set this score for this task — you can still tag bars and add your own notes, just not replace the PDF.");
+    return;
+  }
   document.getElementById("topStatus").textContent = "Loading " + file.name + "…";
   const isReplacing = !!pdfDoc;
   loadPdfBlob(file, file.name, false, isReplacing);
@@ -5523,12 +5590,117 @@ document.getElementById("submissionsModal").addEventListener("click", (e)=>{
 });
 
 // =====================================================================
-// Join a class (student side) — resolves a short join code to a class's
-// task list, then hydrates the chosen task into a normal local project via
-// the same applyImportedProjectData() used by JSON import/cloud load, just
-// sourced from the task's Blob PDF URL instead of an embedded data URL.
+// My Classes (student side) — a joined class's tasks live only here, kept
+// out of the personal Home project grid entirely (see renderHomeGrid's
+// taskRole filter). Joining resolves a short code to a class, remembers it
+// locally, then every task in that class is opened or created from this
+// page — never straight out of the join modal — so reopening a task always
+// reuses the same local project instead of creating a duplicate.
 // =====================================================================
-document.getElementById("joinClassBtn").addEventListener("click", ()=>{
+function getJoinedClasses(){
+  try{ return JSON.parse(localStorage.getItem("score_studio_joined_classes") || "[]"); }
+  catch{ return []; }
+}
+function saveJoinedClasses(list){
+  localStorage.setItem("score_studio_joined_classes", JSON.stringify(list));
+}
+function addJoinedClass(cls){
+  const list = getJoinedClasses();
+  if(!list.some(c=>c.classId===cls.classId)) list.push(cls);
+  saveJoinedClasses(list);
+}
+
+function myClassesShowList(){
+  document.getElementById("myClassesListPanel").style.display = "block";
+  document.getElementById("myClassesDetailPanel").style.display = "none";
+  myClassesRenderList();
+}
+function myClassesRenderList(){
+  const grid = document.getElementById("myClassesGrid");
+  const classes = getJoinedClasses();
+  grid.innerHTML = "";
+  if(classes.length === 0){
+    grid.innerHTML = '<div id="homeEmpty">No classes joined yet — click "+ Join a class" to add one.</div>';
+    return;
+  }
+  classes.forEach(cls=>{
+    const card = document.createElement("div");
+    card.className = "project-card";
+    card.innerHTML = '<div class="project-card-top"><span class="project-name">' + escapeHtml(cls.className) + '</span></div>';
+    card.addEventListener("click", ()=> myClassesOpenClass(cls));
+    grid.appendChild(card);
+  });
+}
+document.getElementById("myClassesHomeBtn").addEventListener("click", showHome);
+document.getElementById("myClassesBackBtn").addEventListener("click", myClassesShowList);
+
+async function myClassesOpenClass(cls){
+  document.getElementById("myClassesListPanel").style.display = "none";
+  document.getElementById("myClassesDetailPanel").style.display = "block";
+  document.getElementById("myClassesNameLabel").textContent = cls.className;
+  await myClassesRenderTaskGrid(cls);
+}
+async function myClassesRenderTaskGrid(cls){
+  const grid = document.getElementById("myClassesTaskGrid");
+  grid.innerHTML = "<div style=\"color:var(--ink-soft);\">Loading tasks…</div>";
+  let tasks;
+  try{
+    const resp = await fetch("/api/class/" + encodeURIComponent(cls.joinCode));
+    if(!resp.ok) throw new Error((await resp.json().catch(()=>({}))).error || "Server error");
+    tasks = (await resp.json()).tasks || [];
+  }catch(err){
+    grid.innerHTML = "<div style=\"color:var(--bad);\">Couldn't load tasks: " + escapeHtml(err.message) + "</div>";
+    return;
+  }
+  const existingByTaskId = new Map((await listProjects()).filter(p=>p.taskId).map(p=>[p.taskId, p]));
+  grid.innerHTML = "";
+  if(tasks.length === 0){
+    grid.innerHTML = '<div id="homeEmpty">No tasks yet — check back later.</div>';
+    return;
+  }
+  tasks.forEach(t=>{
+    const existing = existingByTaskId.get(t.id);
+    const card = document.createElement("div");
+    card.className = "project-card";
+    card.innerHTML =
+      '<div class="project-card-top"><span class="project-name">' + escapeHtml(t.title) + '</span></div>' +
+      '<div class="project-meta">' + escapeHtml((t.questionText||"").slice(0,90)) + (t.questionText && t.questionText.length>90 ? "…" : "") + '</div>' +
+      '<span class="task-card-status ' + (existing?"continue":"start") + '">' + (existing?"Continue":"Start") + '</span>';
+    card.addEventListener("click", ()=> openOrCreateTaskProject(t.id));
+    grid.appendChild(card);
+  });
+}
+
+// Looks up an existing local project for this task first (so reopening the
+// same task from My Classes never creates a duplicate and always keeps the
+// student's own notes/tags), only creating+hydrating one the first time.
+async function openOrCreateTaskProject(taskId){
+  const existing = (await listProjects()).find(p=>p.taskId===taskId);
+  if(existing){ await showStudio(existing.id); return; }
+  let task;
+  try{
+    const resp = await fetch("/api/task/" + encodeURIComponent(taskId));
+    if(!resp.ok) throw new Error((await resp.json().catch(()=>({}))).error || "Server error");
+    task = await resp.json();
+  }catch(err){
+    alert("Couldn't open that task: " + err.message);
+    return;
+  }
+  const localId = await createProject(task.title, {
+    taskId: task.id, classId: task.classId, taskRole: "student", taskQuestionText: task.questionText
+  });
+  await showStudio(localId);
+  // Reuses the exact same import path a JSON project file takes — the
+  // score PDF just happens to come from a Blob URL instead of an
+  // embedded data: URL. See applyImportedProjectData() above.
+  applyImportedProjectData({
+    markersByPage: task.markersByPage, pageSystems: task.pageSystems, notes: [],
+    groups: task.groups, barCounter: task.barCounter, videoId: task.videoId,
+    pdfDataUrl: task.pdfBlobUrl, pdfName: task.pdfName
+  });
+}
+
+document.getElementById("myClassesJoinBtn").addEventListener("click", ()=>{
   document.getElementById("joinClassCodeInput").value = "";
   document.getElementById("joinClassTaskList").innerHTML = "";
   document.getElementById("joinClassModal").style.display = "flex";
@@ -5543,27 +5715,19 @@ document.getElementById("joinClassModal").addEventListener("click", (e)=>{
 async function joinClassLookup(){
   const code = document.getElementById("joinClassCodeInput").value.trim();
   if(!code) return;
-  const list = document.getElementById("joinClassTaskList");
-  list.innerHTML = "Looking up class…";
+  const status = document.getElementById("joinClassTaskList");
+  status.innerHTML = "Looking up class…";
   try{
     const resp = await fetch("/api/class/" + encodeURIComponent(code));
     if(!resp.ok) throw new Error((await resp.json().catch(()=>({}))).error || "Server error");
     const data = await resp.json();
-    list.innerHTML = '<div class="project-meta" style="margin-bottom:8px;">' + escapeHtml(data.className) + '</div>';
-    if((data.tasks||[]).length === 0){
-      list.innerHTML += '<div style="color:var(--ink-soft);">No tasks yet — check back later.</div>';
-      return;
-    }
-    data.tasks.forEach(t=>{
-      const item = document.createElement("button");
-      item.className = "btn";
-      item.style.cssText = "display:block;width:100%;text-align:left;margin-bottom:6px;white-space:normal;";
-      item.textContent = t.title;
-      item.addEventListener("click", ()=> joinTask(t.id));
-      list.appendChild(item);
-    });
+    const cls = { classId: data.classId, joinCode: code.toUpperCase(), className: data.className };
+    addJoinedClass(cls);
+    document.getElementById("joinClassModal").style.display = "none";
+    showMyClasses();
+    myClassesOpenClass(cls);
   }catch(err){
-    list.innerHTML = "<div style=\"color:var(--bad);\">" + escapeHtml(err.message) + "</div>";
+    status.innerHTML = "<div style=\"color:var(--bad);\">" + escapeHtml(err.message) + "</div>";
   }
 }
 document.getElementById("joinClassConfirmBtn").addEventListener("click", joinClassLookup);
@@ -5571,29 +5735,6 @@ document.getElementById("joinClassCodeInput").addEventListener("keydown", (e)=>{
   if(e.key==="Enter") joinClassLookup();
   if(e.key==="Escape") document.getElementById("joinClassModal").style.display = "none";
 });
-
-async function joinTask(taskId){
-  const list = document.getElementById("joinClassTaskList");
-  list.innerHTML = "Loading task…";
-  try{
-    const resp = await fetch("/api/task/" + encodeURIComponent(taskId));
-    if(!resp.ok) throw new Error((await resp.json().catch(()=>({}))).error || "Server error");
-    const task = await resp.json();
-    const localId = await createProject(task.title, { taskId: task.id, classId: task.classId, taskRole: "student" });
-    document.getElementById("joinClassModal").style.display = "none";
-    await showStudio(localId);
-    // Reuses the exact same import path a JSON project file takes — the
-    // score PDF just happens to come from a Blob URL instead of an
-    // embedded data: URL. See applyImportedProjectData() above.
-    applyImportedProjectData({
-      markersByPage: task.markersByPage, pageSystems: task.pageSystems, notes: [],
-      groups: task.groups, barCounter: task.barCounter, videoId: task.videoId,
-      pdfDataUrl: task.pdfBlobUrl, pdfName: task.pdfName
-    });
-  }catch(err){
-    list.innerHTML = "<div style=\"color:var(--bad);\">Couldn't join that task: " + escapeHtml(err.message) + "</div>";
-  }
-}
 
 // =====================================================================
 // init
