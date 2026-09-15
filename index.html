@@ -4,13 +4,23 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Score Analysis Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Lexend:wght@600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#f5f6f8; --panel:#ffffff; --ink:#1b1f24; --ink-soft:#697079; --line:#e7e9ee;
+    --bg:#f4f5f8; --panel:#ffffff; --ink:#1b1f27; --ink-soft:#6b7280; --line:#e6e8ee;
     --accent:#6c4cff; --accent-soft:#efeafe; --good:#1c7a44; --good-soft:#e5f4ec;
     --bad:#b23a20; --bad-soft:#fce9e3; --warn:#8a5a00; --warn-bg:#fff5e0;
     --radius:12px; --radius-lg:16px;
-    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --shadow-sm:0 1px 2px rgba(20,20,40,0.05), 0 1px 3px rgba(20,20,40,0.06);
+    --shadow-md:0 10px 28px -10px rgba(20,20,40,0.18);
+    --shadow-lg:0 24px 64px -14px rgba(10,10,25,0.40);
+    --font:'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --font-display:'Lexend','Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    font-family:var(--font);
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
   }
   /* system preference applies automatically, unless the student picks an explicit mode below */
   @media (prefers-color-scheme: dark){
@@ -33,8 +43,13 @@
 
   /* ---------- home view ---------- */
   #homeView{display:none;flex-direction:column;height:100%;}
-  #homeTopbar{padding:16px 20px;border-bottom:1px solid var(--line);background:var(--panel);display:flex;align-items:center;gap:12px;}
-  #homeTopbar h1{font-size:1.1rem;margin:0;flex:1;}
+  #homeTopbar{padding:14px 24px;border-bottom:1px solid var(--line);background:var(--panel);display:flex;flex-wrap:wrap;align-items:center;gap:14px 18px;}
+  #brandLockup{display:flex;align-items:center;gap:9px;flex-shrink:0;}
+  #brandIcon{font-size:1.4rem;line-height:1;}
+  #brandName{font-family:var(--font-display);font-weight:700;font-size:1.12rem;letter-spacing:-0.01em;color:var(--ink);white-space:nowrap;}
+  .nav-group{display:flex;align-items:center;gap:2px;background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:3px;}
+  .nav-group .btn{border:none;background:transparent;box-shadow:none;}
+  .nav-group .btn:hover:not(:disabled){background:var(--panel);box-shadow:var(--shadow-sm);}
   #themePicker{display:flex;align-items:center;gap:7px;}
   .theme-label{font-size:0.76rem;color:var(--ink-soft);margin-right:2px;white-space:nowrap;}
   .theme-swatch{width:22px;height:22px;border-radius:50%;border:2px solid var(--line);background:var(--swatch-color);cursor:pointer;padding:0;transition:transform 0.12s,border-color 0.12s;flex-shrink:0;}
@@ -328,7 +343,7 @@
 
   /* ---------- Teacher mode + "submit to teacher" ---------- */
   #teacherView{display:none;flex-direction:column;height:100%;}
-  #teacherTopbar{padding:16px 20px;border-bottom:1px solid var(--line);background:var(--panel);display:flex;align-items:center;gap:12px;}
+  #teacherTopbar{padding:16px 20px;border-bottom:1px solid var(--line);background:var(--panel);display:flex;flex-wrap:wrap;align-items:center;gap:12px;}
   #teacherTopbar h1{font-size:1.1rem;margin:0;}
   #teacherClassListPanel{flex:1;overflow:auto;padding:24px;}
   #teacherClassGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;max-width:1000px;margin:0 auto;}
@@ -338,7 +353,7 @@
   #teacherJoinCodeBanner span{color:var(--ink-soft);}
   #teacherTaskGrid{flex:1;overflow:auto;padding:24px;display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;}
   #myClassesView{display:none;flex-direction:column;height:100%;}
-  #myClassesTopbar{padding:16px 20px;border-bottom:1px solid var(--line);background:var(--panel);display:flex;align-items:center;gap:12px;}
+  #myClassesTopbar{padding:16px 20px;border-bottom:1px solid var(--line);background:var(--panel);display:flex;flex-wrap:wrap;align-items:center;gap:12px;}
   #myClassesTopbar h1{font-size:1.1rem;margin:0;}
   #myClassesListPanel{flex:1;overflow:auto;padding:24px;}
   #myClassesGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;max-width:1000px;margin:0 auto;}
@@ -361,12 +376,13 @@
   .submission-card .sc-toggle{background:none;border:none;color:var(--accent);cursor:pointer;font-size:0.76rem;font-weight:700;padding:0;}
 
   /* =====================================================================
-     Modern polish layer — VISUAL ONLY. Appended last so it layers on top
-     of the base rules without touching any layout, IDs, classes or JS.
-     Only colours, elevation, radius, transitions and hover feedback.
+     Design pass — VISUAL ONLY. Appended last so it layers on top of the
+     base rules without touching any layout, IDs, classes or JS. Colours,
+     type, elevation, radius, transitions and hover/focus feedback only.
      ===================================================================== */
   ::selection{background:var(--accent-soft);color:var(--accent);}
   html{scroll-behavior:smooth;}
+  body{line-height:1.45;}
 
   /* slim, unobtrusive scrollbars */
   *{scrollbar-width:thin;scrollbar-color:var(--line) transparent;}
@@ -375,41 +391,66 @@
   ::-webkit-scrollbar-thumb{background:var(--line);border-radius:999px;}
   ::-webkit-scrollbar-thumb:hover{background:var(--ink-soft);}
 
-  /* buttons — smoother, a hint of elevation on the filled ones */
-  .btn{transition:background .14s ease,border-color .14s ease,color .14s ease,box-shadow .14s ease,transform .05s ease,filter .14s ease;font-weight:600;}
+  /* headings + brand — a distinct display face gives the app an actual
+     typographic identity instead of reading as unstyled system UI */
+  h1,h2{font-family:var(--font-display);letter-spacing:-0.015em;font-weight:700;}
+  .group-name{letter-spacing:-0.012em;}
+  .modal-box h2{font-size:1.05rem;}
+
+  /* buttons — smoother, more considered weight/spacing, a hint of elevation
+     on the filled ones so primary actions read as unmistakably primary */
+  .btn{
+    transition:background .14s ease,border-color .14s ease,color .14s ease,box-shadow .14s ease,transform .05s ease,filter .14s ease;
+    font-weight:600;padding:7px 15px;
+  }
   .btn:hover:not(:disabled){border-color:var(--accent);}
   .btn:active:not(:disabled){transform:translateY(1px);}
+  .btn.primary{background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 100%,white 6%),var(--accent));}
   .btn.primary,.btn.secondary-fill,.btn.active{box-shadow:0 1px 2px rgba(0,0,0,0.14),0 6px 16px -8px rgba(0,0,0,0.30);}
   .btn.primary:hover:not(:disabled),.btn.secondary-fill:hover:not(:disabled),.btn.active:hover:not(:disabled){filter:brightness(1.07);}
 
   /* surface elevation — cards, panels, modals, dropdowns, the video widget */
-  .project-card,.note-card{box-shadow:0 1px 2px rgba(0,0,0,0.04),0 1px 3px rgba(0,0,0,0.06);}
-  .project-card{transition:border-color .16s ease,box-shadow .16s ease,transform .16s ease;}
-  .project-card:hover{border-color:var(--accent);box-shadow:0 10px 28px -8px rgba(0,0,0,0.16);transform:translateY(-2px);}
-  .paragraph-box,.note-bubble,.piece-header,.response-card{box-shadow:0 1px 2px rgba(0,0,0,0.04);}
-  .modal-box{border:1px solid var(--line);border-radius:var(--radius-lg);box-shadow:0 24px 64px -14px rgba(0,0,0,0.45),0 0 0 1px rgba(0,0,0,0.03);}
+  .project-card,.note-card{box-shadow:var(--shadow-sm);border-radius:var(--radius-lg);}
+  .project-card{transition:border-color .16s ease,box-shadow .16s ease,transform .16s ease;padding:18px;}
+  .project-card:hover{border-color:var(--accent);box-shadow:var(--shadow-md);transform:translateY(-2px);}
+  .project-name{font-size:1rem;}
+  .paragraph-box,.note-bubble,.piece-header,.response-card{box-shadow:var(--shadow-sm);}
+  .modal-box{border:1px solid var(--line);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg),0 0 0 1px rgba(0,0,0,0.03);padding:22px;}
   .modal-overlay{background:rgba(10,12,16,0.5);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);}
-  .dropdown-menu{border-radius:var(--radius-lg);box-shadow:0 18px 44px -10px rgba(0,0,0,0.30);}
-  #videoWidget{border-radius:var(--radius-lg);box-shadow:0 14px 40px -10px rgba(0,0,0,0.32);}
+  .dropdown-menu{border-radius:var(--radius-lg);box-shadow:var(--shadow-md);}
+  #videoWidget{border-radius:var(--radius-lg);box-shadow:var(--shadow-md);}
 
   /* topbars — hairline + faint drop so they read as a surface above content */
-  #homeTopbar,#topbar,#practiceTopbar{box-shadow:0 1px 0 var(--line),0 6px 18px -14px rgba(0,0,0,0.28);}
+  #homeTopbar,#topbar,#practiceTopbar,#teacherTopbar,#myClassesTopbar{box-shadow:0 1px 0 var(--line),0 6px 18px -14px rgba(0,0,0,0.28);}
 
-  /* headings — tighter, more contemporary */
-  h1,h2,.group-name{letter-spacing:-0.012em;}
+  /* empty states — softer than a plain dashed box, with a little visual weight */
+  #homeEmpty,.piece-empty,#practiceListEmpty{
+    border-style:dashed;border-color:var(--line);background:color-mix(in srgb,var(--panel) 60%,transparent);
+    border-radius:var(--radius-lg);
+  }
 
-  /* inputs / textareas / selects — one consistent soft focus ring */
+  /* inputs / textareas / selects — one consistent soft focus ring + softer resting border */
+  input[type=text],input[type=file],textarea,select{border-radius:10px;}
   input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-soft);border-color:var(--accent);}
+  .modal-box input[type=text],.modal-box textarea{background:var(--bg);}
+
+  /* project/task card meta text — a touch more breathing room between lines */
+  .project-meta{line-height:1.5;}
+
+  /* theme swatches — crisper ring on the active colour */
+  .theme-swatch.active{box-shadow:0 0 0 2px var(--panel),0 0 0 3px var(--ink);}
 </style>
 </head>
 <body>
 
 <div id="homeView">
   <div id="homeTopbar">
-    <button class="btn" id="practiceNavBtn">📝 Practice Response</button>
-    <button class="btn" id="teacherNavBtn">🧑‍🏫 Teacher</button>
-    <button class="btn" id="joinClassBtn">🏫 My Classes</button>
-    <h1>🎼 Score Analysis Studio — Projects</h1>
+    <div id="brandLockup"><span id="brandIcon">🎼</span><span id="brandName">Score Analysis Studio</span></div>
+    <div class="nav-group">
+      <button class="btn" id="practiceNavBtn">📝 Practice Response</button>
+      <button class="btn" id="teacherNavBtn">🧑‍🏫 Teacher</button>
+      <button class="btn" id="joinClassBtn">🏫 My Classes</button>
+    </div>
     <div class="spacer"></div>
     <div id="themePicker"><span class="theme-label">Theme</span></div>
     <div id="modePicker"></div>
@@ -629,6 +670,7 @@
       <span id="practiceTimerStatus"></span>
     </div>
     <div class="spacer"></div>
+    <button class="btn" id="practiceBackToScoreBtn" style="display:none;">🎼 Back to score</button>
     <button class="btn" id="practiceBackBtn" style="display:none;">☰ My practice responses</button>
     <button class="btn primary" id="practiceExportBtn" style="display:none;">⬇ Export response (.docx)</button>
   </div>
@@ -3924,10 +3966,21 @@ function practiceShowWrite(){
   document.getElementById("practiceBackBtn").style.display = "";
   document.getElementById("practiceExportBtn").style.display = "";
   document.getElementById("practiceTimerBar").style.display = "flex";
+  // Only a response written against a class task has a score to go back
+  // to — an ordinary practice response (picked from QUESTION_POOLS) has no
+  // linked project at all.
+  document.getElementById("practiceBackToScoreBtn").style.display = (practiceCurrentResponse && practiceCurrentResponse.taskId) ? "" : "none";
   practiceRenderWrite();
 }
 document.getElementById("practiceHomeBtn").addEventListener("click", showHome);
 document.getElementById("practiceBackBtn").addEventListener("click", practiceShowList);
+document.getElementById("practiceBackToScoreBtn").addEventListener("click", async ()=>{
+  const taskId = practiceCurrentResponse && practiceCurrentResponse.taskId;
+  if(!taskId) return;
+  const existing = (await listProjects()).find(p=>p.taskId===taskId);
+  if(existing){ await showStudio(existing.id); }
+  else { alert("Couldn't find this task's score locally — try opening it again from My Classes."); }
+});
 
 // ---------- list view ----------
 async function practiceRenderList(){
@@ -5516,21 +5569,15 @@ document.getElementById("publishTaskBtn").addEventListener("click", async ()=>{
 
 document.getElementById("taskWriteBtn").addEventListener("click", async ()=>{
   if(!currentTaskId) return;
-  let task;
-  try{
-    const resp = await fetch("/api/task/" + encodeURIComponent(currentTaskId));
-    if(!resp.ok) throw new Error((await resp.json().catch(()=>({}))).error || "Server error");
-    task = await resp.json();
-  }catch(err){
-    alert("Couldn't load this task's question: " + err.message);
-    return;
-  }
+  // No fetch needed — the question is already loaded onto this project
+  // (currentTaskQuestionText, see openProject()), so starting to write
+  // works offline too, not just when the class API happens to be reachable.
   practiceCurrentResponse = {
     id: uid(),
     questionId: "task:" + currentTaskId,
-    questionText: task.questionText || "",
+    questionText: currentTaskQuestionText || "",
     questionYear: "Class task",
-    questionLevel: task.title || "",
+    questionLevel: (currentProjectMeta && currentProjectMeta.name) || "",
     taskId: currentTaskId,
     classId: currentClassId,
     createdAt: Date.now(), updatedAt: Date.now(),
@@ -5542,7 +5589,22 @@ document.getElementById("taskWriteBtn").addEventListener("click", async ()=>{
     timer: { durationSec: 1200, remainingSec: 1200, endAt: null, running: false }
   };
   await saveResponseRecord(practiceCurrentResponse);
-  await showPractice();
+  // Switch views directly rather than calling showPractice() — it calls
+  // practiceShowList() internally, which resets practiceCurrentResponse to
+  // null right before practiceShowWrite() below needs to read it, wiping
+  // out the response just created (this was a real, reachable bug: the
+  // write view rendered with no question and no paragraphs, and threw on
+  // .taskId — see practiceShowWrite()'s own null-safe read of it now too).
+  // Still need practicePieces refreshed ourselves, though — showPractice()
+  // was the only place that populated it, so skipping it entirely left the
+  // evidence panel permanently empty ("No pieces found yet") even when
+  // this exact piece has real notes on it.
+  practicePieces = await listProjects();
+  document.getElementById("homeView").style.display = "none";
+  document.getElementById("studioView").style.display = "none";
+  document.getElementById("practiceView").style.display = "flex";
+  document.getElementById("teacherView").style.display = "none";
+  document.getElementById("myClassesView").style.display = "none";
   practiceShowWrite();
 });
 
@@ -5674,9 +5736,13 @@ async function myClassesRenderTaskGrid(cls){
 // Looks up an existing local project for this task first (so reopening the
 // same task from My Classes never creates a duplicate and always keeps the
 // student's own notes/tags), only creating+hydrating one the first time.
+// Always fetches the task fresh either way — question text and video link
+// are the teacher's to set (see the Studio lockdown above), so a student
+// reopening an already-started task should see the current values, not
+// whatever was true the first time they joined. The score itself
+// (markers/pageSystems/groups) is deliberately left alone on the existing
+// path so a teacher republishing tags never overwrites a student's own.
 async function openOrCreateTaskProject(taskId){
-  const existing = (await listProjects()).find(p=>p.taskId===taskId);
-  if(existing){ await showStudio(existing.id); return; }
   let task;
   try{
     const resp = await fetch("/api/task/" + encodeURIComponent(taskId));
@@ -5684,6 +5750,14 @@ async function openOrCreateTaskProject(taskId){
     task = await resp.json();
   }catch(err){
     alert("Couldn't open that task: " + err.message);
+    return;
+  }
+  const existing = (await listProjects()).find(p=>p.taskId===taskId);
+  if(existing){
+    existing.taskQuestionText = task.questionText;
+    existing.videoId = task.videoId;
+    await dbPut(META_STORE, existing);
+    await showStudio(existing.id);
     return;
   }
   const localId = await createProject(task.title, {
