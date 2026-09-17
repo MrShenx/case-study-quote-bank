@@ -164,18 +164,6 @@
   .marker-badge.linked{background:var(--good);}
   .marker-badge.selected{background:var(--bad);}
   .marker-badge[contenteditable="true"]{cursor:text;outline:2px solid #fff;}
-  /* the bar currently sounding, while a synced recording plays */
-  .marker-line.sounding{background:var(--good);opacity:1;width:3px;margin-left:-1.5px;
-    box-shadow:0 0 0 3px color-mix(in srgb, var(--good) 25%, transparent);}
-  .marker-cluster.sounding .marker-badge{background:var(--good);color:#fff;border-color:var(--good);}
-
-  #syncPanel{padding:10px 16px;border-bottom:1px solid var(--line);background:var(--accent-soft);
-    display:flex;flex-wrap:wrap;align-items:center;gap:12px;}
-  .sync-main{display:flex;align-items:center;gap:12px;flex:1;min-width:240px;}
-  #syncStatus{font-size:0.8rem;color:var(--ink);}
-  .sync-hint{font-size:0.74rem;color:var(--ink-soft);}
-  .sync-side{display:flex;align-items:center;gap:8px;}
-  #syncCount{font-size:0.76rem;color:var(--ink-soft);white-space:nowrap;}
   #vwAudioName{font-size:0.72rem;color:var(--ink-soft);padding:4px 0;overflow:hidden;
     text-overflow:ellipsis;white-space:nowrap;}
   #vwAudioRow button{width:100%;}
@@ -290,7 +278,8 @@
   #vwNow{font-size:0.82rem;font-weight:700;color:var(--ink);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;text-align:center;letter-spacing:0.01em;}
   #vwNow .vw-now-sep{color:var(--ink-soft);font-weight:400;margin:0 4px;font-size:0.74rem;}
   .now-btn{background:var(--accent-soft);color:var(--accent);border-color:transparent;font-weight:600;padding:5px 9px;}
-  #vwRailTrack{position:relative;height:16px;background:var(--accent-soft);border-radius:6px;cursor:pointer;}
+  /* touch-action:none so a drag scrubs instead of panning the page */
+  #vwRailTrack{position:relative;height:16px;background:var(--accent-soft);border-radius:6px;cursor:pointer;touch-action:none;}
   .vw-progress{position:absolute;top:0;left:0;height:100%;background:var(--accent);opacity:0.3;border-radius:6px 0 0 6px;pointer-events:none;}
   .vw-tick{position:absolute;top:2px;bottom:2px;width:2px;background:var(--good);cursor:pointer;}
   .vw-range{position:absolute;top:2px;bottom:2px;background:var(--good);opacity:0.35;border-radius:3px;cursor:pointer;}
@@ -716,7 +705,6 @@
     <button class="btn" id="tagModeBtn" disabled><span data-icon="pencil"></span><span class="mode-btn-label">Tag mode</span></button>
     <button class="btn" id="systemModeBtn" disabled><span data-icon="ruler"></span><span class="mode-btn-label">Mark system</span></button>
     <button class="btn" id="sectionModeBtn" disabled><span data-icon="square-dashed"></span><span class="mode-btn-label">Mark section</span></button>
-    <button class="btn" id="syncModeBtn" disabled><span data-icon="audio-waveform"></span><span class="mode-btn-label">Sync to audio</span></button>
     <button class="btn icon-only" id="advToggleBtn" title="More options"><span data-icon="settings"></span></button>
     <div class="divider"></div>
     <div class="dropdown-wrap">
@@ -740,20 +728,6 @@
     <div class="spacer"></div>
     <span class="status" id="backupStatus"></span>
     <span class="status" id="topStatus">No score loaded</span>
-  </div>
-
-  <div id="syncPanel" style="display:none;">
-    <div class="sync-main">
-      <button class="btn primary" id="syncTapBtn"><span data-icon="crosshair" data-icon-size="15"></span> Tap here (or press Space)</button>
-      <span id="syncStatus">Press play, then tap on each barline as you hear it.</span>
-      <span class="sync-hint">or click any bar to anchor just that one</span>
-    </div>
-    <div class="sync-side">
-      <span id="syncCount"></span>
-      <button class="btn ghost" id="syncUndoBtn"><span data-icon="undo-2" data-icon-size="14"></span> Undo</button>
-      <button class="btn ghost del" id="syncClearBtn">Clear all</button>
-      <button class="btn" id="syncDoneBtn">Done</button>
-    </div>
   </div>
 
   <div id="advPanel">
@@ -1783,8 +1757,6 @@ async function openProject(id){
   document.getElementById("tagModeBtn").disabled = true;
   document.getElementById("systemModeBtn").disabled = true;
   document.getElementById("sectionModeBtn").disabled = true;
-  document.getElementById("syncModeBtn").disabled = true;
-  exitSyncMode();
   document.getElementById("prevPageBtn").disabled = true;
   document.getElementById("nextPageBtn").disabled = true;
   document.getElementById("zoomOutBtn").disabled = true;
@@ -1913,7 +1885,6 @@ function loadPdfBlob(blobOrFile, name, fromStorage, isReplacing){
       document.getElementById("tagModeBtn").disabled = false;
       document.getElementById("systemModeBtn").disabled = false;
       document.getElementById("sectionModeBtn").disabled = false;
-      document.getElementById("syncModeBtn").disabled = false;
       document.getElementById("prevPageBtn").disabled = false;
       document.getElementById("nextPageBtn").disabled = false;
       document.getElementById("zoomResetBtn").disabled = false;
@@ -2296,123 +2267,6 @@ function sortMarkersByPosition(list){
 
 function barIsLinked(id){
   return notes.some(n=> n.startBarId===id || n.endBarId===id);
-}
-
-// ---------------------------------------------------------------------
-// Bar ↔ time.
-//
-// Before this, "click a bar, hear it" only worked where a note already
-// happened to carry a hand-typed timestamp, which was almost nowhere. Now
-// markers can carry their own `sec`, stamped by tapping along to the
-// recording (see the sync panel), and any bar between two stamped ones gets
-// a time by linear interpolation. That's an approximation — it assumes a
-// steady tempo between anchors — but a student tapping every few bars gets
-// close enough to land in the right place, and tapping more often where the
-// tempo moves is the obvious fix.
-// ---------------------------------------------------------------------
-
-// Every marker in the project, in reading order: page, then top-to-bottom,
-// then left-to-right. Anchors are only meaningful in this order.
-function allMarkersInOrder(){
-  const pages = Object.keys(markersByPage).map(Number).sort((a,b)=>a-b);
-  const out = [];
-  pages.forEach(pg=>{
-    const list = (markersByPage[pg] || []).slice();
-    sortMarkersByPosition(list);
-    list.forEach(m=> out.push({ page: pg, marker: m }));
-  });
-  return out;
-}
-
-function anchoredMarkerCount(){
-  return allMarkersInOrder().filter(x=> x.marker.sec != null).length;
-}
-
-// Resolves a marker to a time: its own anchor, or interpolated between the
-// nearest anchors either side. Returns null when nothing is anchored at all,
-// or when the marker sits outside every anchored span and can't be placed.
-function barToTime(markerId){
-  const ordered = allMarkersInOrder();
-  const idx = ordered.findIndex(x=> x.marker.id === markerId);
-  if(idx === -1) return null;
-  if(ordered[idx].marker.sec != null) return ordered[idx].marker.sec;
-
-  let before = null, after = null;
-  for(let i = idx - 1; i >= 0; i--){ if(ordered[i].marker.sec != null){ before = { i, sec: ordered[i].marker.sec }; break; } }
-  for(let i = idx + 1; i < ordered.length; i++){ if(ordered[i].marker.sec != null){ after = { i, sec: ordered[i].marker.sec }; break; } }
-
-  if(before && after){
-    const span = after.i - before.i;
-    if(span <= 0) return before.sec;
-    return before.sec + (after.sec - before.sec) * ((idx - before.i) / span);
-  }
-  // Outside the anchored range there's no second point to interpolate
-  // against, so the nearest anchor is the honest answer rather than
-  // extrapolating a tempo we have no evidence for.
-  if(before) return before.sec;
-  if(after) return after.sec;
-  return null;
-}
-
-// Every marker with a time attached — anchored ones as stamped, the rest
-// interpolated — resolved in a single pass rather than by calling barToTime()
-// per marker, since this runs four times a second while the recording plays.
-function resolvedMarkerTimes(){
-  const ordered = allMarkersInOrder();
-  const anchorIdx = [];
-  ordered.forEach((x,i)=>{ if(x.marker.sec != null) anchorIdx.push(i); });
-  if(!anchorIdx.length) return [];
-  return ordered.map((x,i)=>{
-    if(x.marker.sec != null) return { page:x.page, marker:x.marker, sec:x.marker.sec };
-    let before = null, after = null;
-    for(const a of anchorIdx){ if(a < i) before = a; else { after = a; break; } }
-    let sec;
-    if(before != null && after != null){
-      const span = after - before;
-      sec = ordered[before].marker.sec
-          + (ordered[after].marker.sec - ordered[before].marker.sec) * ((i - before) / span);
-    } else {
-      sec = ordered[before != null ? before : after].marker.sec;
-    }
-    return { page:x.page, marker:x.marker, sec };
-  });
-}
-
-// The reverse of barToTime: which bar is sounding at time t? Drives the
-// follow-the-score highlight. Uses resolved times, not just anchors — a bar
-// the student never tapped is still sounding when the music reaches it.
-function markerAtTime(t){
-  const resolved = resolvedMarkerTimes();
-  if(!resolved.length) return null;
-  let current = null;
-  for(const x of resolved){
-    if(x.sec <= t + 0.001) current = x; else break;
-  }
-  return current;
-}
-
-let followedMarkerId = null;
-function clearSoundingBar(){
-  followedMarkerId = null;
-  document.querySelectorAll(".marker-line.sounding,.marker-cluster.sounding")
-    .forEach(el=> el.classList.remove("sounding"));
-}
-function highlightBarAtTime(t){
-  // "Sounding" stops being true the moment playback does, so don't leave a
-  // bar lit up after a pause — it would otherwise survive until the next
-  // overlay re-render, including into another page or project.
-  if(!mediaPlayer.isPlaying()){ if(followedMarkerId) clearSoundingBar(); return; }
-  const hit = markerAtTime(t);
-  const id = hit ? hit.marker.id : null;
-  if(id === followedMarkerId) return;
-  clearSoundingBar();
-  followedMarkerId = id;
-  if(!id) return;
-  if(hit.page !== currentPage) return; // don't yank the student to another page mid-listen
-  const line = document.querySelector('.marker-line[data-id="' + id + '"]');
-  const cluster = document.querySelector('.marker-cluster[data-id="' + id + '"]');
-  if(line) line.classList.add("sounding");
-  if(cluster) cluster.classList.add("sounding");
 }
 
 function findMarkerById(id){
@@ -2921,34 +2775,13 @@ function onMarkerClick(id){
   }
   if(!m) return;
 
-  // In sync mode a click anchors THAT bar to the current playback position,
-  // rather than the next one in sequence. Tapping Space every bar is the fast
-  // path; this is how you anchor sparsely — every phrase, say — and let
-  // barToTime() interpolate the bars in between.
-  if(syncMode){
-    m.sec = mediaPlayer.getCurrentTime();
-    syncHistory.push(m.id);
-    const ordered = allMarkersInOrder();
-    syncCursor = Math.min(ordered.length, ordered.findIndex(x=> x.marker.id === m.id) + 1);
-    persist();
-    renderMarkerOverlay();
-    renderSyncStatus();
-    return;
-  }
-
   selectedMarkerId = id;
   renderMarkerOverlay();
   const note = notes.find(n=> n.startBarId===id || n.endBarId===id);
   if(note){
     jumpToNote(note.id);
-    // A note's own typed timestamp still wins — the student chose it
-    // deliberately — but a bar with no note timestamp now falls back to the
-    // anchored recording, so every bar is clickable-to-hear once synced.
-    const sec = note.startSec != null ? note.startSec : barToTime(id);
-    if(sec != null) seekVideoAt(sec, note.startSec != null ? note.endSec : null);
+    if(note.startSec!=null) seekVideoAt(note.startSec, note.endSec);
   } else {
-    const sec = barToTime(id);
-    if(sec != null) seekVideoAt(sec);
     openAddNoteFor(m);
   }
 }
@@ -4297,15 +4130,64 @@ const mediaPlayer = {
   }
 };
 
-document.getElementById("vwHead").addEventListener("click", (e)=>{
-  if(e.target.id === "vwToggleBtn") return;
-  document.getElementById("videoWidget").classList.toggle("collapsed");
-});
-document.getElementById("vwToggleBtn").addEventListener("click", ()=>{
+// One toggle for both ways in, so the chevron always matches the state —
+// collapsing via the header used to leave it pointing the wrong way.
+function toggleVideoWidget(){
   const w = document.getElementById("videoWidget");
-  w.classList.toggle("collapsed");
-  document.getElementById("vwToggleBtn").innerHTML = icon(w.classList.contains("collapsed") ? "chevron-right" : "chevron-down", 14);
+  const collapsed = w.classList.toggle("collapsed");
+  document.getElementById("vwToggleBtn").innerHTML = icon(collapsed ? "chevron-right" : "chevron-down", 14);
+}
+document.getElementById("vwHead").addEventListener("click", (e)=>{
+  // closest(), not e.target.id: these buttons contain an <svg>, so a click
+  // lands on the icon rather than the button itself. Matching on the id alone
+  // meant this handler ran too and the two toggles cancelled out — which is
+  // why the collapse button appeared dead while the bar around it worked.
+  if(e.target.closest("#vwToggleBtn, #vwPlayPauseBtn")) return;
+  toggleVideoWidget();
 });
+document.getElementById("vwToggleBtn").addEventListener("click", (e)=>{
+  e.stopPropagation();
+  toggleVideoWidget();
+});
+
+// ---------- scrubbing ----------
+// The rail already showed position and note ticks but couldn't be moved.
+// Pointer events so mouse, touch and stylus all work, with capture so a drag
+// that wanders off the track keeps scrubbing.
+const vwRailTrackEl = document.getElementById("vwRailTrack");
+let railScrubbing = false;
+function scrubFromRail(clientX){
+  if(!durationSec) return;
+  const r = vwRailTrackEl.getBoundingClientRect();
+  const frac = Math.min(1, Math.max(0, (clientX - r.left) / r.width));
+  mediaPlayer.seek(frac * durationSec);
+  // Painted immediately rather than waiting on the 250ms ticker, so the
+  // playhead tracks the finger instead of lagging behind it.
+  vwProgress.style.width = (frac*100) + "%";
+  vwPlayhead.style.left = (frac*100) + "%";
+  vwPlayhead.style.display = "block";
+  document.getElementById("vwNow").innerHTML =
+    secToClock(frac*durationSec) + '<span class="vw-now-sep">/</span>' + secToClock(durationSec);
+}
+vwRailTrackEl.addEventListener("pointerdown", (e)=>{
+  // A tick or range is a note's own timestamp with its own click handler —
+  // leave those be rather than turning them into scrub starts.
+  if(e.target.closest(".vw-tick, .vw-range")) return;
+  if(!mediaPlayer.isReady()) return;
+  railScrubbing = true;
+  try{ vwRailTrackEl.setPointerCapture(e.pointerId); }catch(err){ /* not captureable */ }
+  scrubFromRail(e.clientX);
+  e.preventDefault();
+  e.stopPropagation();
+});
+vwRailTrackEl.addEventListener("pointermove", (e)=>{ if(railScrubbing) scrubFromRail(e.clientX); });
+function endRailScrub(e){
+  if(!railScrubbing) return;
+  railScrubbing = false;
+  try{ vwRailTrackEl.releasePointerCapture(e.pointerId); }catch(err){ /* already released */ }
+}
+vwRailTrackEl.addEventListener("pointerup", endRailScrub);
+vwRailTrackEl.addEventListener("pointercancel", endRailScrub);
 
 function parseYouTubeId(input){
   input = input.trim();
@@ -4405,105 +4287,6 @@ document.getElementById("vwAudioFile").addEventListener("change", async (e)=>{
   await loadAudioBlob(file, file.name, false);
 });
 
-// ---------------------------------------------------------------------
-// Tap-along sync.
-//
-// Anchoring every bar by typing timestamps would be unusable; tapping along
-// once while the recording plays takes about as long as the piece does. Taps
-// land on markers in reading order, skipping none, so a student can tap every
-// bar or every few bars and let barToTime() fill in the rest.
-// ---------------------------------------------------------------------
-let syncMode = false;
-let syncCursor = 0;        // index into allMarkersInOrder()
-let syncHistory = [];      // marker ids stamped this session, for Undo
-
-function enterSyncMode(){
-  if(!mediaPlayer.hasSource()){
-    alert("Load a recording first — paste a YouTube link or choose an audio file in the Video panel.");
-    return;
-  }
-  syncMode = true;
-  syncHistory = [];
-  // Resume from the first unanchored marker, so a student can stop and
-  // come back without re-tapping what they already did.
-  const ordered = allMarkersInOrder();
-  const firstGap = ordered.findIndex(x=> x.marker.sec == null);
-  syncCursor = firstGap === -1 ? ordered.length : firstGap;
-  document.getElementById("syncPanel").style.display = "flex";
-  document.getElementById("syncModeBtn").classList.add("active");
-  setModeLabel("syncModeBtn", "Syncing");
-  renderSyncStatus();
-}
-function exitSyncMode(){
-  syncMode = false;
-  document.getElementById("syncPanel").style.display = "none";
-  document.getElementById("syncModeBtn").classList.remove("active");
-  setModeLabel("syncModeBtn", "Sync to audio");
-}
-// Space-tapping should never land on a bar that's already anchored — those
-// were either tapped earlier or set deliberately by clicking.
-function syncAdvanceCursor(){
-  const ordered = allMarkersInOrder();
-  while(syncCursor < ordered.length && ordered[syncCursor].marker.sec != null) syncCursor++;
-}
-
-function renderSyncStatus(){
-  syncAdvanceCursor();
-  const ordered = allMarkersInOrder();
-  const anchored = anchoredMarkerCount();
-  const next = ordered[syncCursor];
-  document.getElementById("syncStatus").textContent = next
-    ? ("Next: " + (next.marker.label || ("bar " + next.marker.number)) + (next.page !== currentPage ? " (page " + next.page + ")" : ""))
-    : (anchored === ordered.length
-        ? "Every bar is anchored."
-        : "No un-anchored bars left ahead — the rest are worked out between your anchors.");
-  document.getElementById("syncCount").textContent =
-    anchored + " of " + ordered.length + " anchored";
-}
-function syncTap(){
-  if(!syncMode) return;
-  const ordered = allMarkersInOrder();
-  const target = ordered[syncCursor];
-  if(!target) return;
-  target.marker.sec = mediaPlayer.getCurrentTime();
-  syncHistory.push(target.marker.id);
-  syncCursor++;
-  persist();
-  renderMarkerOverlay();
-  renderSyncStatus();
-}
-function syncUndo(){
-  const lastId = syncHistory.pop();
-  if(!lastId) return;
-  const hit = allMarkersInOrder().find(x=> x.marker.id === lastId);
-  if(hit) hit.marker.sec = null;
-  syncCursor = Math.max(0, syncCursor - 1);
-  persist();
-  renderMarkerOverlay();
-  renderSyncStatus();
-}
-
-document.getElementById("syncModeBtn").addEventListener("click", ()=>{
-  if(syncMode) exitSyncMode(); else enterSyncMode();
-});
-document.getElementById("syncTapBtn").addEventListener("click", syncTap);
-document.getElementById("syncDoneBtn").addEventListener("click", exitSyncMode);
-document.getElementById("syncUndoBtn").addEventListener("click", syncUndo);
-armDeleteConfirm(document.getElementById("syncClearBtn"), ()=>{
-  allMarkersInOrder().forEach(x=> x.marker.sec = null);
-  syncHistory = []; syncCursor = 0;
-  persist(); renderMarkerOverlay(); renderSyncStatus();
-});
-// Space is the natural key for this and there's no text field in the panel,
-// but it must not hijack typing anywhere else on the page.
-document.addEventListener("keydown", (e)=>{
-  if(!syncMode || e.code !== "Space") return;
-  const t = e.target;
-  if(t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
-  e.preventDefault();
-  syncTap();
-});
-
 // Which of the two sources the widget should present.
 function updateSourceUi(){
   const isAudio = mediaPlayer.kind === "audio";
@@ -4594,7 +4377,6 @@ setInterval(()=>{
     activeEndSec = null;
   }
   updatePlayPauseIcon(mediaPlayer.isPlaying());
-  highlightBarAtTime(t);
 }, 250);
 
 // =====================================================================
@@ -6632,7 +6414,11 @@ function reviseBuildScoreQueue(){
       .find(m=> m.id === note.startBarId);
     if(!marker) return;
     if(!((note.what || "").trim() || (note.why || "").trim())) return;
-    items.push({ kind:"score", pieceId:piece.id, pieceName:piece.name, note, marker, page:note.startPage });
+    // The page's other markers come along so the renderer can work out where
+    // this bar ENDS — a point marker only records where it starts.
+    const pageMarkers = (piece.markersByPage && piece.markersByPage[note.startPage]) || [];
+    items.push({ kind:"score", pieceId:piece.id, pieceName:piece.name, note, marker,
+                 page:note.startPage, pageMarkers });
   });
   items.sort((a,b)=>{
     const ra = getRecall(a.note), rb = getRecall(b.note);
@@ -6656,6 +6442,38 @@ async function reviseLoadScorePdf(pieceId){
   return reviseScorePdf;
 }
 
+// Which slice of the page to show. Showing the whole page defeats the drill —
+// the student can read every other bar, and the one being asked about is tiny.
+// Returns {x,y,w,h} as page fractions.
+function reviseCropFor(item){
+  const m = item.marker;
+  let x0, x1, y0, y1;
+  if(m.type === "region"){
+    x0 = m.xFrac0; x1 = m.xFrac1; y0 = m.yFrac0; y1 = m.yFrac1;
+  } else {
+    // A point marker is a barline: the bar runs from it to the next marker on
+    // the same system. Same-system means overlapping vertically — comparing
+    // tops alone would pick up a bar directly below on the next system.
+    y0 = m.yTopFrac; y1 = m.yBotFrac;
+    const mid = (y0 + y1) / 2;
+    const next = (item.pageMarkers || [])
+      .filter(o=> o.id !== m.id && o.type !== "region" && o.xFrac > m.xFrac
+                  && o.yTopFrac <= mid && o.yBotFrac >= mid)
+      .sort((a,b)=> a.xFrac - b.xFrac)[0];
+    x0 = m.xFrac;
+    x1 = next ? next.xFrac : 1;
+  }
+  // Padding: a little air either side, and more above/below so the staff isn't
+  // cut flush against the crop edge.
+  const padX = 0.02, padY = Math.max(0.02, (y1 - y0) * 0.35);
+  x0 = Math.max(0, x0 - padX); x1 = Math.min(1, x1 + padX);
+  y0 = Math.max(0, y0 - padY); y1 = Math.min(1, y1 + padY);
+  // A hairline crop would magnify into mush; keep a sane minimum.
+  if(x1 - x0 < 0.08){ const c=(x0+x1)/2; x0 = Math.max(0, c-0.04); x1 = Math.min(1, c+0.04); }
+  if(y1 - y0 < 0.06){ const c=(y0+y1)/2; y0 = Math.max(0, c-0.03); y1 = Math.min(1, c+0.03); }
+  return { x:x0, y:y0, w:x1-x0, h:y1-y0 };
+}
+
 async function reviseRenderScoreCard(item){
   const token = ++reviseScoreToken;
   const wrap = document.getElementById("reviseScoreWrap");
@@ -6676,36 +6494,51 @@ async function reviseRenderScoreCard(item){
   if(token !== reviseScoreToken) return;
 
   const raw = page.getViewport({ scale: 1 });
-  // Measured off the block-level container: the wrap is shrink-to-fit, so its
-  // own width is 0 until the canvas inside it has been sized.
-  // Side-by-side means the score gets a column, not the card's full width.
+  const crop = reviseCropFor(item);
+  // Scale so the cropped strip fills the column, then pull it back if that
+  // would make it too tall for the card.
   const avail = document.getElementById("reviseScoreView").clientWidth || 420;
-  const scale = Math.min(avail / raw.width, 480 / raw.height);
+  let scale = avail / (crop.w * raw.width);
+  const maxH = 460;
+  if(crop.h * raw.height * scale > maxH) scale = maxH / (crop.h * raw.height);
+  scale = Math.min(scale, 8);
+  // A very tight crop at high magnification could ask for an enormous full-page
+  // canvas, so cap the intermediate render rather than the visible result.
+  if(raw.width * scale > 6000) scale = 6000 / raw.width;
+
   const viewport = page.getViewport({ scale });
-  canvas.width = viewport.width;
-  canvas.height = viewport.height;
-  canvas.style.width = viewport.width + "px";
-  canvas.style.height = viewport.height + "px";
-  await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+  const off = document.createElement("canvas");
+  off.width = Math.ceil(viewport.width);
+  off.height = Math.ceil(viewport.height);
+  await page.render({ canvasContext: off.getContext("2d"), viewport }).promise;
   if(token !== reviseScoreToken) return;
 
+  const sx = crop.x * off.width, sy = crop.y * off.height;
+  const sw = Math.max(1, crop.w * off.width), sh = Math.max(1, crop.h * off.height);
+  canvas.width = Math.round(sw);
+  canvas.height = Math.round(sh);
+  canvas.style.width = Math.round(sw) + "px";
+  canvas.style.height = Math.round(sh) + "px";
+  canvas.getContext("2d").drawImage(off, sx, sy, sw, sh, 0, 0, Math.round(sw), Math.round(sh));
+
   msg.textContent = "";
-  // Only the bar being asked about is marked — every other marker is left off
-  // on purpose, so the page can't give the answer away by showing which bars
-  // carry notes.
+  // The crop already isolates the bar; this just marks where it begins, since
+  // a cropped strip of notation gives no other clue which barline is meant.
   const m = item.marker;
   const el = document.createElement("div");
   el.className = "revise-marker";
+  const relX = f => ((f - crop.x) / crop.w) * canvas.width;
+  const relY = f => ((f - crop.y) / crop.h) * canvas.height;
   if(m.type === "region"){
     el.classList.add("region");
-    el.style.left = (m.xFrac0 * viewport.width) + "px";
-    el.style.top = (m.yFrac0 * viewport.height) + "px";
-    el.style.width = ((m.xFrac1 - m.xFrac0) * viewport.width) + "px";
-    el.style.height = ((m.yFrac1 - m.yFrac0) * viewport.height) + "px";
+    el.style.left = relX(m.xFrac0) + "px";
+    el.style.top = relY(m.yFrac0) + "px";
+    el.style.width = (relX(m.xFrac1) - relX(m.xFrac0)) + "px";
+    el.style.height = (relY(m.yFrac1) - relY(m.yFrac0)) + "px";
   } else {
-    el.style.left = (m.xFrac * viewport.width) + "px";
-    el.style.top = (m.yTopFrac * viewport.height) + "px";
-    el.style.height = ((m.yBotFrac - m.yTopFrac) * viewport.height) + "px";
+    el.style.left = relX(m.xFrac) + "px";
+    el.style.top = relY(m.yTopFrac) + "px";
+    el.style.height = (relY(m.yBotFrac) - relY(m.yTopFrac)) + "px";
   }
   wrap.appendChild(el);
 }
