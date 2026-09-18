@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Score Analysis Studio</title>
+<title>Analysis Studio</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Lexend:wght@600;700&display=swap" rel="stylesheet">
@@ -44,18 +44,18 @@
   /* ---------- home view ---------- */
   #homeView{display:none;flex-direction:column;height:100%;}
   #homeTopbar{padding:14px 24px;border-bottom:1px solid var(--line);background:var(--panel);display:flex;flex-wrap:wrap;align-items:center;gap:14px 18px;}
-  #brandLockup{display:flex;align-items:center;gap:9px;flex-shrink:0;}
-  #brandIcon{display:inline-flex;color:var(--accent);}
-  #brandName{font-family:var(--font-display);font-weight:700;font-size:1.12rem;letter-spacing:-0.01em;color:var(--ink);white-space:nowrap;}
+  .brand-lockup{display:flex;align-items:center;gap:9px;flex-shrink:0;}
+  .brand-icon{display:inline-flex;color:var(--accent);}
+  .brand-name{font-family:var(--font-display);font-weight:700;font-size:1.12rem;letter-spacing:-0.01em;color:var(--ink);white-space:nowrap;}
   .nav-group{display:flex;align-items:center;gap:2px;background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:3px;}
   .nav-group .btn{border:none;background:transparent;box-shadow:none;border-radius:999px;}
   .nav-group .btn:hover:not(:disabled){background:var(--panel);box-shadow:var(--shadow-sm);}
-  #themePicker{display:flex;align-items:center;gap:7px;}
+  .theme-picker{display:flex;align-items:center;gap:7px;}
   .theme-label{font-size:0.76rem;color:var(--ink-soft);margin-right:2px;white-space:nowrap;}
   .theme-swatch{width:22px;height:22px;border-radius:50%;border:2px solid var(--line);background:var(--swatch-color);cursor:pointer;padding:0;transition:transform 0.12s,border-color 0.12s;flex-shrink:0;}
   .theme-swatch:hover{transform:scale(1.15);}
   .theme-swatch.active{border-color:var(--ink);transform:scale(1.15);}
-  #modePicker{display:flex;align-items:center;gap:2px;background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:2px;}
+  .mode-picker{display:flex;align-items:center;gap:2px;background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:2px;}
   .mode-btn{border:none;background:transparent;color:var(--ink-soft);font-size:0.85rem;line-height:1;padding:6px;border-radius:999px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;}
   .mode-btn:hover{color:var(--ink);}
   .mode-btn.active{background:var(--accent);color:#fff;}
@@ -412,6 +412,28 @@
     #practiceParagraphPanel,#practiceEvidencePanel{width:100%;border-right:none;border-bottom:1px solid var(--line);}
   }
 
+  /* ---------- start screen: which of the two jobs are you here for ---------- */
+  .chooser-view-shell{display:none;flex-direction:column;height:100%;}
+  #chooserView,#classHubView{display:none;flex-direction:column;height:100%;}
+  #chooserBar,#classHubBar{padding:14px 24px;border-bottom:1px solid var(--line);background:var(--panel);
+    display:flex;flex-wrap:wrap;align-items:center;gap:14px 18px;
+    box-shadow:0 1px 0 var(--line),0 6px 18px -14px rgba(0,0,0,0.28);}
+  .chooser-body{flex:1;overflow:auto;padding:48px 24px;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:26px;}
+  .chooser-heading{font-size:1.25rem;margin:0;text-align:center;}
+  .chooser-cards{display:flex;flex-wrap:wrap;gap:18px;justify-content:center;width:100%;}
+  .chooser-card{width:320px;max-width:100%;text-align:left;cursor:pointer;font:inherit;color:var(--ink);
+    background:var(--panel-2);border:1px solid transparent;border-radius:var(--radius-lg);
+    box-shadow:var(--shadow-sm);padding:22px;display:flex;flex-direction:column;gap:8px;
+    transition:border-color .16s ease,box-shadow .16s ease,transform .16s ease;}
+  .chooser-card:hover{border-color:var(--accent);box-shadow:var(--shadow-md);transform:translateY(-2px);}
+  .chooser-icon{display:inline-flex;color:var(--accent);}
+  .chooser-title{font-family:var(--font-display);font-weight:700;font-size:1.05rem;}
+  .chooser-desc{font-size:0.85rem;line-height:1.55;color:var(--ink-soft);}
+  #chooserFooter{flex-shrink:0;text-align:center;padding:10px;font-size:0.72rem;color:var(--ink-soft);
+    border-top:1px solid var(--line);}
+  #homeToChooserBtn,#classToChooserBtn{flex-shrink:0;}
+
   /* =====================================================================
      Revise — drilling study notes from memory. Cross-work by design (the
      comparative questions ask students to move between pieces), which is why
@@ -617,18 +639,44 @@
 </head>
 <body>
 
+<div id="chooserView">
+  <div id="chooserBar">
+    <div class="brand-lockup"><span class="brand-icon" data-icon="music-2" data-icon-size="22"></span><span class="brand-name">Analysis Studio</span></div>
+    <div class="spacer"></div>
+    <div class="theme-picker"><span class="theme-label">Theme</span></div>
+    <div class="mode-picker"></div>
+  </div>
+  <div class="chooser-body">
+    <h2 class="chooser-heading">What are you working on?</h2>
+    <div class="chooser-cards">
+      <button class="chooser-card" id="chooseQuotesBtn">
+        <span class="chooser-icon" data-icon="brain" data-icon-size="26"></span>
+        <span class="chooser-title">Quotation studies</span>
+        <span class="chooser-desc">Build a bank of quotes from your own scores — tag the bars, write what and why,
+          then drill them from memory and practise essays with them.</span>
+      </button>
+      <button class="chooser-card" id="chooseClassBtn">
+        <span class="chooser-icon" data-icon="school" data-icon-size="26"></span>
+        <span class="chooser-title">Class work</span>
+        <span class="chooser-desc">Lesson-by-lesson analysis set by your teacher: open the score and question for a
+          task, work through it, and submit it when you're done.</span>
+      </button>
+    </div>
+  </div>
+  <div id="chooserFooter">Made by Mr Shen with Claude</div>
+</div>
+
 <div id="homeView">
   <div id="homeTopbar">
-    <div id="brandLockup"><span id="brandIcon" data-icon="music-2" data-icon-size="22"></span><span id="brandName">Score Analysis Studio</span></div>
+    <button class="btn" id="homeToChooserBtn" title="Back to the start"><span data-icon="arrow-left"></span></button>
+    <div class="brand-lockup"><span class="brand-icon" data-icon="brain" data-icon-size="20"></span><span class="brand-name">Quotation studies</span></div>
     <div class="nav-group">
       <button class="btn" id="reviseNavBtn"><span data-icon="brain"></span> Revise</button>
       <button class="btn" id="practiceNavBtn"><span data-icon="pen-line"></span> Practice Response</button>
-      <button class="btn" id="teacherNavBtn"><span data-icon="graduation-cap"></span> Teacher</button>
-      <button class="btn" id="joinClassBtn"><span data-icon="school"></span> My Classes</button>
     </div>
     <div class="spacer"></div>
-    <div id="themePicker"><span class="theme-label">Theme</span></div>
-    <div id="modePicker"></div>
+    <div class="theme-picker"><span class="theme-label">Theme</span></div>
+    <div class="mode-picker"></div>
     <button class="btn primary" id="newProjectBtn">+ New project</button>
   </div>
   <div id="homeGrid"></div>
@@ -932,6 +980,31 @@
   </div>
 </div>
 
+<div id="classHubView">
+  <div id="classHubBar">
+    <button class="btn" id="classToChooserBtn" title="Back to the start"><span data-icon="arrow-left"></span></button>
+    <div class="brand-lockup"><span class="brand-icon" data-icon="school" data-icon-size="20"></span><span class="brand-name">Class work</span></div>
+    <div class="spacer"></div>
+    <div class="theme-picker"><span class="theme-label">Theme</span></div>
+    <div class="mode-picker"></div>
+  </div>
+  <div class="chooser-body">
+    <h2 class="chooser-heading">Lesson-by-lesson analysis</h2>
+    <div class="chooser-cards">
+      <button class="chooser-card" id="joinClassBtn">
+        <span class="chooser-icon" data-icon="school" data-icon-size="26"></span>
+        <span class="chooser-title">My classes</span>
+        <span class="chooser-desc">Join a class with the code your teacher gave you, then open the tasks set for it.</span>
+      </button>
+      <button class="chooser-card" id="teacherNavBtn">
+        <span class="chooser-icon" data-icon="graduation-cap" data-icon-size="26"></span>
+        <span class="chooser-title">Teacher</span>
+        <span class="chooser-desc">Set up a class, publish a task with its score and question, and read what students submit.</span>
+      </button>
+    </div>
+  </div>
+</div>
+
 <div id="teacherView">
   <div id="teacherTopbar">
     <button class="btn" id="teacherHomeBtn"><span data-icon="home"></span> Home</button>
@@ -1229,7 +1302,9 @@ function setMode(key){
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
 function renderModePicker(){
-  const picker = document.getElementById("modePicker");
+  // One per top bar now (start screen, quotation studies, class work), so
+  // every instance gets filled rather than only the first in the document.
+  document.querySelectorAll(".mode-picker").forEach(picker=>{
   picker.innerHTML = "";
   MODES.forEach(key=>{
     const btn = document.createElement("button");
@@ -1240,10 +1315,11 @@ function renderModePicker(){
     btn.addEventListener("click", ()=> setMode(key));
     picker.appendChild(btn);
   });
+  });
 }
 
 function renderThemePicker(){
-  const picker = document.getElementById("themePicker");
+  document.querySelectorAll(".theme-picker").forEach(picker=>{
   picker.querySelectorAll(".theme-swatch").forEach(el=>el.remove());
   Object.keys(THEMES).forEach(key=>{
     const btn = document.createElement("button");
@@ -1253,6 +1329,7 @@ function renderThemePicker(){
     btn.title = key.charAt(0).toUpperCase() + key.slice(1);
     btn.addEventListener("click", ()=> setTheme(key));
     picker.appendChild(btn);
+  });
   });
 }
 
@@ -1528,12 +1605,30 @@ async function migrateOldSingleProjectData(){
 
 // Every top-level view is a sibling div that's either flex or none. Kept as a
 // list so adding a view is one entry here rather than a line in each show*().
-const VIEWS = ["homeView","studioView","practiceView","teacherView","myClassesView","reviseView"];
+const VIEWS = ["chooserView","homeView","studioView","practiceView","teacherView","myClassesView","reviseView","classHubView"];
 function showView(id){
   VIEWS.forEach(v=>{
     const el = document.getElementById(v);
     if(el) el.style.display = (v === id) ? "flex" : "none";
   });
+}
+
+// The start screen. The app does two quite different jobs — building a bank of
+// quotes from your own scores, and working through analysis tasks a teacher
+// sets — and mixing both into one navigation bar made each harder to read.
+function showChooser(){
+  flushAutoBackup();
+  currentProjectId = null;
+  currentProjectMeta = null;
+  cancelAutoBackup();
+  showView("chooserView");
+}
+function showClassHub(){
+  flushAutoBackup();
+  currentProjectId = null;
+  currentProjectMeta = null;
+  cancelAutoBackup();
+  showView("classHubView");
 }
 
 function showHome(){
@@ -1618,16 +1713,24 @@ function projectHasContentWorthSaving(){
   // below, using stale data left over from whatever they had open last.
   return !!currentProjectId && (!!currentProjectPdfName || notes.length > 0);
 }
+// A task project belongs to class work, a normal project to quotation
+// studies — leaving either should land back where it was opened from, not
+// always in the quote bank.
+function leaveStudio(){
+  if(currentTaskRole === "student") showMyClasses();
+  else if(currentTaskRole === "teacher") showTeacher();
+  else showHome();
+}
 document.getElementById("homeBtn").addEventListener("click", ()=>{
   if(projectHasContentWorthSaving()){
     document.getElementById("leaveReminderModal").style.display = "flex";
   } else {
-    showHome();
+    leaveStudio();
   }
 });
 document.getElementById("leaveReminderContinueBtn").addEventListener("click", ()=>{
   document.getElementById("leaveReminderModal").style.display = "none";
-  showHome();
+  leaveStudio();
 });
 document.getElementById("leaveReminderCloudBtn").addEventListener("click", ()=>{
   document.getElementById("leaveReminderModal").style.display = "none";
@@ -1704,7 +1807,7 @@ function showMyClasses(){
   myClassesShowList();
 }
 document.getElementById("joinClassBtn").addEventListener("click", showMyClasses);
-document.getElementById("teacherHomeBtn").addEventListener("click", showHome);
+document.getElementById("teacherHomeBtn").addEventListener("click", showClassHub);
 
 function resetVideoPlayer(){
   // Tears down the PLAYER only. Deliberately doesn't clear audioName/videoId:
@@ -2028,159 +2131,214 @@ window.addEventListener("resize", ()=>{ if(pdfDoc) renderPage(currentPage); });
 // ~0.9 ink density vs ~0.05 background noise, while a binary count blurred
 // that gap down to ~0.25 vs ~0.15 and was unusable.
 function inkAt(data, i){
-  const lum = 0.299*data[i] + 0.587*data[i+1] + 0.114*data[i+2];
+  // Composite onto white before measuring. A transparent pixel is RGB 0,0,0
+  // with alpha 0 — reading the colour alone scores bare canvas as the darkest
+  // possible ink, so an unpainted canvas, or any PDF that draws no background
+  // of its own, would read as solid black everywhere.
+  const a = data[i+3] / 255;
+  const lum = (0.299*data[i] + 0.587*data[i+1] + 0.114*data[i+2]) * a + 255 * (1 - a);
   return Math.max(0, (230 - lum) / 230);
+}
+
+// ---------------------------------------------------------------------
+// Auto-detection of staves and barlines.
+//
+// Everything here works on runs of dark pixels rather than on how much ink a
+// row or column holds on average. That distinction is the whole game: a row
+// of noteheads and beams can carry more ink than a staff line without
+// containing a single long stroke, and a note stem is every bit as dark and
+// as narrow as a barline. What separates them is geometry — a staff line is
+// one long horizontal stroke, and a barline is one unbroken vertical stroke
+// touching both the top and bottom lines of its staff.
+// ---------------------------------------------------------------------
+const DARK = 0.35;  // ink level counted as "a mark", not paper or a faint scan
+
+// Longest run of dark pixels in a row, tolerating 1px breaks from antialiasing.
+function longestRunInRow(data, w, y){
+  let best = 0, run = 0, gap = 0;
+  const off = y*w*4;
+  for(let x=0; x<w; x++){
+    if(inkAt(data, off + x*4) > DARK){ run += gap + 1; gap = 0; if(run > best) best = run; }
+    else if(run){ if(++gap > 1){ run = 0; gap = 0; } }
+  }
+  return best;
 }
 
 function detectStaffLines(imgData, w, h, relativeSensitivity){
   const data = imgData.data;
-  const rowInk = new Float32Array(h);
-  let maxInk = 0;
+  const runs = new Float32Array(h);
+  let maxRun = 0;
   for(let y=0; y<h; y++){
-    let sum = 0;
-    const rowOff = y*w*4;
-    for(let x=0; x<w; x++) sum += inkAt(data, rowOff + x*4);
-    rowInk[y] = sum / w;
-    if(rowInk[y] > maxInk) maxInk = rowInk[y];
+    runs[y] = longestRunInRow(data, w, y);
+    if(runs[y] > maxRun) maxRun = runs[y];
   }
-  if(maxInk < 0.02) return []; // blank page / render not ready
-  // threshold relative to this page's own peak row ink-density, not an
-  // absolute fraction of page width — real scores vary hugely in how much
-  // of a row's width is actual staff line vs. margin/instrument-label space.
-  const threshold = maxInk * relativeSensitivity;
-  const lineRows = [];
-  for(let y=0; y<h; y++) if(rowInk[y] > threshold) lineRows.push(y);
-  // cluster adjacent rows into single line centers
+  if(maxRun < w*0.1) return []; // nothing long enough to be a staff line
+  // Relative to the longest stroke on the page, so it travels between a
+  // full-width orchestral staff and a short incipit. Beams and slurs are long
+  // but nowhere near a staff line's width, so they fall below this.
+  //
+  // The floor matters: below about a quarter, beams start counting as staff
+  // lines, which drags a staff's measured top and bottom out to the beam and
+  // then no barline reaches both — detection degrades to nothing found rather
+  // than to something wrong. Staying proportional keeps short incipits working.
+  const threshold = maxRun * Math.max(relativeSensitivity, 0.25);
+  const rows = [];
+  for(let y=0; y<h; y++) if(runs[y] > threshold) rows.push(y);
+  // Merge the 2-3 rows a single drawn line covers into one centre.
   const lines = [];
-  let i=0;
-  while(i<lineRows.length){
-    let j=i;
-    while(j+1<lineRows.length && lineRows[j+1]-lineRows[j] <= 3) j++;
-    lines.push(Math.round((lineRows[i]+lineRows[j])/2));
+  for(let i=0; i<rows.length; ){
+    let j = i;
+    while(j+1 < rows.length && rows[j+1]-rows[j] <= 3) j++;
+    lines.push(Math.round((rows[i]+rows[j])/2));
     i = j+1;
   }
   return lines;
 }
 
 function groupIntoStaves(lines){
-  // Cluster detected line-rows by gap size rather than requiring an exact
-  // run of 5: on real (non-synthetic) scores, notation clutter — beams,
-  // stems, lyrics — routinely causes 1-2 of a staff's 5 lines to be missed,
-  // and a strict "must find exactly 5 in a row" rule throws the whole staff
-  // away when that happens. Intra-staff gaps (between the 5 lines of one
-  // staff) are consistently much smaller than inter-staff gaps (the space
-  // between one staff and the next), so a single adaptive threshold cleanly
-  // separates them even when a line or two is missing.
-  if(lines.length < 2) return [];
+  if(lines.length < 4) return [];
   const gaps = lines.slice(1).map((y,i)=> y - lines[i]);
-  const sortedGaps = [...gaps].sort((a,b)=>a-b);
-  const medianGap = sortedGaps[Math.floor(sortedGaps.length/2)];
-  const threshold = Math.max(6, medianGap * 2.3);
+  // The line spacing of a staff is the *small* gap. Taking a median across all
+  // gaps lets the large between-staff gaps drag the estimate up, which is how
+  // several staves used to end up merged into one.
+  const sorted = [...gaps].sort((a,b)=>a-b);
+  const small = sorted.slice(0, Math.max(1, Math.ceil(sorted.length/2)));
+  const spacing = small[Math.floor(small.length/2)] || 1;
+  const splitAt = spacing * 1.8;
 
   const clusters = [];
   let cur = [lines[0]];
   for(let i=1;i<lines.length;i++){
-    if(lines[i]-lines[i-1] <= threshold) cur.push(lines[i]);
+    if(lines[i]-lines[i-1] <= splitAt) cur.push(lines[i]);
     else { clusters.push(cur); cur = [lines[i]]; }
   }
   clusters.push(cur);
 
   const staves = [];
   clusters.forEach(cluster=>{
-    if(cluster.length < 3) return; // too few lines to trust as a real staff
+    if(cluster.length < 4) return;  // 4 allows one line lost under a beam
     const top = cluster[0], bottom = cluster[cluster.length-1];
-    const n = cluster.length;
-    const avgGap = n>1 ? (bottom-top)/(n-1) : 10;
-    // pad by half a line-gap so a staff missing its outer line (common under
-    // a beam or stem) still gets a reasonable vertical extent
-    staves.push({ top: top - avgGap*0.6, bottom: bottom + avgGap*0.6, lineGap: avgGap });
+    const lineGap = (bottom - top) / (cluster.length - 1);
+    if(lineGap <= 0) return;
+    staves.push({ top, bottom, lineGap, lines: cluster });
   });
   return staves;
 }
 
 function groupIntoSystems(staves){
-  if(staves.length===0) return [];
-  if(staves.length===1) return [{ top: staves[0].top, bottom: staves[0].bottom }];
+  if(staves.length === 0) return [];
+  const asOwn = ()=> staves.map(s=>({ top:s.top, bottom:s.bottom, staves:[s] }));
+  if(staves.length === 1) return asOwn();
+
   const gaps = [];
   for(let k=1;k<staves.length;k++) gaps.push(staves[k].top - staves[k-1].bottom);
-  const sorted = [...gaps].sort((a,b)=>a-b);
-  const median = sorted[Math.floor(sorted.length/2)];
-  const threshold = median * 2.2 + 4;
+  const minG = Math.min(...gaps), maxG = Math.max(...gaps);
+  // Only braced staves (a piano part, a choral score) belong to one system, and
+  // those produce two clearly different gap sizes. When every gap is much the
+  // same the music is one staff per system — the common case for a lead sheet
+  // or a single line — and grouping would swallow the whole page into one band.
+  if(maxG < minG * 1.8) return asOwn();
+
+  const splitAt = Math.sqrt(Math.max(minG, 1) * maxG);
   const systems = [];
-  let sysTop = staves[0].top, sysBottom = staves[0].bottom;
+  let cur = [staves[0]];
   for(let k=1;k<staves.length;k++){
-    if(gaps[k-1] <= threshold){
-      sysBottom = staves[k].bottom;
-    } else {
-      systems.push({ top: sysTop, bottom: sysBottom });
-      sysTop = staves[k].top; sysBottom = staves[k].bottom;
-    }
+    if(gaps[k-1] <= splitAt) cur.push(staves[k]);
+    else { systems.push(cur); cur = [staves[k]]; }
   }
-  systems.push({ top: sysTop, bottom: sysBottom });
-  return systems;
+  systems.push(cur);
+  return systems.map(group=>({
+    top: group[0].top, bottom: group[group.length-1].bottom, staves: group
+  }));
 }
 
-function detectBarlinesInSystem(imgData, w, h, sysTop, sysBottom, relativeSensitivity){
-  const data = imgData.data;
-  // sysTop/sysBottom may be non-integer (staff padding is fractional) — a
-  // typed array returns undefined for a non-integer index, which poisons
-  // every ink sum with NaN and silently zeroes out detection, so round first.
-  const yFrom = Math.max(0, Math.round(sysTop)), yTo = Math.min(h-1, Math.round(sysBottom));
-  const rangeH = yTo - yFrom + 1;
-  if(rangeH <= 0) return [];
-  const colInk = new Float32Array(w);
-  let maxInk = 0;
-  for(let x=0; x<w; x++){
-    let sum=0;
-    for(let y=yFrom; y<=yTo; y++) sum += inkAt(data, (y*w+x)*4);
-    colInk[x] = sum/rangeH;
-    if(colInk[x] > maxInk) maxInk = colInk[x];
-  }
-  if(maxInk < 0.02) return [];
-  // relative to this system's own peak column ink-density — a barline
-  // spanning many staves picks up more inter-staff whitespace than one
-  // confined to a single clean staff, so an absolute cutoff doesn't travel
-  // well between a 1-staff and an 11-staff system.
-  const threshold = maxInk * relativeSensitivity;
-  const cols = [];
-  for(let x=0;x<w;x++) if(colInk[x] > threshold) cols.push(x);
-  // cluster into candidate centers, enforce minimum spacing and minimum
-  // stroke width — a note stem is typically 1-2px wide at this resolution,
-  // while a real barline stroke is consistently several px wide, so a
-  // width floor is an effective filter against stem false-positives.
-  const candidates = [];
-  let i=0;
-  const minSpacing = Math.max(10, rangeH*0.05);
-  const minRunWidth = 2;
-  while(i<cols.length){
-    let j=i;
-    while(j+1<cols.length && cols[j+1]-cols[j] <= 3) j++;
-    const runWidth = cols[j] - cols[i] + 1;
-    if(runWidth < minRunWidth){ i = j+1; continue; }
-    let best=i;
-    for(let k=i;k<=j;k++) if(colInk[cols[k]] > colInk[cols[best]]) best=k;
-    const x = cols[best];
-    if(candidates.length===0 || x - candidates[candidates.length-1] >= minSpacing){
-      candidates.push(x);
+// Longest unbroken vertical run of dark pixels in a column, returned as the
+// span it covers. Tolerates 1px breaks so a staff line crossing a stroke, or
+// antialiasing, doesn't chop it in half.
+function longestRunInColumn(data, w, x, yFrom, yTo){
+  let bestTop = -1, bestBot = -1, best = 0;
+  let start = -1, gap = 0;
+  for(let y=yFrom; y<=yTo; y++){
+    if(inkAt(data, (y*w+x)*4) > DARK){
+      if(start < 0) start = y;
+      gap = 0;
+      const len = y - start + 1;
+      if(len > best){ best = len; bestTop = start; bestBot = y; }
+    } else if(start >= 0){
+      if(++gap > 1){ start = -1; gap = 0; }
     }
+  }
+  return { len: best, top: bestTop, bottom: bestBot };
+}
+
+// A barline is a stroke that touches both outer lines of the staff. A stem
+// does not: it runs about three and a half spaces from its notehead, so
+// whichever end it starts from, it stops short of the other. That single test
+// is what stops stems being read as barlines — they are just as dark and just
+// as narrow, so ink and width can't tell them apart.
+function detectBarlinesInStaff(imgData, w, h, staff, tolInGaps){
+  const data = imgData.data;
+  const top = Math.max(0, Math.round(staff.top));
+  const bottom = Math.min(h-1, Math.round(staff.bottom));
+  if(bottom - top < 4) return [];
+  const tol = Math.max(1.5, staff.lineGap * tolInGaps);
+  // Look a little beyond the staff so a barline drawn slightly proud of it
+  // still reads as one continuous stroke.
+  const scanTop = Math.max(0, Math.round(top - staff.lineGap));
+  const scanBot = Math.min(h-1, Math.round(bottom + staff.lineGap));
+
+  const hits = [];
+  for(let x=0; x<w; x++){
+    const r = longestRunInColumn(data, w, x, scanTop, scanBot);
+    if(r.len <= 0) continue;
+    if(r.top <= top + tol && r.bottom >= bottom - tol) hits.push(x);
+  }
+  // Cluster the 2-3 columns one stroke covers, and keep barlines apart by a
+  // couple of staff spaces so a thick double bar counts once.
+  const minSpacing = Math.max(4, staff.lineGap * 1.5);
+  const out = [];
+  for(let i=0; i<hits.length; ){
+    let j = i;
+    while(j+1 < hits.length && hits[j+1]-hits[j] <= 3) j++;
+    const centre = Math.round((hits[i] + hits[j]) / 2);
+    if(!out.length || centre - out[out.length-1] >= minSpacing) out.push(centre);
     i = j+1;
   }
-  return candidates;
+  return out;
 }
 
 function detectBarsOnCanvas(canvas, opts){
   opts = opts || {};
   const staffThreshold = (opts.staffThreshold!=null ? opts.staffThreshold : 30)/100;
-  const barThreshold = (opts.barThreshold!=null ? opts.barThreshold : 30)/100;
+  const barSens = (opts.barThreshold!=null ? opts.barThreshold : 30);
+  // Higher sensitivity = more forgiving about a stroke falling short of a
+  // staff line, so more candidates survive.
+  const tolInGaps = 0.2 + (barSens/100) * 0.5;
   const ctx = canvas.getContext("2d");
   const w = canvas.width, h = canvas.height;
   const imgData = ctx.getImageData(0,0,w,h);
   const lines = detectStaffLines(imgData, w, h, staffThreshold);
   const staves = groupIntoStaves(lines);
   const systems = groupIntoSystems(staves);
+
   const results = systems.map(sys=>{
-    const xs = detectBarlinesInSystem(imgData, w, h, sys.top, sys.bottom, barThreshold);
-    return { yTop: sys.top, yBottom: sys.bottom, barX: xs };
+    // Barlines are found per staff, then merged: in a braced system a barline
+    // may be drawn through every staff, through only the outer ones, or once
+    // through the whole height, and all three should give the same answer.
+    const all = [];
+    sys.staves.forEach(st=> detectBarlinesInStaff(imgData, w, h, st, tolInGaps).forEach(x=> all.push(x)));
+    all.sort((a,b)=>a-b);
+    const gapTol = Math.max(4, sys.staves[0].lineGap * 1.5);
+    const merged = [];
+    for(let i=0;i<all.length;){
+      let j=i;
+      while(j+1<all.length && all[j+1]-all[j] <= gapTol) j++;
+      merged.push(Math.round((all[i]+all[j])/2));
+      i=j+1;
+    }
+    // Pad the band so a marker drawn on it clears the outermost staff lines.
+    const pad = sys.staves[0].lineGap * 0.6;
+    return { yTop: sys.top - pad, yBottom: sys.bottom + pad, barX: merged };
   });
   return { width:w, height:h, systems: results };
 }
@@ -2197,7 +2355,17 @@ function runDetectionOnCurrentPage(){
   const barThreshold = parseInt(document.getElementById("barSens").value,10);
   document.getElementById("detectStatus").style.display = "block";
   document.getElementById("detectStatus").textContent = "Detecting…";
-  setTimeout(()=>{
+  // Page rendering is async, so a click landing a moment too early used to
+  // scan a blank canvas and report "0 staff systems found" — indistinguishable
+  // from a page it genuinely couldn't read. Wait for ink before scanning.
+  let waited = 0;
+  const runWhenPainted = ()=>{
+    if(!canvasHasInk(canvas)){
+      if(waited < 4000){ waited += 120; setTimeout(runWhenPainted, 120); return; }
+      document.getElementById("detectStatus").textContent =
+        "The page hasn't finished drawing yet — give it a moment and try again.";
+      return;
+    }
     const result = detectBarsOnCanvas(canvas, { staffThreshold, barThreshold });
     const w = result.width, h = result.height;
     if(!markersByPage[currentPage]) markersByPage[currentPage] = [];
@@ -2224,7 +2392,23 @@ function runDetectionOnCurrentPage(){
     persist();
     renderMarkerOverlay();
     renderNotes();
-  }, 20);
+  };
+  setTimeout(runWhenPainted, 20);
+}
+
+// Has this canvas been painted yet? Every row is visited but only every eighth
+// column: notation is mostly white space and a staff line is two pixels thick,
+// so a square sampling grid steps straight over the lines and reports a fully
+// drawn page as blank.
+function canvasHasInk(canvas){
+  const w = canvas.width, h = canvas.height;
+  if(!w || !h) return false;
+  const data = canvas.getContext("2d").getImageData(0,0,w,h).data;
+  let dark = 0;
+  for(let y=0; y<h; y++)
+    for(let x=0; x<w; x+=8)
+      if(inkAt(data, (y*w+x)*4) > DARK && ++dark > 12) return true;
+  return false;
 }
 
 function updateDetectStatus(){
@@ -6995,6 +7179,10 @@ document.querySelectorAll("#reviseTabs .btn").forEach(b=>
 });
 
 document.getElementById("reviseNavBtn").addEventListener("click", showRevise);
+document.getElementById("chooseQuotesBtn").addEventListener("click", showHome);
+document.getElementById("chooseClassBtn").addEventListener("click", showClassHub);
+document.getElementById("homeToChooserBtn").addEventListener("click", showChooser);
+document.getElementById("classToChooserBtn").addEventListener("click", showChooser);
 document.getElementById("reviseHomeBtn").addEventListener("click", showHome);
 document.getElementById("reviseDoneHomeBtn").addEventListener("click", showHome);
 document.getElementById("reviseStartBtn").addEventListener("click", reviseStart);
@@ -7405,7 +7593,7 @@ function myClassesRenderList(){
     grid.appendChild(card);
   });
 }
-document.getElementById("myClassesHomeBtn").addEventListener("click", showHome);
+document.getElementById("myClassesHomeBtn").addEventListener("click", showClassHub);
 document.getElementById("myClassesBackBtn").addEventListener("click", myClassesShowList);
 
 async function myClassesOpenClass(cls){
@@ -7530,7 +7718,7 @@ document.getElementById("joinClassCodeInput").addEventListener("keydown", (e)=>{
   renderModePicker();
   applyTheme();
   await migrateOldSingleProjectData();
-  showHome();
+  showChooser();
 })();
 </script>
 </body>
