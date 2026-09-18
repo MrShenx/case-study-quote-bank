@@ -1032,7 +1032,7 @@
 
 <div id="teacherView">
   <div id="teacherTopbar">
-    <button class="btn" id="teacherHomeBtn"><span data-icon="home"></span> Home</button>
+    <button class="btn" id="teacherHomeBtn"><span data-icon="arrow-left"></span> Class work</button>
     <h1><span data-icon="graduation-cap"></span> Teacher — Classes</h1>
     <div class="spacer"></div>
     <button class="btn primary" id="newClassBtn">+ New class</button>
@@ -1176,7 +1176,7 @@
 
 <div id="myClassesView">
   <div id="myClassesTopbar">
-    <button class="btn" id="myClassesHomeBtn"><span data-icon="home"></span> Home</button>
+    <button class="btn" id="myClassesHomeBtn"><span data-icon="arrow-left"></span> Class work</button>
     <h1 id="myClassesTitle"><span data-icon="school"></span> My Classes</h1>
     <div class="spacer"></div>
     <button class="btn primary" id="myClassesJoinBtn">+ Join a class</button>
@@ -1741,6 +1741,17 @@ function projectHasContentWorthSaving(){
 // A task project belongs to class work, a normal project to quotation
 // studies — leaving either should land back where it was opened from, not
 // always in the quote bank.
+// A score opened from a class task goes back to the class; one opened from the
+// quote bank goes back there. The button has to say which — it read "Home" and
+// showed a home icon while doing neither, which is simply misleading.
+function updateStudioBackButton(){
+  const btn = document.getElementById("homeBtn");
+  if(!btn) return;
+  const fromClass = currentTaskRole === "student" || currentTaskRole === "teacher";
+  btn.innerHTML = fromClass ? icon("arrow-left",16) + " Back to class"
+                            : icon("home",16) + " Home";
+}
+
 function leaveStudio(){
   if(currentTaskRole === "student") showMyClasses();
   else if(currentTaskRole === "teacher") showTeacher();
@@ -1871,6 +1882,7 @@ async function openProject(id){
   currentTaskRole = rec.taskRole;
   currentTaskQuestionText = rec.taskQuestionText;
   document.getElementById("publishTaskBtn").style.display = currentTaskRole === "teacher" ? "" : "none";
+  updateStudioBackButton();
   document.getElementById("publishTaskSection").style.display = currentTaskRole === "teacher" ? "" : "none";
   document.getElementById("taskWriteBtn").style.display = currentTaskRole === "student" ? "" : "none";
   // A student can tag/annotate a class task freely, but the score PDF and
