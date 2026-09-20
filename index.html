@@ -831,7 +831,7 @@
 
   <div id="taskQuestionBanner" style="display:none;"></div>
   <div id="topbar">
-    <button class="btn" id="homeBtn"><span data-icon="home"></span> Home</button>
+    <button class="btn" id="homeBtn"><span data-icon="arrow-left"></span> Back</button>
     <span class="project-name-label" id="projectNameLabel"></span>
     <button class="btn primary" id="taskWriteBtn" style="display:none;"><span data-icon="pen-line"></span> Write about this task</button>
     <button class="btn primary" id="uploadBtn"><span data-icon="upload"></span> Upload PDF score</button>
@@ -948,7 +948,7 @@
 
 <div id="practiceView">
   <div id="practiceTopbar">
-    <button class="btn" id="practiceHomeBtn"><span data-icon="home"></span> Home</button>
+    <button class="btn" id="practiceHomeBtn"><span data-icon="arrow-left"></span> Back</button>
     <h1><span data-icon="pen-line"></span> Practice Response</h1>
     <div class="spacer"></div>
     <div id="practiceTimerBar" style="display:none;">
@@ -1077,7 +1077,7 @@
 
 <div id="teacherView">
   <div id="teacherTopbar">
-    <button class="btn" id="teacherHomeBtn"><span data-icon="arrow-left"></span> Class work</button>
+    <button class="btn" id="teacherHomeBtn"><span data-icon="arrow-left"></span> Back</button>
     <h1><span data-icon="graduation-cap"></span> Teacher — Classes</h1>
     <div class="spacer"></div>
     <button class="btn primary" id="newClassBtn">+ New class</button>
@@ -1103,7 +1103,7 @@
 
 <div id="reviseView">
   <div id="reviseTopbar">
-    <button class="btn" id="reviseHomeBtn"><span data-icon="home"></span> Home</button>
+    <button class="btn" id="reviseHomeBtn"><span data-icon="arrow-left"></span> Back</button>
     <h1><span data-icon="brain"></span> Revise</h1>
     <div class="nav-group" id="reviseTabs">
       <button class="btn active" data-tab="drill">Drill</button>
@@ -1221,7 +1221,7 @@
 
 <div id="myClassesView">
   <div id="myClassesTopbar">
-    <button class="btn" id="myClassesHomeBtn"><span data-icon="arrow-left"></span> Class work</button>
+    <button class="btn" id="myClassesHomeBtn"><span data-icon="arrow-left"></span> Back</button>
     <h1 id="myClassesTitle"><span data-icon="school"></span> My Classes</h1>
     <div class="spacer"></div>
     <button class="btn primary" id="myClassesJoinBtn">+ Join a class</button>
@@ -1676,11 +1676,89 @@ async function migrateOldSingleProjectData(){
 // Every top-level view is a sibling div that's either flex or none. Kept as a
 // list so adding a view is one entry here rather than a line in each show*().
 const VIEWS = ["chooserView","homeView","studioView","practiceView","teacherView","myClassesView","reviseView","classHubView"];
+// ---------- navigation history ----------
+// Back means back: every view switch records the one being left, and the
+// back buttons simply pop that stack. Guessing the parent from the project
+// record was the old way and it got this wrong — a teacher's own copy of a
+// class task is listed in the quote bank too, so opening one from Quotation
+// studies and pressing back threw you out to the class list.
+// Studio entries carry their project id, since returning there means
+// reopening that score rather than just showing a div.
+let viewHistory = [];
+let currentView = null;
+let currentViewProjectId = null;
+let navigatingBack = false;
+
 function showView(id){
+  if(currentView && currentView !== id && !navigatingBack){
+    viewHistory.push({ view: currentView, projectId: currentViewProjectId });
+    if(viewHistory.length > 50) viewHistory.shift(); // bouncing between two views shouldn't grow forever
+  }
+  currentView = id;
+  currentViewProjectId = null; // showStudio() fills this in straight after
   VIEWS.forEach(v=>{
     const el = document.getElementById(v);
     if(el) el.style.display = (v === id) ? "flex" : "none";
   });
+  updateBackButtons();
+}
+
+const VIEW_LABELS = {
+  chooserView:"Start", homeView:"Quotation studies", studioView:"Score",
+  practiceView:"Practice", teacherView:"Classes", myClassesView:"My classes",
+  reviseView:"Revise", classHubView:"Class work"
+};
+// Where each view sends you when nothing is on the stack — a page opened
+// directly, or the first screen of the session.
+const VIEW_PARENTS = {
+  homeView:"chooserView", classHubView:"chooserView", studioView:"homeView",
+  practiceView:"homeView", reviseView:"homeView",
+  teacherView:"classHubView", myClassesView:"classHubView"
+};
+function backTarget(){
+  if(viewHistory.length) return viewHistory[viewHistory.length-1];
+  const parent = VIEW_PARENTS[currentView];
+  return parent ? { view: parent, projectId: null } : null;
+}
+// Every top-bar back button, labelled with where it actually goes.
+const BACK_BUTTONS = ["homeBtn","practiceHomeBtn","reviseHomeBtn","teacherHomeBtn","myClassesHomeBtn"];
+const BACK_BUTTONS_ICON_ONLY = ["homeToChooserBtn","classToChooserBtn"];
+function updateBackButtons(){
+  const target = backTarget();
+  const label = target ? (VIEW_LABELS[target.view] || "Back") : "Back";
+  BACK_BUTTONS.forEach(id=>{
+    const b = document.getElementById(id);
+    if(!b) return;
+    b.innerHTML = icon("arrow-left",16) + " " + label;
+    b.title = "Back to " + label;
+  });
+  BACK_BUTTONS_ICON_ONLY.forEach(id=>{
+    const b = document.getElementById(id);
+    if(b) b.title = "Back to " + label;
+  });
+}
+async function goBack(){
+  const target = backTarget();
+  if(!target){ showChooser(); return; }
+  if(viewHistory.length) viewHistory.pop();
+  navigatingBack = true;
+  try{
+    if(target.view === "studioView" && target.projectId) await showStudio(target.projectId);
+    else if(target.view === "homeView") showHome();
+    else if(target.view === "chooserView") showChooser();
+    else if(target.view === "classHubView") showClassHub();
+    else if(target.view === "teacherView") showTeacher();
+    else if(target.view === "myClassesView") showMyClasses();
+    else if(target.view === "reviseView") await showRevise();
+    // Back into Practice with a response still open means back to what you
+    // were writing, not out to the list of responses.
+    else if(target.view === "practiceView"){
+      if(practiceCurrentResponse){ showView("practiceView"); practiceShowWrite(); }
+      else await showPractice();
+    }
+    else showView(target.view);
+  } finally { navigatingBack = false; }
+  updateBackButtons();
 }
 
 // The start screen. The app does two quite different jobs — building a bank of
@@ -1783,46 +1861,9 @@ function projectHasContentWorthSaving(){
   // below, using stale data left over from whatever they had open last.
   return !!currentProjectId && (!!currentProjectPdfName || notes.length > 0);
 }
-// Leaving Studio goes back to whichever screen opened it, and the button says
-// so — it used to read "Home" and show a home icon while doing neither.
-//
-// The destination is the view we came FROM, not what the project record says.
-// Reading taskRole looked equivalent and wasn't: a teacher's own copy of a
-// class task is also listed in the quote bank, so opening one from Quotation
-// studies and pressing back threw you out to the class list.
-let studioOrigin = null;
-const STUDIO_ORIGINS = {
-  homeView:      { label: "Quotation studies", go: showHome },
-  myClassesView: { label: "Back to class",     go: showMyClasses },
-  teacherView:   { label: "Back to class",     go: showTeacher },
-  classHubView:  { label: "Back to class",     go: showClassHub },
-  practiceView:  { label: "Back to writing",   go(){
-    showView("practiceView");
-    if(practiceCurrentResponse) practiceShowWrite(); else practiceShowList();
-  } }
-};
-// Computed display, not the inline style: before any show*() has run every
-// view is hidden by the stylesheet alone, so inline styles are all empty.
-function rememberStudioOrigin(){
-  studioOrigin = VIEWS.find(v=> v !== "studioView" &&
-    document.getElementById(v) &&
-    getComputedStyle(document.getElementById(v)).display !== "none") || null;
-}
-function studioOriginEntry(){
-  if(studioOrigin && STUDIO_ORIGINS[studioOrigin]) return STUDIO_ORIGINS[studioOrigin];
-  // No usable origin (opened from a screen that isn't a place to return to):
-  // fall back to what the project itself says it belongs to.
-  if(currentTaskRole === "student") return STUDIO_ORIGINS.myClassesView;
-  if(currentTaskRole === "teacher") return STUDIO_ORIGINS.teacherView;
-  return STUDIO_ORIGINS.homeView;
-}
-function updateStudioBackButton(){
-  const btn = document.getElementById("homeBtn");
-  if(!btn) return;
-  btn.innerHTML = icon("arrow-left",16) + " " + studioOriginEntry().label;
-}
-
-function leaveStudio(){ studioOriginEntry().go(); }
+// Studio's back button is the shared one: it goes wherever the history says,
+// which is the screen that opened this score.
+function leaveStudio(){ goBack(); }
 document.getElementById("homeBtn").addEventListener("click", ()=>{
   if(projectHasContentWorthSaving()){
     document.getElementById("leaveReminderModal").style.display = "flex";
@@ -1884,8 +1925,8 @@ document.getElementById("newProjectNameInput").addEventListener("keydown", (e)=>
 });
 
 async function showStudio(id){
-  rememberStudioOrigin(); // must run before showView hides the screen we're on
   showView("studioView");
+  currentViewProjectId = id; // so coming back here later reopens this score
   await openProject(id);
 }
 
@@ -1910,7 +1951,7 @@ function showMyClasses(){
   myClassesShowList();
 }
 document.getElementById("joinClassBtn").addEventListener("click", showMyClasses);
-document.getElementById("teacherHomeBtn").addEventListener("click", showClassHub);
+document.getElementById("teacherHomeBtn").addEventListener("click", goBack);
 
 function resetVideoPlayer(){
   // Tears down the PLAYER only. Deliberately doesn't clear audioName/videoId:
@@ -1949,7 +1990,6 @@ async function openProject(id){
   currentTaskRole = rec.taskRole;
   currentTaskQuestionText = rec.taskQuestionText;
   document.getElementById("publishTaskBtn").style.display = currentTaskRole === "teacher" ? "" : "none";
-  updateStudioBackButton();
   document.getElementById("publishTaskSection").style.display = currentTaskRole === "teacher" ? "" : "none";
   document.getElementById("taskWriteBtn").style.display = currentTaskRole === "student" ? "" : "none";
   // A student can tag/annotate a class task freely, but the score PDF and
@@ -5194,7 +5234,7 @@ function practiceShowWrite(){
   document.getElementById("practiceWriteSubmitBtn").style.display = (practiceCurrentResponse && practiceCurrentResponse.taskId) ? "" : "none";
   practiceRenderWrite();
 }
-document.getElementById("practiceHomeBtn").addEventListener("click", showHome);
+document.getElementById("practiceHomeBtn").addEventListener("click", goBack);
 document.getElementById("practiceBackBtn").addEventListener("click", practiceShowList);
 document.getElementById("practiceBackToScoreBtn").addEventListener("click", async ()=>{
   const taskId = practiceCurrentResponse && practiceCurrentResponse.taskId;
@@ -7297,9 +7337,9 @@ document.querySelectorAll("#reviseTabs .btn").forEach(b=>
 document.getElementById("reviseNavBtn").addEventListener("click", showRevise);
 document.getElementById("chooseQuotesBtn").addEventListener("click", showHome);
 document.getElementById("chooseClassBtn").addEventListener("click", showClassHub);
-document.getElementById("homeToChooserBtn").addEventListener("click", showChooser);
-document.getElementById("classToChooserBtn").addEventListener("click", showChooser);
-document.getElementById("reviseHomeBtn").addEventListener("click", showHome);
+document.getElementById("homeToChooserBtn").addEventListener("click", goBack);
+document.getElementById("classToChooserBtn").addEventListener("click", goBack);
+document.getElementById("reviseHomeBtn").addEventListener("click", goBack);
 document.getElementById("reviseDoneHomeBtn").addEventListener("click", showHome);
 document.getElementById("reviseStartBtn").addEventListener("click", reviseStart);
 document.getElementById("reviseRevealBtn").addEventListener("click", reviseReveal);
@@ -7709,7 +7749,7 @@ function myClassesRenderList(){
     grid.appendChild(card);
   });
 }
-document.getElementById("myClassesHomeBtn").addEventListener("click", showClassHub);
+document.getElementById("myClassesHomeBtn").addEventListener("click", goBack);
 document.getElementById("myClassesBackBtn").addEventListener("click", myClassesShowList);
 
 async function myClassesOpenClass(cls){
