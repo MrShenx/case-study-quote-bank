@@ -119,6 +119,26 @@ export default async function handler(req, res) {
     return;
   }
 
-  res.setHeader('Allow', ['GET', 'PUT']);
+  // Called when a student deletes the project on their device, so a deleted
+  // project doesn't leave its analysis sitting in KV forever, readable by
+  // anyone holding the code. Idempotent on purpose: a code that was never
+  // saved, or was already deleted, is a success and not an error — the
+  // client's only goal is "this must not exist afterwards", and it retries.
+  //
+  // No new exposure: anyone who knows a code can already overwrite it with
+  // PUT, so this grants nothing that wasn't already possible.
+  if (req.method === 'DELETE') {
+    try {
+      await kv.del(keyFor(id));
+    } catch (err) {
+      console.error('KV del failed:', err);
+      res.status(500).json({ error: 'Could not delete the cloud backup. Please try again.' });
+      return;
+    }
+    res.status(200).json({ ok: true });
+    return;
+  }
+
+  res.setHeader('Allow', ['GET', 'PUT', 'DELETE']);
   res.status(405).json({ error: `Method ${req.method} not allowed.` });
 }

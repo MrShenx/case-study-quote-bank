@@ -1643,10 +1643,54 @@ async function renameProject(id, name){
   rec.name = name; rec.updatedAt = Date.now();
   await dbPut(META_STORE, rec);
 }
+// Deleting a project has to mean deleting the cloud backup too — otherwise a
+// deleted project's analysis sits in KV indefinitely, readable by anyone
+// holding its code, and there is no way left to remove it: the code is stored
+// only on the record being destroyed. So read the code first, then delete.
+//
+// The local delete is not made to wait on the network. A student clearing out
+// a project on a school wifi that has dropped still gets the local delete they
+// asked for, and the code goes on a retry queue that is drained at startup.
+const PENDING_CLOUD_DELETES_KEY = "scoreStudioPendingCloudDeletes";
+function pendingCloudDeletes(){
+  try{ return JSON.parse(localStorage.getItem(PENDING_CLOUD_DELETES_KEY) || "[]"); }
+  catch{ return []; }
+}
+function savePendingCloudDeletes(list){
+  try{ localStorage.setItem(PENDING_CLOUD_DELETES_KEY, JSON.stringify(list.slice(-50))); }
+  catch(e){ /* private mode: the retry is best-effort */ }
+}
+// Resolves true only when the server has confirmed the backup is gone. A 404
+// counts: the goal is "this must not exist", not "I personally removed it".
+async function deleteFromCloud(code){
+  try{
+    const resp = await fetch("/api/project/" + encodeURIComponent(code), { method: "DELETE" });
+    return resp.ok || resp.status === 404;
+  }catch(e){
+    return false; // offline, or the endpoint is unreachable
+  }
+}
+function queueCloudDelete(code){
+  const list = pendingCloudDeletes();
+  if(!list.includes(code)){ list.push(code); savePendingCloudDeletes(list); }
+}
+async function retryPendingCloudDeletes(){
+  const list = pendingCloudDeletes();
+  if(!list.length) return;
+  const stillPending = [];
+  for(const code of list){
+    if(!await deleteFromCloud(code)) stillPending.push(code);
+  }
+  savePendingCloudDeletes(stillPending);
+}
+
 async function deleteProjectCompletely(id){
+  const rec = await dbGet(META_STORE, id);
+  const code = rec && rec.cloudId; // the only copy of it — read before the record goes
   await dbDelete(META_STORE, id);
   await dbDelete(PDF_STORE, id);
   await dbDelete(AUDIO_STORE, id);
+  if(code && !await deleteFromCloud(code)) queueCloudDelete(code);
 }
 
 async function migrateOldSingleProjectData(){
@@ -1807,7 +1851,7 @@ async function renderHomeGrid(){
       <div class="project-card-top">
         <span class="project-name">${escapeHtml(p.name)}</span>
         <button class="project-icon-btn" data-action="rename" title="Rename">${icon("pencil",14)}</button>
-        <button class="project-icon-btn del" data-action="delete" title="Delete project">${icon("trash-2",14)}</button>
+        <button class="project-icon-btn del" data-action="delete" title="${p.cloudId ? 'Delete project — including its cloud backup' : 'Delete project'}">${icon("trash-2",14)}</button>
       </div>
       <div class="project-meta">${p.pdfName ? escapeHtml(p.pdfName) : 'No PDF yet'}</div>
       <div class="project-meta">${noteCount} note${noteCount===1?'':'s'} · ${barCount} bar${barCount===1?'':'s'} tagged</div>
@@ -7873,6 +7917,10 @@ document.getElementById("joinClassCodeInput").addEventListener("keydown", (e)=>{
   applyTheme();
   await migrateOldSingleProjectData();
   showChooser();
+  // Backups whose delete couldn't be sent last time (offline, server down).
+  // Not awaited: the app is usable immediately, and the queue keeps until it
+  // succeeds.
+  retryPendingCloudDeletes();
 })();
 </script>
 </body>
