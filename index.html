@@ -138,7 +138,7 @@
      label beside Home. */
   @media(min-width:900px){
     #practiceTopbar > h1, #reviseTopbar > h1, #teacherTopbar > h1, #myClassesTopbar > h1,
-    #chooserBar > .brand-lockup, #classHubBar > .brand-lockup{
+    #classHubBar > .brand-lockup{
       position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
       margin:0;pointer-events:none;max-width:38%;justify-content:center;
     }
@@ -315,42 +315,45 @@
   .link-btn.play{background:var(--good-soft);color:var(--good);border-color:transparent;font-weight:600;}
   .link-btn.play:disabled{opacity:0.4;cursor:not-allowed;}
 
-  /* ---------- video / audio player, docked under the notes ----------
-     It used to float, position:fixed, over the bottom-right corner — which is
-     exactly where the study notes are, so it sat on top of them. Now it's the
-     last child of #notesPanel: the notes list is flex:1 above it and simply
-     ends where the player begins, so nothing can be covered. Video on the
-     left, time and scrub bar on the right, to keep it short. */
+  /* ---------- audio / video player, docked under the notes ----------
+     It used to float over the bottom-right corner — exactly where the study
+     notes are — so it's the last child of #notesPanel instead: the notes list
+     is flex:1 above it and simply ends where the player begins.
+     Students are here to listen, not to watch, so the resting state is a
+     single transport strip (play · elapsed · scrub rail · duration) about
+     34px tall. The video frame and the two source rows live above it and only
+     appear when the strip's chevron is used; that choice is remembered. A
+     project with no source yet always opens expanded, otherwise the "paste a
+     link" box would be unreachable. */
   #videoWidget{flex-shrink:0;background:var(--panel);border-top:1px solid var(--line);
-    display:grid;grid-template-columns:minmax(200px,38%) 1fr;align-items:center;}
-  #videoWidget .vw-head{grid-column:1 / -1;}
-  #videoWidget .vw-body{grid-column:1;padding-bottom:8px !important;}
-  #videoWidget .vw-mini{grid-column:2;}
-  /* collapsed: the video goes, the time bar takes the whole row */
-  #videoWidget.collapsed .vw-mini{grid-column:1 / -1;}
-  #videoWidget .vw-head{display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--panel-2);border-bottom:1px solid var(--line);cursor:pointer;}
-  #videoWidget .vw-head span{font-size:0.76rem;font-weight:700;flex:1;}
-  #videoWidget .vw-toggle{background:none;border:none;cursor:pointer;color:var(--ink);display:inline-flex;align-items:center;justify-content:center;padding:2px;}
-  #videoWidget .vw-body{padding:8px;padding-bottom:0;display:flex;flex-direction:column;gap:6px;}
+    display:flex;flex-direction:column;}
+  #videoWidget .vw-body{padding:8px 10px;display:flex;flex-direction:column;gap:6px;
+    border-bottom:1px solid var(--line);}
   #videoWidget.collapsed .vw-body{display:none;}
+  #videoWidget .vw-toggle{background:none;border:none;cursor:pointer;color:var(--ink-soft);
+    display:inline-flex;align-items:center;justify-content:center;padding:3px;border-radius:6px;}
+  #videoWidget .vw-toggle:hover{background:var(--panel-2);color:var(--ink);}
+  #vwPlayPauseBtn{color:var(--accent);}
   #videoWidget .vw-urlrow{display:flex;gap:4px;}
   #videoWidget .vw-urlrow input{flex:1;min-width:0;padding:5px 8px;border-radius:6px;border:1px solid var(--line);font-size:0.72rem;}
   #videoWidget .vw-urlrow button{padding:5px 8px;border-radius:6px;border:1px solid var(--line);background:var(--panel);font-size:0.72rem;cursor:pointer;}
-  #vwPlayerWrap{position:relative;width:100%;aspect-ratio:16/9;background:#000;border-radius:6px;overflow:hidden;}
+  /* capped: a 16:9 frame across the whole notes panel is most of the panel,
+     and nobody needs to watch it at that size */
+  #vwPlayerWrap{position:relative;width:100%;max-width:320px;aspect-ratio:16/9;background:#000;border-radius:6px;overflow:hidden;}
   #vwPlayerWrap iframe{position:absolute;inset:0;width:100%;height:100%;border:0;}
-  /* stays visible even when the widget is collapsed, so the time bar and
-     current time are always readable without expanding the player back out */
-  .vw-mini{padding:8px;display:flex;flex-direction:column;gap:6px;}
-  #vwNow{font-size:0.82rem;font-weight:700;color:var(--ink);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;text-align:center;letter-spacing:0.01em;}
-  #vwNow .vw-now-sep{color:var(--ink-soft);font-weight:400;margin:0 4px;font-size:0.74rem;}
+  /* the strip — one row, always visible, never hidden by collapsing */
+  .vw-bar{display:flex;align-items:center;gap:8px;padding:5px 10px;}
+  #vwNow{font-size:0.74rem;font-weight:700;color:var(--ink);white-space:nowrap;flex-shrink:0;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:0.01em;}
+  #vwDuration{font-size:0.72rem;color:var(--ink-soft);white-space:nowrap;flex-shrink:0;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
   .now-btn{background:var(--accent-soft);color:var(--accent);border-color:transparent;font-weight:600;padding:5px 9px;}
   /* touch-action:none so a drag scrubs instead of panning the page */
-  #vwRailTrack{position:relative;height:16px;background:var(--accent-soft);border-radius:6px;cursor:pointer;touch-action:none;}
+  #vwRailTrack{position:relative;flex:1;min-width:60px;height:12px;background:var(--accent-soft);border-radius:6px;cursor:pointer;touch-action:none;}
   .vw-progress{position:absolute;top:0;left:0;height:100%;background:var(--accent);opacity:0.3;border-radius:6px 0 0 6px;pointer-events:none;}
-  .vw-tick{position:absolute;top:2px;bottom:2px;width:2px;background:var(--good);cursor:pointer;}
-  .vw-range{position:absolute;top:2px;bottom:2px;background:var(--good);opacity:0.35;border-radius:3px;cursor:pointer;}
-  .vw-playhead{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--ink);opacity:0.7;pointer-events:none;}
-  .vw-labels{display:flex;justify-content:space-between;font-size:0.62rem;color:var(--ink-soft);}
+  .vw-tick{position:absolute;top:1px;bottom:1px;width:2px;background:var(--good);cursor:pointer;}
+  .vw-range{position:absolute;top:1px;bottom:1px;background:var(--good);opacity:0.35;border-radius:3px;cursor:pointer;}
+  .vw-playhead{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ink);opacity:0.7;pointer-events:none;}
 
   @media(max-width:860px){
     #main{flex-direction:column;overflow:auto;}
@@ -359,9 +362,8 @@
     /* Stacked, the page itself scrolls rather than the notes list, so pin
        the player to the bottom of the viewport instead of the end of a long
        list; one column, with the video kept to a sensible size. */
-    #videoWidget{position:sticky;bottom:0;z-index:5;grid-template-columns:1fr;box-shadow:0 -6px 16px -10px rgba(0,0,0,0.25);}
-    #videoWidget .vw-body,#videoWidget .vw-mini{grid-column:1;}
-    #vwPlayerWrap{max-width:360px;margin:0 auto;}
+    #videoWidget{position:sticky;bottom:0;z-index:5;box-shadow:0 -6px 16px -10px rgba(0,0,0,0.25);}
+    #vwPlayerWrap{max-width:300px;margin:0 auto;}
   }
 
   /* =====================================================================
@@ -470,12 +472,21 @@
   /* ---------- start screen: which of the two jobs are you here for ---------- */
   .chooser-view-shell{display:none;flex-direction:column;height:100%;}
   #chooserView,#classHubView{display:none;flex-direction:column;height:100%;}
-  #chooserBar,#classHubBar{padding:14px 24px;border-bottom:1px solid var(--line);background:transparent;
-    display:flex;flex-wrap:wrap;align-items:center;gap:14px 18px;
-    box-shadow:0 1px 0 var(--line),0 6px 18px -14px rgba(0,0,0,0.28);}
-  .chooser-body{flex:1;overflow:auto;padding:48px 24px;display:flex;flex-direction:column;
-    align-items:center;justify-content:center;gap:26px;}
-  .chooser-heading{font-size:1.25rem;margin:0;text-align:center;}
+  #chooserBar,#classHubBar{padding:14px 24px;background:transparent;
+    display:flex;flex-wrap:wrap;align-items:center;gap:14px 18px;}
+  #classHubBar{border-bottom:1px solid var(--line);}
+  /* nothing but the theme controls left on the start screen's bar, so it has
+     no line under it either — the hero below is the page's real top edge */
+  #chooserBar{min-height:56px;}
+  .chooser-body{flex:1;overflow:auto;padding:40px 24px 48px;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:34px;}
+  /* The name belongs here, at title size above the two doors, rather than
+     shrunk into the corner of a bar — this screen has nothing else to say. */
+  .chooser-hero{display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;}
+  .chooser-mark{color:var(--accent);}
+  .chooser-wordmark{font-family:var(--font-display);font-weight:700;margin:0;
+    font-size:clamp(2.1rem,6vw,3.2rem);line-height:1.05;letter-spacing:-0.02em;}
+  .chooser-heading{font-size:1.02rem;margin:0;text-align:center;color:var(--ink-soft);font-weight:500;}
   .chooser-cards{display:flex;flex-wrap:wrap;gap:18px;justify-content:center;width:100%;}
   .chooser-card{width:320px;max-width:100%;text-align:left;cursor:pointer;font:inherit;color:var(--ink);
     background:var(--panel-2);border:1px solid transparent;border-radius:var(--radius-lg);
@@ -695,13 +706,16 @@
 
 <div id="chooserView">
   <div id="chooserBar">
-    <div class="brand-lockup"><span class="brand-icon" data-icon="music-2" data-icon-size="22"></span><span class="brand-name">Analysis Studio</span></div>
     <div class="spacer"></div>
     <div class="theme-picker"><span class="theme-label">Theme</span></div>
     <div class="mode-picker"></div>
   </div>
   <div class="chooser-body">
-    <h2 class="chooser-heading">What are you working on?</h2>
+    <div class="chooser-hero">
+      <span class="chooser-mark" data-icon="music-2" data-icon-size="34"></span>
+      <h1 class="chooser-wordmark">Analysis Studio</h1>
+      <p class="chooser-heading">What are you working on?</p>
+    </div>
     <div class="chooser-cards">
       <button class="chooser-card" id="chooseQuotesBtn">
         <span class="chooser-icon" data-icon="brain" data-icon-size="26"></span>
@@ -903,12 +917,7 @@
       <div id="notesScroll">
         <div id="notesEmpty">No notes yet. Click a bar on the score, then "+ Add note" — or add one unlinked and connect it later.</div>
       </div>
-      <div id="videoWidget">
-        <div class="vw-head" id="vwHead">
-          <span><span data-icon="headphones"></span> <span id="vwHeadLabel">Video</span></span>
-          <button class="vw-toggle" id="vwPlayPauseBtn" title="Play/pause"><span data-icon="play" data-icon-size="14"></span></button>
-          <button class="vw-toggle" id="vwToggleBtn"><span data-icon="chevron-down" data-icon-size="14"></span></button>
-        </div>
+      <div id="videoWidget" class="collapsed">
         <div class="vw-body">
           <div class="vw-urlrow" id="vwUrlRow">
             <input type="text" id="vwUrlInput" placeholder="Paste YouTube link…">
@@ -921,13 +930,15 @@
           <div id="vwAudioName" style="display:none;"></div>
           <div id="vwPlayerWrap"><div id="vwPlayer"></div></div>
         </div>
-        <div class="vw-mini">
-          <div id="vwNow">Nothing selected yet</div>
+        <div class="vw-bar">
+          <button class="vw-toggle" id="vwPlayPauseBtn" title="Play/pause"><span data-icon="play" data-icon-size="15"></span></button>
+          <div id="vwNow">–:––</div>
           <div id="vwRailTrack">
             <div class="vw-progress" id="vwProgress"></div>
             <div class="vw-playhead" id="vwPlayhead" style="display:none;"></div>
           </div>
-          <div class="vw-labels"><span>0:00</span><span id="vwDuration">–:––</span></div>
+          <span id="vwDuration">–:––</span>
+          <button class="vw-toggle" id="vwToggleBtn" title="Show the player"><span data-icon="chevron-up" data-icon-size="14"></span></button>
         </div>
       </div>
     </div>
@@ -1772,25 +1783,46 @@ function projectHasContentWorthSaving(){
   // below, using stale data left over from whatever they had open last.
   return !!currentProjectId && (!!currentProjectPdfName || notes.length > 0);
 }
-// A task project belongs to class work, a normal project to quotation
-// studies — leaving either should land back where it was opened from, not
-// always in the quote bank.
-// A score opened from a class task goes back to the class; one opened from the
-// quote bank goes back there. The button has to say which — it read "Home" and
-// showed a home icon while doing neither, which is simply misleading.
+// Leaving Studio goes back to whichever screen opened it, and the button says
+// so — it used to read "Home" and show a home icon while doing neither.
+//
+// The destination is the view we came FROM, not what the project record says.
+// Reading taskRole looked equivalent and wasn't: a teacher's own copy of a
+// class task is also listed in the quote bank, so opening one from Quotation
+// studies and pressing back threw you out to the class list.
+let studioOrigin = null;
+const STUDIO_ORIGINS = {
+  homeView:      { label: "Quotation studies", go: showHome },
+  myClassesView: { label: "Back to class",     go: showMyClasses },
+  teacherView:   { label: "Back to class",     go: showTeacher },
+  classHubView:  { label: "Back to class",     go: showClassHub },
+  practiceView:  { label: "Back to writing",   go(){
+    showView("practiceView");
+    if(practiceCurrentResponse) practiceShowWrite(); else practiceShowList();
+  } }
+};
+// Computed display, not the inline style: before any show*() has run every
+// view is hidden by the stylesheet alone, so inline styles are all empty.
+function rememberStudioOrigin(){
+  studioOrigin = VIEWS.find(v=> v !== "studioView" &&
+    document.getElementById(v) &&
+    getComputedStyle(document.getElementById(v)).display !== "none") || null;
+}
+function studioOriginEntry(){
+  if(studioOrigin && STUDIO_ORIGINS[studioOrigin]) return STUDIO_ORIGINS[studioOrigin];
+  // No usable origin (opened from a screen that isn't a place to return to):
+  // fall back to what the project itself says it belongs to.
+  if(currentTaskRole === "student") return STUDIO_ORIGINS.myClassesView;
+  if(currentTaskRole === "teacher") return STUDIO_ORIGINS.teacherView;
+  return STUDIO_ORIGINS.homeView;
+}
 function updateStudioBackButton(){
   const btn = document.getElementById("homeBtn");
   if(!btn) return;
-  const fromClass = currentTaskRole === "student" || currentTaskRole === "teacher";
-  btn.innerHTML = fromClass ? icon("arrow-left",16) + " Back to class"
-                            : icon("home",16) + " Home";
+  btn.innerHTML = icon("arrow-left",16) + " " + studioOriginEntry().label;
 }
 
-function leaveStudio(){
-  if(currentTaskRole === "student") showMyClasses();
-  else if(currentTaskRole === "teacher") showTeacher();
-  else showHome();
-}
+function leaveStudio(){ studioOriginEntry().go(); }
 document.getElementById("homeBtn").addEventListener("click", ()=>{
   if(projectHasContentWorthSaving()){
     document.getElementById("leaveReminderModal").style.display = "flex";
@@ -1852,6 +1884,7 @@ document.getElementById("newProjectNameInput").addEventListener("keydown", (e)=>
 });
 
 async function showStudio(id){
+  rememberStudioOrigin(); // must run before showView hides the screen we're on
   showView("studioView");
   await openProject(id);
 }
@@ -1886,7 +1919,7 @@ function resetVideoPlayer(){
   mediaPlayer.destroy();
   pendingSeek = null; activeEndSec = null;
   document.getElementById("vwPlayerWrap").innerHTML = '<div id="vwPlayer"></div>';
-  document.getElementById("vwNow").textContent = "Nothing selected yet";
+  document.getElementById("vwNow").textContent = "–:––";
   vwPlayhead.style.display = "none";
   vwProgress.style.width = "0%";
 }
@@ -4400,25 +4433,29 @@ const mediaPlayer = {
   }
 };
 
-// One toggle for both ways in, so the chevron always matches the state —
-// collapsing via the header used to leave it pointing the wrong way.
-function toggleVideoWidget(){
-  const w = document.getElementById("videoWidget");
-  const collapsed = w.classList.toggle("collapsed");
-  document.getElementById("vwToggleBtn").innerHTML = icon(collapsed ? "chevron-right" : "chevron-down", 14);
+// Collapsed is the resting state: the transport strip stays, the video frame
+// and source rows go. Remembered browser-wide rather than per project, since
+// it's a working preference ("I don't watch the video") and not something
+// about any one score.
+const PLAYER_OPEN_KEY = "scoreStudioPlayerOpen";
+function setPlayerOpen(open, remember){
+  document.getElementById("videoWidget").classList.toggle("collapsed", !open);
+  const btn = document.getElementById("vwToggleBtn");
+  btn.innerHTML = icon(open ? "chevron-down" : "chevron-up", 14);
+  btn.title = open ? "Hide the player" : "Show the player";
+  if(remember){ try{ localStorage.setItem(PLAYER_OPEN_KEY, open ? "1" : "0"); }catch(e){ /* private mode */ } }
 }
-document.getElementById("vwHead").addEventListener("click", (e)=>{
-  // closest(), not e.target.id: these buttons contain an <svg>, so a click
-  // lands on the icon rather than the button itself. Matching on the id alone
-  // meant this handler ran too and the two toggles cancelled out — which is
-  // why the collapse button appeared dead while the bar around it worked.
-  if(e.target.closest("#vwToggleBtn, #vwPlayPauseBtn")) return;
-  toggleVideoWidget();
-});
+function playerOpenPreference(){
+  try{ return localStorage.getItem(PLAYER_OPEN_KEY) === "1"; }catch(e){ return false; }
+}
+function toggleVideoWidget(){
+  setPlayerOpen(document.getElementById("videoWidget").classList.contains("collapsed"), true);
+}
 document.getElementById("vwToggleBtn").addEventListener("click", (e)=>{
   e.stopPropagation();
   toggleVideoWidget();
 });
+setPlayerOpen(playerOpenPreference(), false);
 
 // ---------- scrubbing ----------
 // The rail already showed position and note ticks but couldn't be moved.
@@ -4436,8 +4473,7 @@ function scrubFromRail(clientX){
   vwProgress.style.width = (frac*100) + "%";
   vwPlayhead.style.left = (frac*100) + "%";
   vwPlayhead.style.display = "block";
-  document.getElementById("vwNow").innerHTML =
-    secToClock(frac*durationSec) + '<span class="vw-now-sep">/</span>' + secToClock(durationSec);
+  document.getElementById("vwNow").textContent = secToClock(frac*durationSec);
 }
 vwRailTrackEl.addEventListener("pointerdown", (e)=>{
   // A tick or range is a note's own timestamp with its own click handler —
@@ -4560,10 +4596,19 @@ document.getElementById("vwAudioFile").addEventListener("change", async (e)=>{
 // Which of the two sources the widget should present.
 function updateSourceUi(){
   const isAudio = mediaPlayer.kind === "audio";
-  document.getElementById("vwPlayerWrap").style.display = isAudio ? "none" : "";
+  // Hidden for audio, and also when there's no video yet — an empty black
+  // 16:9 rectangle is the single biggest thing in the panel and says nothing.
+  document.getElementById("vwPlayerWrap").style.display = (isAudio || !videoId) ? "none" : "";
   document.getElementById("vwAudioName").style.display = isAudio ? "" : "none";
   document.getElementById("vwAudioName").textContent = audioName || "";
-  document.getElementById("vwHeadLabel").textContent = isAudio ? "Audio" : "Video";
+  document.getElementById("vwPlayPauseBtn").title = isAudio ? "Play/pause the recording" : "Play/pause the video";
+  // With nothing loaded yet there's nothing to collapse to — and the box for
+  // pasting a link lives inside the collapsible half, so staying shut would
+  // hide the only way to set a source. Once there is one, the remembered
+  // preference takes over.
+  const hasSource = isAudio || !!videoId;
+  const canSetSource = document.getElementById("vwUrlRow").style.display !== "none";
+  setPlayerOpen((!hasSource && canSetSource) || playerOpenPreference(), false);
 }
 
 let activeEndSec = null;
@@ -4625,7 +4670,7 @@ vwTrack.addEventListener("click", (e)=>{
 });
 
 function updatePlayPauseIcon(isPlaying){
-  document.getElementById("vwPlayPauseBtn").innerHTML = icon(isPlaying ? "pause" : "play", 14);
+  document.getElementById("vwPlayPauseBtn").innerHTML = icon(isPlaying ? "pause" : "play", 15);
 }
 document.getElementById("vwPlayPauseBtn").addEventListener("click", (e)=>{
   e.stopPropagation();
@@ -4640,7 +4685,7 @@ setInterval(()=>{
   const pct = Math.min(100, Math.max(0, t/durationSec*100));
   vwPlayhead.style.left = pct + "%"; vwPlayhead.style.display = "block";
   vwProgress.style.width = pct + "%";
-  document.getElementById("vwNow").innerHTML = secToClock(t) + '<span class="vw-now-sep">/</span>' + secToClock(durationSec);
+  document.getElementById("vwNow").textContent = secToClock(t);
   if(activeEndSec!=null && t>=activeEndSec){
     mediaPlayer.pause();
     updatePlayPauseIcon(false);
