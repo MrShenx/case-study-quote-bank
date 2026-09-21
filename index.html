@@ -3824,7 +3824,6 @@ async function exportStudyNotesDocx(){
   const originalText = btn.innerHTML;
   btn.disabled = true;
   btn.textContent = "Generating…";
-  const originalPage = currentPage;
   try{
     const docxLib = await import("https://cdn.jsdelivr.net/npm/docx@8/build/index.mjs");
     const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, ShadingType, AlignmentType, VerticalAlign, ImageRun, LevelFormat, BorderStyle } = docxLib;
@@ -3844,54 +3843,108 @@ async function exportStudyNotesDocx(){
       });
     }
 
-    // Reuse the app's own render pipeline (main #pdfCanvas) rather than a parallel
-    // pdfDoc.getPage()+render() call — pdf.js hangs forever if a page already
-    // rendered elsewhere gets render() called on it a second time.
-    async function ensurePageShown(pageNum){
-      await waitUntilRenderIdle();
-      if(currentPage !== pageNum){
-        currentPage = pageNum;
-        await renderPage(pageNum);
-        await waitUntilRenderIdle();
-      }
+    // ---- score images ----------------------------------------------------
+    // These used to be cropped out of the on-screen #pdfCanvas, which meant
+    // two things: the exported image was only ever as sharp as whatever zoom
+    // the score happened to be left at, and the crop was a fixed ±10% box
+    // around the note's FIRST barline — so a quote marked bars 1–3 exported
+    // as bar 1 with some of bar 2.
+    //
+    // Both are fixed by doing what the drill does: open our own pdf.js
+    // document, work out the real extent of the marked range with the drill's
+    // own reviseCropFor(), and render the page at a resolution chosen for
+    // print rather than for the screen.
+    // The left column is 3791 twips wide less 100 twips of cell margin each
+    // side — 2.49in, or 239px at Word's 96dpi. 236 fills it with a hair to spare.
+    const DISPLAY_W = 236;  // px in the document
+    const DISPLAY_H = 300;   // px — keeps a tall portrait crop from swallowing the row
+    const OVERSAMPLE = 4;    // pixels captured per pixel displayed: ~380 dpi on the page
+    const MAX_SCALE = 14;   // a very tight crop would otherwise ask for an absurd zoom
+
+    async function openExportPdf(){
+      const rec = await dbGet(PDF_STORE, currentProjectId);
+      if(!rec || !rec.blob) return null;
+      return await pdfjsLib.getDocument({ data: await rec.blob.arrayBuffer() }).promise;
     }
 
-    async function captureBarImage(note){
-      if(!note.startBarId || !pdfDoc) return null;
+    // The crop for one note, in page fractions, or null when it has no bar.
+    function cropForNote(note){
+      if(!note.startBarId) return null;
+      const marker = findMarkerById(note.startBarId);
+      if(!marker) return null;
+      const page = note.startPage || 1;
+      return {
+        page,
+        ...reviseCropFor({ marker, note, page, pageMarkers: markersByPage[page] || [] })
+      };
+    }
+
+    // Renders one image per note. Each render targets a canvas the size of the
+    // crop itself — pdf.js is given the full-page viewport and a translation,
+    // so it rasterises only what lands inside that canvas. Rendering the whole
+    // page and then cutting a piece out would need an enormous intermediate
+    // for a tight crop (a single bar at this density is a ~4000x6000 page),
+    // which is past what Safari on an iPad will allocate — it silently hands
+    // back a blank canvas rather than failing.
+    async function captureAllBarImages(allNotes){
+      const images = new Map();
+      const pdf = await openExportPdf();
+      if(!pdf) return images;   // no score on this device — every note falls back to text
       try{
-        const startMarker = findMarkerById(note.startBarId);
-        if(!startMarker) return null;
-        const endMarker = note.endBarId ? findMarkerById(note.endBarId) : null;
-        await ensurePageShown(note.startPage || 1);
-        const pageCanvas = document.getElementById("pdfCanvas");
+        const wanted = [];
+        allNotes.forEach(note=>{
+          const c = cropForNote(note);
+          if(c) wanted.push({ note, page: c.page, crop: c.crop });
+        });
+        wanted.sort((a,b)=> a.page - b.page);   // one getPage() per page, in order
 
-        // endMarker's xFrac only means anything if it's on the SAME page we're
-        // cropping from — otherwise it's a coordinate from a different page's
-        // canvas entirely. When the range crosses a page break, show through
-        // to this page's right edge instead of mixing the two coordinate spaces.
-        const endOnSamePage = endMarker && note.endPage === note.startPage;
-        const leftFrac = Math.max(0, startMarker.xFrac - 0.10);
-        const rightFrac = endMarker && !endOnSamePage ? 1 : Math.min(1, (endOnSamePage ? endMarker.xFrac : startMarker.xFrac) + 0.10);
-        const topFrac = Math.max(0, startMarker.yTopFrac - 0.01);
-        const botFrac = Math.min(1, startMarker.yBotFrac + 0.01);
-        const cropX = leftFrac*pageCanvas.width, cropW = Math.max(1, (rightFrac-leftFrac)*pageCanvas.width);
-        const cropY = topFrac*pageCanvas.height, cropH = Math.max(1, (botFrac-topFrac)*pageCanvas.height);
+        let pageNum = null, page = null, raw = null, done = 0;
+        for(const item of wanted){
+          btn.textContent = "Rendering score… (" + (++done) + "/" + wanted.length + ")";
+          try{
+            if(item.page !== pageNum){
+              pageNum = item.page;
+              page = await pdf.getPage(pageNum);
+              raw = page.getViewport({ scale: 1 });
+            }
+            const crop = item.crop;
 
-        const cropCanvas = document.createElement("canvas");
-        cropCanvas.width = Math.ceil(cropW); cropCanvas.height = Math.ceil(cropH);
-        cropCanvas.getContext("2d").drawImage(pageCanvas, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+            // Display size: fill the column, pulled back if the crop is tall.
+            let dispW = DISPLAY_W, dispH = DISPLAY_W * (crop.h * raw.height) / (crop.w * raw.width);
+            if(dispH > DISPLAY_H){ dispH = DISPLAY_H; dispW = DISPLAY_H * (crop.w * raw.width) / (crop.h * raw.height); }
 
-        const blob = await new Promise(resolve=> cropCanvas.toBlob(resolve, "image/png"));
-        if(!blob) return null;
-        const arrayBuffer = await blob.arrayBuffer();
-        const maxWidthPx = 220; // fits inside the left column with margins
-        const scale = Math.min(1, maxWidthPx/cropCanvas.width);
-        return {
-          data: new Uint8Array(arrayBuffer),
-          width: Math.max(1, Math.round(cropCanvas.width*scale)),
-          height: Math.max(1, Math.round(cropCanvas.height*scale))
-        };
-      }catch(e){ return null; } // a single failed capture falls back to text, never blocks export
+            // Render at exactly the capture resolution — no resampling step at
+            // all, so what Word embeds is what pdf.js drew.
+            let scale = (dispW * OVERSAMPLE) / (crop.w * raw.width);
+            scale = Math.min(scale, MAX_SCALE);
+            const viewport = page.getViewport({ scale });
+
+            const out = document.createElement("canvas");
+            out.width = Math.max(1, Math.round(crop.w * viewport.width));
+            out.height = Math.max(1, Math.round(crop.h * viewport.height));
+            const ctx = out.getContext("2d");
+            ctx.fillStyle = "#fff";   // PDFs with no page fill render transparent
+            ctx.fillRect(0, 0, out.width, out.height);
+            await page.render({
+              canvasContext: ctx,
+              viewport,
+              transform: [1, 0, 0, 1, -crop.x * viewport.width, -crop.y * viewport.height]
+            }).promise;
+
+            const blob = await new Promise(resolve=> out.toBlob(resolve, "image/png"));
+            out.width = out.height = 0;
+            if(!blob) continue;
+            images.set(item.note.id, {
+              data: new Uint8Array(await blob.arrayBuffer()),
+              width: Math.max(1, Math.round(dispW)),
+              height: Math.max(1, Math.round(dispH))
+            });
+          }catch(e){ /* one failed capture falls back to text, never blocks the export */ }
+        }
+      }finally{
+        if(pdf && pdf.destroy){ try{ pdf.destroy(); }catch(e){ /* already gone */ } }
+      }
+      return images;
     }
 
     function exampleCell(imageResult, note){
@@ -3921,14 +3974,12 @@ async function exportStudyNotesDocx(){
       return new TableCell({ width: { size: RIGHT_W, type: WidthType.DXA }, verticalAlign: VerticalAlign.TOP, margins: cellMargins, children });
     }
 
-    let noteBlocksBuilt = 0;
-    const totalNoteBlocks = notes.length;
-    async function buildNoteBlock(note){
-      // image capture re-renders a full page for a large/complex score, which
-      // can take a while — showing progress keeps this from reading as hung
-      noteBlocksBuilt++;
-      btn.textContent = "Generating… (" + noteBlocksBuilt + "/" + totalNoteBlocks + ")";
-      const imageResult = await captureBarImage(note);
+    // Rendering a page is the slow part of this export, so it happens once up
+    // front for every note, and building the document is then instant.
+    const barImages = await captureAllBarImages(notes);
+    btn.textContent = "Generating…";
+    function buildNoteBlock(note){
+      const imageResult = barImages.get(note.id) || null;
       const table = new Table({
         width: { size: LEFT_W+RIGHT_W, type: WidthType.DXA },
         columnWidths: [LEFT_W, RIGHT_W],
@@ -3957,12 +4008,12 @@ async function exportStudyNotesDocx(){
       const groupNotes = notes.filter(n=>n.groupId===g.id);
       if(groupNotes.length===0) continue;
       bodyChildren.push(headingParagraph(g.name));
-      for(const n of groupNotes) (await buildNoteBlock(n)).forEach(el=>bodyChildren.push(el));
+      for(const n of groupNotes) buildNoteBlock(n).forEach(el=>bodyChildren.push(el));
     }
     const ungrouped = notes.filter(n=>n.groupId==null);
     if(ungrouped.length>0){
       if(groups.length>0) bodyChildren.push(headingParagraph("Ungrouped"));
-      for(const n of ungrouped) (await buildNoteBlock(n)).forEach(el=>bodyChildren.push(el));
+      for(const n of ungrouped) buildNoteBlock(n).forEach(el=>bodyChildren.push(el));
     }
     if(bodyChildren.length===0){
       bodyChildren.push(new Paragraph({ children: [ new TextRun("No notes yet — add some analysis notes before exporting.") ] }));
@@ -3992,10 +4043,6 @@ async function exportStudyNotesDocx(){
     console.error("Study notes export failed:", err);
     alert("Couldn't generate the study notes document: " + err.message);
   }finally{
-    if(currentPage !== originalPage){
-      currentPage = originalPage;
-      renderPage(originalPage);
-    }
     btn.disabled = false;
     btn.innerHTML = originalText;
   }
