@@ -98,6 +98,11 @@
   .modal-box h2{margin:0 0 12px;font-size:1rem;}
   .modal-box input[type=text]{width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);margin-bottom:14px;box-sizing:border-box;}
   .modal-actions{display:flex;justify-content:flex-end;gap:8px;}
+  .btn.danger{background:var(--bad);color:#fff;border-color:transparent;font-weight:600;}
+  .btn.danger:hover{filter:brightness(1.06);}
+  #confirmModal .modal-box{width:420px;}
+  #confirmBody{font-size:0.88rem;color:var(--ink-soft);line-height:1.55;margin:-4px 0 16px;}
+  #confirmBody strong{color:var(--ink);}
 
   /* ---------- top bar ---------- */
   #topbar{
@@ -759,6 +764,21 @@
     <div class="modal-actions">
       <button class="btn ghost" id="newProjectCancelBtn">Cancel</button>
       <button class="btn primary" id="newProjectCreateBtn">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- One confirm dialog for anything irreversible. Deliberately not the
+     two-click trash button used for local-only deletes: these destroy work
+     that belongs to students, on a server, so the count goes in front of
+     the teacher before anything happens. -->
+<div id="confirmModal" class="modal-overlay" style="display:none;">
+  <div class="modal-box">
+    <h2 id="confirmTitle">Are you sure?</h2>
+    <p id="confirmBody"></p>
+    <div class="modal-actions">
+      <button class="btn ghost" id="confirmCancelBtn">Cancel</button>
+      <button class="btn danger" id="confirmOkBtn">Delete</button>
     </div>
   </div>
 </div>
@@ -1448,6 +1468,29 @@ function nl2br(str){ return escapeHtml(str).replace(/\n/g,"<br>"); }
 // dialogs can be permanently silenced by the user ("prevent this page from
 // creating additional dialogs"), which then makes deletion silently do
 // nothing with no visible error — this sidesteps that class of bug entirely.
+// A modal confirm that resolves to true/false. armDeleteConfirm's two clicks
+// are fine for a note or a local project, but not for something that erases
+// other people's work off a server — that needs the number in front of the
+// person before they commit to it.
+let confirmResolver = null;
+function askConfirm(title, bodyHtml, okLabel){
+  document.getElementById("confirmTitle").textContent = title;
+  document.getElementById("confirmBody").innerHTML = bodyHtml;
+  document.getElementById("confirmOkBtn").textContent = okLabel || "Delete";
+  document.getElementById("confirmModal").style.display = "flex";
+  return new Promise(resolve=>{ confirmResolver = resolve; });
+}
+function closeConfirm(answer){
+  document.getElementById("confirmModal").style.display = "none";
+  const r = confirmResolver; confirmResolver = null;
+  if(r) r(answer);
+}
+document.getElementById("confirmCancelBtn").addEventListener("click", ()=> closeConfirm(false));
+document.getElementById("confirmOkBtn").addEventListener("click", ()=> closeConfirm(true));
+document.getElementById("confirmModal").addEventListener("click", (e)=>{
+  if(e.target.id === "confirmModal") closeConfirm(false);
+});
+
 function armDeleteConfirm(btn, onConfirmed){
   let timeout = null;
   const original = btn.innerHTML;
@@ -7464,11 +7507,54 @@ async function teacherShowClassList(){
     const card = document.createElement("div");
     card.className = "project-card";
     card.innerHTML =
-      '<div class="project-card-top"><span class="project-name">' + escapeHtml(c.name) + '</span></div>' +
+      '<div class="project-card-top"><span class="project-name">' + escapeHtml(c.name) + '</span>' +
+      '<button class="project-icon-btn del" data-action="delete-class" title="Delete this class and everything in it">' + icon("trash-2",14) + '</button></div>' +
       '<div class="project-meta">Code ' + escapeHtml(c.joinCode) + ' · ' + c.taskCount + ' task' + (c.taskCount===1?"":"s") + '</div>';
     card.addEventListener("click", ()=> teacherOpenClass(c));
+    card.querySelector('[data-action="delete-class"]').addEventListener("click", (e)=>{
+      e.stopPropagation();
+      teacherDeleteClass(c);
+    });
     grid.appendChild(card);
   });
+}
+
+// Deleting a class takes its tasks, its questions, its score PDFs and every
+// student submission on it with it — so the teacher is told how much of that
+// there is, from the server's own count, before they can confirm.
+async function teacherDeleteClass(c){
+  const q = "teacherCode=" + encodeURIComponent(getTeacherCode()) + "&classId=" + encodeURIComponent(c.id);
+  let plan;
+  try{
+    const resp = await fetch("/api/class?" + q + "&dryRun=1", { method: "DELETE" });
+    plan = await resp.json();
+    if(!resp.ok) throw new Error(plan.error || ("Server responded with " + resp.status));
+  }catch(err){
+    alert("Couldn't check what's in this class: " + err.message);
+    return;
+  }
+  const bits = [];
+  bits.push("<strong>" + plan.tasks + "</strong> task" + (plan.tasks===1?"":"s"));
+  bits.push("<strong>" + plan.submissions + "</strong> student submission" + (plan.submissions===1?"":"s"));
+  const ok = await askConfirm(
+    "Delete “" + c.name + "”?",
+    "This permanently deletes the class and everything in it from the server: " +
+    bits.join(" and ") + ", the questions, and the uploaded score PDFs. " +
+    "Students in this class will no longer be able to open their tasks, and the join code " +
+    escapeHtml(c.joinCode) + " will stop working.<br><br>This cannot be undone.",
+    "Delete the class");
+  if(!ok) return;
+  try{
+    const resp = await fetch("/api/class?" + q, { method: "DELETE" });
+    const data = await resp.json();
+    if(!resp.ok) throw new Error(data.error || ("Server responded with " + resp.status));
+    if(data.blobErrors && data.blobErrors.length){
+      console.warn("Score PDFs that could not be deleted:", data.blobErrors);
+    }
+  }catch(err){
+    alert("Couldn't delete the class: " + err.message);
+  }
+  await teacherShowClassList();
 }
 
 async function teacherOpenClass(c){
@@ -7506,7 +7592,8 @@ async function teacherRenderTaskGrid(){
     const card = document.createElement("div");
     card.className = "project-card";
     card.innerHTML =
-      '<div class="project-card-top"><span class="project-name">' + escapeHtml(t.title) + '</span></div>' +
+      '<div class="project-card-top"><span class="project-name">' + escapeHtml(t.title) + '</span>' +
+      '<button class="project-icon-btn del" data-action="delete-task" title="Delete this task, its score and its submissions">' + icon("trash-2",14) + '</button></div>' +
       '<div class="project-meta">' + escapeHtml((t.questionText||"").slice(0,90)) + (t.questionText && t.questionText.length>90 ? "…" : "") + '</div>';
     const viewBtn = document.createElement("button");
     viewBtn.className = "btn";
@@ -7514,8 +7601,42 @@ async function teacherRenderTaskGrid(){
     viewBtn.textContent = "View submissions";
     viewBtn.addEventListener("click", (e)=>{ e.stopPropagation(); teacherOpenSubmissions(t); });
     card.appendChild(viewBtn);
+    const delBtn = card.querySelector('[data-action="delete-task"]');
+    delBtn.addEventListener("click", (e)=>{ e.stopPropagation(); teacherDeleteTask(t); });
     grid.appendChild(card);
   });
+}
+
+// Same contract as deleting a class, one level down: the task, its question,
+// its score PDF and the submissions made on it.
+async function teacherDeleteTask(t){
+  const q = "teacherCode=" + encodeURIComponent(getTeacherCode());
+  const base = "/api/task/" + encodeURIComponent(t.id) + "?" + q;
+  let plan;
+  try{
+    const resp = await fetch(base + "&dryRun=1", { method: "DELETE" });
+    plan = await resp.json();
+    if(!resp.ok) throw new Error(plan.error || ("Server responded with " + resp.status));
+  }catch(err){
+    alert("Couldn't check this task: " + err.message);
+    return;
+  }
+  const ok = await askConfirm(
+    "Delete “" + t.title + "”?",
+    "This permanently deletes the task from the server — its question, its uploaded score PDF, " +
+    "and <strong>" + plan.submissions + "</strong> student submission" + (plan.submissions===1?"":"s") +
+    " made on it. Students will no longer be able to open it.<br><br>This cannot be undone.",
+    "Delete the task");
+  if(!ok) return;
+  try{
+    const resp = await fetch(base, { method: "DELETE" });
+    const data = await resp.json();
+    if(!resp.ok) throw new Error(data.error || ("Server responded with " + resp.status));
+    if(data.blobError) console.warn("Score PDF could not be deleted:", data.blobError);
+  }catch(err){
+    alert("Couldn't delete the task: " + err.message);
+  }
+  await teacherRenderTaskGrid();
 }
 
 document.getElementById("newClassBtn").addEventListener("click", ()=>{

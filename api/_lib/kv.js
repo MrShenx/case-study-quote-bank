@@ -74,3 +74,37 @@ export function classKey(id) { return `class:${id}`; }
 export function joinCodeKey(code) { return `joincode:${code.toUpperCase()}`; }
 export function taskKey(id) { return `task:${id}`; }
 export function submissionsKey(taskId) { return `submissions:${taskId}`; }
+
+export function teacherClassesKey(teacherCode) { return `teacherclasses:${teacherCode}`; }
+
+// Deleting a task means deleting everything that hangs off it: the students'
+// submissions, and the score PDF, which lives in Blob storage rather than KV.
+// Blob deletion is best-effort and reported rather than fatal — a PDF that
+// outlives its task is waste, but failing the whole delete over it would
+// leave the task and its submissions in place, which is worse. Returns what
+// it removed so the caller can tell the teacher.
+export async function purgeTask(taskId, blobDeleter) {
+  const result = { taskId, submissions: 0, blobDeleted: false, blobError: null };
+  let task = null;
+  try { task = await kv.get(taskKey(taskId)); } catch { /* treat as already gone */ }
+  try {
+    const subs = await kv.get(submissionsKey(taskId));
+    result.submissions = Array.isArray(subs) ? subs.length : 0;
+  } catch { /* count is informational only */ }
+  await kv.del(submissionsKey(taskId));
+  await kv.del(taskKey(taskId));
+  if (task && task.pdfBlobUrl && blobDeleter) {
+    try { await blobDeleter(task.pdfBlobUrl); result.blobDeleted = true; }
+    catch (err) { result.blobError = String(err && err.message || err); }
+  }
+  return result;
+}
+
+// The one place that knows how this project authenticates to Blob storage:
+// OIDC, not a static BLOB_READ_WRITE_TOKEN (see api/task/upload.js for why).
+// The SDK picks the OIDC credential up from the function's environment, so
+// del() needs no token passed by hand.
+export async function deleteBlob(url) {
+  const { del } = await import('@vercel/blob');
+  await del(url);
+}
