@@ -291,7 +291,8 @@
   .bar-num-input{width:44px;padding:4px 6px;font-size:0.78rem;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink);text-align:center;}
   .bar-num-input:disabled{opacity:0.4;cursor:not-allowed;}
   .bar-num-input.invalid{border-color:var(--bad);background:var(--bad-soft);}
-  .section-field{font-size:0.8rem;color:var(--ink);flex:1;min-width:80px;border:none;background:transparent;font-weight:600;}
+  .section-field{font-size:0.8rem;color:var(--ink);flex:1;min-width:80px;font-weight:600;
+    padding:4px 8px;border-radius:6px;border:1px solid var(--line);background:var(--panel);}
   .section-field::placeholder{color:var(--ink-soft);font-weight:400;}
   .note-del{margin-left:auto;font-size:0.72rem;color:var(--bad);background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:6px;display:inline-flex;align-items:center;gap:4px;}
   .note-del.confirm-armed{background:var(--bad);color:#fff;}
@@ -308,12 +309,23 @@
   .field-what{font-family:var(--font-serif);font-size:1.06rem;line-height:1.45;font-weight:600;
     letter-spacing:-0.005em;padding:2px 4px;border-radius:6px;margin-left:-4px;}
   .field-why{font-size:0.92rem;line-height:1.6;color:var(--ink-soft);padding:2px 4px;border-radius:6px;margin-left:-4px;}
-  /* Editable, but only says so when you reach for it — a dashed outline around
-     every field at rest is what made the card look like a form. */
-  [contenteditable="true"].field-what,[contenteditable="true"].field-why,[contenteditable="true"].section-field{cursor:text;white-space:pre-wrap;}
-  [contenteditable="true"].field-what:hover,[contenteditable="true"].field-why:hover{background:var(--bg);}
-  [contenteditable="true"].field-what:focus,[contenteditable="true"].field-why:focus,[contenteditable="true"].section-field:focus{
-    outline:none;background:var(--panel);box-shadow:0 0 0 2px var(--accent-soft),0 0 0 3px var(--accent);}
+  /* These are where the analysis gets typed, so they look like it: a real
+     bordered field at rest, not text that turns out to be editable once you
+     happen to click it. */
+  [contenteditable="true"].field-what,[contenteditable="true"].field-why{
+    cursor:text;white-space:pre-wrap;margin-left:0;padding:8px 10px;
+    border:1px solid var(--line);border-radius:8px;background:var(--panel-2);
+    transition:border-color .14s ease,background .14s ease;}
+  [contenteditable="true"].field-what{min-height:2.2em;}
+  [contenteditable="true"].field-why{min-height:3em;}
+  [contenteditable="true"].field-what:hover,[contenteditable="true"].field-why:hover{border-color:var(--accent);background:var(--panel);}
+  [contenteditable="true"].field-what:focus,[contenteditable="true"].field-why:focus,.section-field:focus{
+    outline:none;background:var(--panel);border-color:var(--accent);
+    box-shadow:0 0 0 3px var(--accent-soft);}
+  /* An empty field says what belongs in it, the way the inputs beside it do. */
+  [contenteditable="true"]:empty::before{content:attr(data-placeholder);color:var(--ink-soft);
+    font-weight:400;font-style:italic;pointer-events:none;}
+  .field-what:empty::before{font-family:var(--font);font-size:0.9rem;font-weight:400;}
   .note-listen{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding-top:8px;border-top:1px dashed var(--line);}
   .ts-input{width:82px;padding:5px 9px;font-size:0.8rem;border-radius:8px;border:1px solid var(--line);background:var(--panel);}
   .link-btn{font-size:0.78rem;padding:5px 11px;border-radius:999px;border:1px solid var(--line);background:var(--panel);cursor:pointer;display:inline-flex;align-items:center;gap:4px;}
@@ -1594,6 +1606,9 @@ function migrateNote(n){
   if(n.startSec===undefined) n.startSec = n.timestampSec!==undefined ? n.timestampSec : null;
   if(n.endSec===undefined) n.endSec = null;
   if(n.groupId===undefined) n.groupId = null;
+  // A note saved before the section field existed renders its value straight
+  // into the input, so without this the box reads "undefined".
+  if(n.section===undefined || n.section===null) n.section = "";
   return n;
 }
 
@@ -2237,7 +2252,9 @@ function loadPdfBlob(blobOrFile, name, fromStorage, isReplacing){
       document.getElementById("zoomResetBtn").disabled = false;
       zoomLevel = 1.0;
       updateZoomLabel();
-      document.getElementById("topStatus").textContent = name + " · " + numPages + " page" + (numPages===1?"":"s");
+      // Deliberately blank: the file name and page count were only ever
+      // restating what the page navigator and the project title already say.
+      document.getElementById("topStatus").textContent = "";
       if(!fromStorage){
         currentProjectPdfName = name;
         persistPdfBlob(blobOrFile);
@@ -3570,11 +3587,13 @@ function buildNoteCard(n){
       </div>
       <div>
         <span class="field-label">What (compositional / theoretical / notational)</span>
-        <div class="field-what" contenteditable="true" data-field="what">${nl2br(n.what)}</div>
+        <div class="field-what" contenteditable="true" data-field="what"
+          data-placeholder="What is actually happening here — the technique, the notation, the device?">${nl2br(n.what)}</div>
       </div>
       <div>
         <span class="field-label">Why (effect)</span>
-        <div class="field-why" contenteditable="true" data-field="why">${nl2br(n.why)}</div>
+        <div class="field-why" contenteditable="true" data-field="why"
+          data-placeholder="What effect does it create, and why does the composer do it?">${nl2br(n.why)}</div>
       </div>
       <div class="note-concepts">
         <span class="field-label" style="margin:0;">Concepts</span>
@@ -3875,7 +3894,9 @@ async function exportStudyNotesDocx(){
       const page = note.startPage || 1;
       return {
         page,
-        ...reviseCropFor({ marker, note, page, pageMarkers: markersByPage[page] || [] })
+        // tight: the image is the marked boundary itself — the system band for
+        // bars, the dragged box for a section — not the drill's padded view.
+        ...reviseCropFor({ marker, note, page, pageMarkers: markersByPage[page] || [] }, { tight: true })
       };
     }
 
@@ -6936,7 +6957,14 @@ async function reviseLoadScorePdf(pieceId){
 // system, so it's worked out per system: each system the range touches
 // contributes one highlighted segment, and the crop is their bounding box.
 // Returns { crop:{x,y,w,h}, segments:[{x0,y0,x1,y1}] }, all page fractions.
-function reviseCropFor(item){
+//
+// opts.tight drops the breathing room. On screen a drill card wants air around
+// the excerpt; a study-notes document wants the marked boundary itself — the
+// system band the bars sit in (a bar marker inherits its system's yTopFrac and
+// yBotFrac when it's placed), or, for a section, exactly the box that was
+// dragged round it.
+function reviseCropFor(item, opts){
+  const tight = !!(opts && opts.tight);
   const m = item.marker;
   const note = item.note;
 
@@ -6984,14 +7012,21 @@ function reviseCropFor(item){
 
   let x0 = Math.min(...segments.map(s=> s.x0)), x1 = Math.max(...segments.map(s=> s.x1));
   let y0 = Math.min(...segments.map(s=> s.y0)), y1 = Math.max(...segments.map(s=> s.y1));
-  // Air either side, and more above/below so staves aren't cut flush. The
-  // vertical pad follows one system's height, not the whole multi-system span.
-  const sysH = Math.min(...segments.map(s=> s.y1 - s.y0));
-  const padX = 0.02, padY = Math.max(0.02, sysH * 0.35);
-  x0 = Math.max(0, x0 - padX); x1 = Math.min(1, x1 + padX);
-  y0 = Math.max(0, y0 - padY); y1 = Math.min(1, y1 + padY);
-  if(x1 - x0 < 0.08){ const c=(x0+x1)/2; x0 = Math.max(0, c-0.04); x1 = Math.min(1, c+0.04); }
-  if(y1 - y0 < 0.06){ const c=(y0+y1)/2; y0 = Math.max(0, c-0.03); y1 = Math.min(1, c+0.03); }
+  if(!tight){
+    // Air either side, and more above/below so staves aren't cut flush. The
+    // vertical pad follows one system's height, not the whole multi-system span.
+    const sysH = Math.min(...segments.map(s=> s.y1 - s.y0));
+    const padX = 0.02, padY = Math.max(0.02, sysH * 0.35);
+    x0 = Math.max(0, x0 - padX); x1 = Math.min(1, x1 + padX);
+    y0 = Math.max(0, y0 - padY); y1 = Math.min(1, y1 + padY);
+    if(x1 - x0 < 0.08){ const c=(x0+x1)/2; x0 = Math.max(0, c-0.04); x1 = Math.min(1, c+0.04); }
+    if(y1 - y0 < 0.06){ const c=(y0+y1)/2; y0 = Math.max(0, c-0.03); y1 = Math.min(1, c+0.03); }
+  } else {
+    // Only guard against a degenerate box, which would be a zero-width canvas;
+    // 0.2% of a page is far below anything anyone could have drawn on purpose.
+    if(x1 - x0 < 0.002) x1 = Math.min(1, x0 + 0.002);
+    if(y1 - y0 < 0.002) y1 = Math.min(1, y0 + 0.002);
+  }
   return { crop:{ x:x0, y:y0, w:x1-x0, h:y1-y0 }, segments };
 }
 
