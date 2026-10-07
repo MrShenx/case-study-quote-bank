@@ -8,6 +8,7 @@
 import { randomUUID } from 'node:crypto';
 import { kv, noKvResponse, ID_RE, MAX_BYTES, byteSize, readJsonBody,
          classKey, taskKey } from '../_lib/kv.js';
+import { requireAdmin } from '../_lib/auth.js';
 
 export default async function handler(req, res) {
   if (!kv) { noKvResponse(res); return; }
@@ -20,13 +21,11 @@ export default async function handler(req, res) {
   const body = await readJsonBody(req, res);
   if (body === undefined) return;
 
-  const { teacherCode, classId, title, questionText, videoId, pdfBlobUrl, pdfName,
+  const teacherCode = await requireAdmin(req, res, body);
+  if (!teacherCode) return;
+  const { classId, title, questionText, videoId, pdfBlobUrl, pdfName,
           markersByPage, pageSystems, groups, barCounter } = body;
 
-  if (typeof teacherCode !== 'string' || !ID_RE.test(teacherCode)) {
-    res.status(400).json({ error: 'Missing or invalid teacherCode.' });
-    return;
-  }
   if (typeof classId !== 'string' || !ID_RE.test(classId)) {
     res.status(400).json({ error: 'Missing or invalid classId.' });
     return;

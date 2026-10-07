@@ -20,6 +20,7 @@
 import { issueSignedToken } from '@vercel/blob';
 import { handleUploadPresigned } from '@vercel/blob/client';
 import { ID_RE } from '../_lib/kv.js';
+import { passphraseConfigured, verifyToken } from '../_lib/auth.js';
 
 export default async function handler(request, response) {
   const body = request.body;
@@ -27,10 +28,19 @@ export default async function handler(request, response) {
     const jsonResponse = await handleUploadPresigned({
       body,
       request,
+      // This hands out a signed token that can write a 25MB file into the
+      // project's Blob store, so it needs the same proof as everything else
+      // on the teacher side. It used to accept any well-formed teacher code,
+      // which the browser generates for itself — meaning anyone at all could
+      // upload. The token travels in clientPayload because the Blob client
+      // helper builds this request itself and won't carry custom headers.
       getSignedToken: async (pathname, clientPayload) => {
-        let teacherCode = null;
-        try { teacherCode = JSON.parse(clientPayload || '{}').teacherCode; } catch { /* ignore */ }
-        if (typeof teacherCode !== 'string' || !ID_RE.test(teacherCode)) {
+        let payload = {};
+        try { payload = JSON.parse(clientPayload || '{}'); } catch { /* ignore */ }
+        if (passphraseConfigured()) {
+          const claims = await verifyToken(payload.token);
+          if (!claims || claims.role !== 'admin') throw new Error('Teacher sign-in required.');
+        } else if (typeof payload.teacherCode !== 'string' || !ID_RE.test(payload.teacherCode)) {
           throw new Error('Missing or invalid teacherCode.');
         }
         return {

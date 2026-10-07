@@ -9,6 +9,7 @@
 import { randomUUID } from 'node:crypto';
 import { kv, noKvResponse, ID_RE, MAX_BYTES, byteSize, readJsonBody,
          classKey, taskKey, submissionsKey } from '../../_lib/kv.js';
+import { requireAdmin, isClassMember, clientIp, rateLimit } from '../../_lib/auth.js';
 
 export default async function handler(req, res) {
   if (!kv) { noKvResponse(res); return; }
@@ -20,11 +21,8 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'GET') {
-    const teacherCode = req.query && req.query.teacherCode;
-    if (typeof teacherCode !== 'string' || !ID_RE.test(teacherCode)) {
-      res.status(400).json({ error: 'Missing or invalid teacherCode.' });
-      return;
-    }
+    const teacherCode = await requireAdmin(req, res);
+    if (!teacherCode) return;
     let task, classRec;
     try {
       task = await kv.get(taskKey(id));
@@ -53,13 +51,20 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'POST') {
+    // A task id used to be enough to post into a class. It isn't now: the
+    // sender has to prove they are in the class, and no one address can post
+    // more than twenty times an hour, so the list can't be flooded until it
+    // hits the size cap and locks the real class out.
+    if (!(await rateLimit(res, 'submit', clientIp(req), 20, 3600))) return;
+
     const body = await readJsonBody(req, res);
     if (body === undefined) return;
 
-    const { displayName, questionText, paragraphs, selfCheckResult } = body;
-    let task;
+    const { displayName, studentId, questionText, paragraphs, selfCheckResult } = body;
+    let task, classRec;
     try {
       task = await kv.get(taskKey(id));
+      if (task) classRec = await kv.get(classKey(task.classId));
     } catch (err) {
       console.error('KV get failed:', err);
       res.status(500).json({ error: 'Could not submit right now. Please try again.' });
@@ -69,10 +74,18 @@ export default async function handler(req, res) {
       res.status(404).json({ error: 'This task no longer exists.' });
       return;
     }
+    if (!(await isClassMember(req, classRec, task.classId))) {
+      res.status(403).json({ error: 'Join this class with your class code before submitting.' });
+      return;
+    }
 
     const submission = {
       id: randomUUID(),
       displayName: (typeof displayName === 'string' ? displayName : '').trim().slice(0, 80) || 'Anonymous',
+      // Stable per browser, so a teacher can tell two submissions from the
+      // same student apart from two students who typed the same name. Not an
+      // identity check: without a roster the name is still self-asserted.
+      studentId: typeof studentId === 'string' && ID_RE.test(studentId) ? studentId : null,
       questionText: typeof questionText === 'string' ? questionText.slice(0, 4000) : '',
       paragraphs: Array.isArray(paragraphs) ? paragraphs.slice(0, 20) : [],
       selfCheckResult: selfCheckResult && typeof selfCheckResult === 'object' ? selfCheckResult : null,

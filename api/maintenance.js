@@ -19,12 +19,15 @@
 // question this endpoint can answer about them, and guessing would destroy a
 // student's only remaining copy of their work.
 //
-// Auth is the same teacher code used everywhere else, and it must already own
-// at least one class, so this isn't reachable with a freshly minted code. The
-// report deliberately returns no backup codes or student names — counts only.
+// Admin only: it surveys the whole store, not one teacher's corner of it, so
+// it sits behind the same signed token as the rest of the teacher interface
+// (and, until the passphrase is set, behind the teacher code that owns at
+// least one class, which is what shipped before). The report deliberately
+// returns no backup codes or student names — counts only.
 
 import { kv, noKvResponse, ID_RE, readJsonBody, classKey, taskKey,
          submissionsKey, joinCodeKey, teacherClassesKey, deleteBlob } from './_lib/kv.js';
+import { requireAdmin } from './_lib/auth.js';
 
 async function allKeys(pattern) {
   const out = [];
@@ -127,19 +130,16 @@ export default async function handler(req, res) {
 
   const src = req.method === 'GET' ? (req.query || {}) : ((await readJsonBody(req, res)) || {});
   if (req.method !== 'GET' && src === undefined) return;
-  const teacherCode = src.teacherCode;
-  if (typeof teacherCode !== 'string' || !ID_RE.test(teacherCode)) {
-    res.status(400).json({ error: 'Missing or invalid teacherCode.' });
-    return;
-  }
+  const teacherCode = await requireAdmin(req, res, src);
+  if (!teacherCode) return;
   try {
     if (!(await knownTeacher(teacherCode))) {
-      res.status(403).json({ error: 'That teacher code does not own any classes.' });
+      res.status(403).json({ error: 'That teacher identity does not own any classes.' });
       return;
     }
   } catch (err) {
     console.error('KV get failed:', err);
-    res.status(500).json({ error: 'Could not verify that teacher code.' });
+    res.status(500).json({ error: 'Could not verify that teacher identity.' });
     return;
   }
 

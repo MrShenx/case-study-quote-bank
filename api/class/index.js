@@ -18,16 +18,16 @@ import { randomUUID } from 'node:crypto';
 import { kv, noKvResponse, ID_RE, MAX_BYTES, byteSize, readJsonBody,
          generateJoinCode, classKey, joinCodeKey, teacherClassesKey,
          purgeTask, deleteBlob } from '../_lib/kv.js';
+import { requireAdmin } from '../_lib/auth.js';
 
 export default async function handler(req, res) {
   if (!kv) { noKvResponse(res); return; }
 
   if (req.method === 'GET') {
-    const teacherCode = req.query && req.query.teacherCode;
-    if (typeof teacherCode !== 'string' || !ID_RE.test(teacherCode)) {
-      res.status(400).json({ error: 'Missing or invalid teacherCode.' });
-      return;
-    }
+    // The identity comes from the signed token, never from what the client
+    // claims to be — that is the whole point of the change.
+    const teacherCode = await requireAdmin(req, res);
+    if (!teacherCode) return;
     let classIds;
     try {
       classIds = (await kv.get(teacherClassesKey(teacherCode))) || [];
@@ -59,11 +59,9 @@ export default async function handler(req, res) {
     const body = await readJsonBody(req, res);
     if (body === undefined) return;
 
-    const { teacherCode, name } = body;
-    if (typeof teacherCode !== 'string' || !ID_RE.test(teacherCode)) {
-      res.status(400).json({ error: 'Missing or invalid teacherCode.' });
-      return;
-    }
+    const teacherCode = await requireAdmin(req, res, body);
+    if (!teacherCode) return;
+    const { name } = body;
     const cleanName = (typeof name === 'string' ? name : '').trim().slice(0, 200);
     if (!cleanName) {
       res.status(400).json({ error: 'A class name is required.' });
@@ -108,13 +106,10 @@ export default async function handler(req, res) {
   // to the teacher, so it reports precisely what it removed — and, with
   // dryRun, what it would remove — instead of a bare ok:true.
   if (req.method === 'DELETE') {
-    const teacherCode = req.query && req.query.teacherCode;
+    const teacherCode = await requireAdmin(req, res);
+    if (!teacherCode) return;
     const classId = req.query && req.query.classId;
     const dryRun = !!(req.query && (req.query.dryRun === '1' || req.query.dryRun === 'true'));
-    if (typeof teacherCode !== 'string' || !ID_RE.test(teacherCode)) {
-      res.status(400).json({ error: 'Missing or invalid teacherCode.' });
-      return;
-    }
     if (typeof classId !== 'string' || !ID_RE.test(classId)) {
       res.status(400).json({ error: 'Missing or invalid classId.' });
       return;

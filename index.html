@@ -111,6 +111,23 @@
   .modal-box input[type=text]{width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);margin-bottom:14px;box-sizing:border-box;}
   .modal-actions{display:flex;justify-content:flex-end;gap:8px;}
   .btn.danger{background:var(--bad);color:#fff;border-color:transparent;font-weight:600;}
+  #teacherUnlockBody{font-size:0.86rem;color:var(--ink-soft);line-height:1.5;margin:-4px 0 14px;}
+  #teacherUnlockModal .modal-box{width:380px;}
+  #serverStorageBox{width:460px;}
+  #serverStorageBody{font-size:0.84rem;line-height:1.6;color:var(--ink-soft);margin:-2px 0 14px;}
+  #serverStorageBody strong{color:var(--ink);}
+  #serverStorageBody .ss-row{display:flex;justify-content:space-between;gap:12px;padding:3px 0;}
+  #teacherUnlockInput{width:100%;box-sizing:border-box;}
+  /* The way in for the one person who needs it: present, but not an invitation
+     to the thirty students looking at the same screen. */
+  .teacher-door{margin-top:26px;background:none;border:none;cursor:pointer;font:inherit;
+    font-size:0.78rem;color:var(--ink-soft);display:inline-flex;align-items:center;gap:6px;
+    padding:6px 12px;border-radius:999px;}
+  .teacher-door:hover{color:var(--ink);background:var(--panel-2);}
+  .lock-pill{font-size:0.72rem;font-weight:600;color:var(--good);background:var(--good-soft);
+    padding:3px 10px;border-radius:999px;display:inline-flex;align-items:center;gap:5px;}
+  #teacherSetupWarning{display:none;margin:0 0 14px;padding:10px 14px;border-radius:10px;
+    background:var(--warn-bg);color:var(--warn);font-size:0.82rem;line-height:1.5;}
   .btn.danger:hover{filter:brightness(1.06);}
   #confirmModal .modal-box{width:420px;}
   #confirmBody{font-size:0.88rem;color:var(--ink-soft);line-height:1.55;margin:-4px 0 16px;}
@@ -796,6 +813,32 @@
      two-click trash button used for local-only deletes: these destroy work
      that belongs to students, on a server, so the count goes in front of
      the teacher before anything happens. -->
+<!-- Teacher sign-in. The passphrase is never stored or compared here: it is
+     posted once, checked against a value that exists only in the deployment's
+     environment, and exchanged for a signed token with an expiry. -->
+<div id="serverStorageModal" class="modal-overlay" style="display:none;">
+  <div class="modal-box" id="serverStorageBox">
+    <h2>Server storage</h2>
+    <div id="serverStorageBody"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="serverStorageCloseBtn">Close</button>
+      <button class="btn danger" id="serverStorageSweepBtn" style="display:none;">Delete orphaned records</button>
+    </div>
+  </div>
+</div>
+
+<div id="teacherUnlockModal" class="modal-overlay" style="display:none;">
+  <div class="modal-box">
+    <h2>Teacher sign-in</h2>
+    <p id="teacherUnlockBody">Enter the teacher passphrase to manage classes, tasks and submissions.</p>
+    <input type="password" id="teacherUnlockInput" placeholder="Passphrase" autocomplete="current-password">
+    <div class="modal-actions">
+      <button class="btn ghost" id="teacherUnlockCancelBtn">Cancel</button>
+      <button class="btn primary" id="teacherUnlockGoBtn">Sign in</button>
+    </div>
+  </div>
+</div>
+
 <div id="confirmModal" class="modal-overlay" style="display:none;">
   <div class="modal-box">
     <h2 id="confirmTitle">Are you sure?</h2>
@@ -810,8 +853,9 @@
 <div id="joinClassModal" class="modal-overlay" style="display:none;">
   <div class="modal-box">
     <h2>Join a class</h2>
-    <p style="font-size:0.85rem;color:var(--ink-soft);margin-top:-8px;">Enter the class code your teacher gave you.</p>
-    <input type="text" id="joinClassCodeInput" placeholder="e.g. AB12CD" style="text-transform:uppercase;">
+    <p style="font-size:0.85rem;color:var(--ink-soft);margin-top:-8px;">Enter the class code your teacher gave you, and the name your teacher will know you by.</p>
+    <input type="text" id="joinClassCodeInput" placeholder="Class code, e.g. AB12CD" style="text-transform:uppercase;">
+    <input type="text" id="joinClassNameInput" placeholder="Your name, e.g. Jordan L" style="margin-top:8px;">
     <div class="modal-actions">
       <button class="btn ghost" id="joinClassCancelBtn">Cancel</button>
       <button class="btn primary" id="joinClassConfirmBtn">Find class</button>
@@ -1108,12 +1152,13 @@
         <span class="chooser-title">My classes</span>
         <span class="chooser-desc">Join a class with the code your teacher gave you, then open the tasks set for it.</span>
       </button>
-      <button class="chooser-card" id="teacherNavBtn">
+      <button class="chooser-card" id="teacherNavBtn" style="display:none;">
         <span class="chooser-icon" data-icon="graduation-cap" data-icon-size="26"></span>
         <span class="chooser-title">Teacher</span>
         <span class="chooser-desc">Set up a class, publish a task with its score and question, and read what students submit.</span>
       </button>
     </div>
+    <button class="teacher-door" id="teacherDoorBtn"><span data-icon="lock" data-icon-size="14"></span> Teacher sign-in</button>
   </div>
 </div>
 
@@ -1122,9 +1167,13 @@
     <button class="btn" id="teacherHomeBtn"><span data-icon="arrow-left"></span> Back</button>
     <h1><span data-icon="graduation-cap"></span> Teacher — Classes</h1>
     <div class="spacer"></div>
+    <span class="lock-pill" id="teacherSignedInPill" style="display:none;"><span data-icon="shield-check" data-icon-size="13"></span> Signed in</span>
+    <button class="btn" id="teacherStorageBtn" title="What this app is storing on the server"><span data-icon="database"></span> Server storage</button>
+    <button class="btn" id="teacherLockBtn" title="Sign out of teacher mode"><span data-icon="lock"></span> Lock</button>
     <button class="btn primary" id="newClassBtn">+ New class</button>
   </div>
   <div id="teacherClassListPanel">
+    <div id="teacherSetupWarning"></div>
     <div id="teacherClassGrid"></div>
   </div>
   <div id="teacherClassDetailPanel" style="display:none;">
@@ -2052,8 +2101,15 @@ async function showPractice(){
 }
 document.getElementById("practiceNavBtn").addEventListener("click", showPractice);
 
-function showTeacher(){
+async function showTeacher(){
+  if(unlockConfigured === null) await refreshUnlockConfigured();
+  // unlockConfigured === null means the check itself failed (offline, or the
+  // static preview with no API). Let it through rather than stranding the
+  // teacher behind a door that can't be opened; every server call still
+  // refuses on its own if the lock is really on.
+  if(unlockConfigured === true && !isSignedIn()){ openTeacherUnlock(); return; }
   showView("teacherView");
+  renderTeacherAccessUi();
   teacherShowClassList();
 }
 document.getElementById("teacherNavBtn").addEventListener("click", showTeacher);
@@ -6750,6 +6806,7 @@ function openSelfCheckModal(){
   // picked from QUESTION_POOLS has nowhere to submit to.
   const submitBox = document.getElementById("practiceSubmitBox");
   submitBox.style.display = practiceCurrentResponse.taskId ? "block" : "none";
+  prefillSubmitName();
   document.getElementById("practiceSubmitStatus").textContent = "";
   document.getElementById("practiceCheckModal").style.display = "flex";
 }
@@ -6765,11 +6822,18 @@ document.getElementById("practiceCheckCloseBtn").addEventListener("click", () =>
 document.getElementById("practiceCheckModal").addEventListener("click", (e) => {
   if(e.target.id === "practiceCheckModal") document.getElementById("practiceCheckModal").style.display = "none";
 });
+// The name they gave on joining, so nobody has to retype it every submission
+// (and so a class doesn't end up half "Jordan" and half "jordan l").
+function prefillSubmitName(){
+  const box = document.getElementById("practiceSubmitNameInput");
+  if(box && !box.value) box.value = getStudentName();
+}
 document.getElementById("practiceSubmitBtn").addEventListener("click", async ()=>{
   if(!practiceCurrentResponse || !practiceCurrentResponse.taskId) return;
   const btn = document.getElementById("practiceSubmitBtn");
   const status = document.getElementById("practiceSubmitStatus");
   const displayName = document.getElementById("practiceSubmitNameInput").value.trim();
+  setStudentName(displayName);
   btn.disabled = true;
   status.textContent = "Submitting…";
   try{
@@ -6778,6 +6842,13 @@ document.getElementById("practiceSubmitBtn").addEventListener("click", async ()=
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         displayName,
+        studentId: getStudentId(),
+        // Either of these proves this browser belongs to the class: the token
+        // issued when it joined, or the class code it was given. The second is
+        // the fallback for a student who hasn't refreshed their class list
+        // since membership tokens arrived.
+        classTokens: getJoinedClasses().map(c=>c.classToken).filter(Boolean),
+        joinCodes: getJoinedClasses().map(c=>c.joinCode).filter(Boolean),
         questionText: practiceCurrentResponse.questionText,
         paragraphs: practiceCurrentResponse.paragraphs,
         selfCheckResult: practiceLastCheckResult
@@ -7571,6 +7642,207 @@ function getTeacherCode(){
   return code;
 }
 
+// ---------- teacher sign-in ----------
+// The teacher code above is still what OWNS a class on the server, exactly as
+// before, so nothing already stored has to change. What's new is that the
+// server no longer takes the browser's word for it: every teacher action now
+// carries a token the server itself signed, issued only in exchange for a
+// passphrase that lives in the deployment's environment variables.
+const ADMIN_TOKEN_KEY = "score_studio_admin_token";
+let adminAuth = null;          // { token, expiresAt }
+let unlockConfigured = null;   // null until the server has been asked
+
+function loadAdminAuth(){
+  try{
+    const raw = JSON.parse(localStorage.getItem(ADMIN_TOKEN_KEY) || "null");
+    adminAuth = (raw && raw.token && raw.expiresAt > Date.now()) ? raw : null;
+  }catch(e){ adminAuth = null; }
+  return adminAuth;
+}
+function saveAdminAuth(a){
+  adminAuth = a;
+  try{
+    if(a) localStorage.setItem(ADMIN_TOKEN_KEY, JSON.stringify(a));
+    else localStorage.removeItem(ADMIN_TOKEN_KEY);
+  }catch(e){ /* private mode: the session just won't outlive the tab */ }
+  renderTeacherAccessUi();
+}
+function isSignedIn(){
+  return !!(adminAuth && adminAuth.expiresAt > Date.now());
+}
+function teacherHeaders(extra){
+  const h = Object.assign({}, extra || {});
+  if(isSignedIn()) h["x-admin-token"] = adminAuth.token;
+  return h;
+}
+// Every teacher-side request goes through here so that one expired session is
+// handled in one place rather than in nine.
+async function teacherFetch(url, opts){
+  const o = Object.assign({}, opts || {});
+  o.headers = teacherHeaders(o.headers);
+  const resp = await fetch(url, o);
+  if(resp.status === 401){
+    saveAdminAuth(null);
+    showView("classHubView");
+    openTeacherUnlock("Your teacher session has expired. Sign in again to carry on.");
+    throw new Error("Teacher session expired.");
+  }
+  return resp;
+}
+
+async function refreshUnlockConfigured(){
+  try{
+    const resp = await fetch("/api/teacher/unlock");
+    unlockConfigured = resp.ok ? !!(await resp.json()).configured : null;
+  }catch(e){ unlockConfigured = null; }
+  renderTeacherAccessUi();
+  return unlockConfigured;
+}
+
+// One place decides what a visitor is allowed to see of the teacher side.
+function renderTeacherAccessUi(){
+  const card = document.getElementById("teacherNavBtn");
+  const door = document.getElementById("teacherDoorBtn");
+  const pill = document.getElementById("teacherSignedInPill");
+  const warn = document.getElementById("teacherSetupWarning");
+  const signedIn = isSignedIn();
+  // With no passphrase set on the deployment there is nothing to sign in to
+  // yet, so the card stays where it was rather than locking the teacher out
+  // of their own classes.
+  const open = signedIn || unlockConfigured === false;
+  if(card) card.style.display = open ? "" : "none";
+  if(door) door.style.display = open ? "none" : "";
+  if(pill) pill.style.display = signedIn ? "" : "none";
+  if(warn){
+    // "block", not "": the rule that hides this banner lives in the
+    // stylesheet, so clearing the inline style would re-hide it.
+    warn.style.display = unlockConfigured === false ? "block" : "none";
+    warn.innerHTML = icon("triangle-alert",14) +
+      " <strong>This teacher area isn't locked yet.</strong> Anyone who opens this site can see it. " +
+      "Set <code>TEACHER_PASSPHRASE</code> in the Vercel dashboard (Settings \u2192 Environment Variables), " +
+      "redeploy, then sign in here once \u2014 your existing classes come with you.";
+  }
+}
+
+function openTeacherUnlock(message){
+  document.getElementById("teacherUnlockBody").textContent = message ||
+    "Enter the teacher passphrase to manage classes, tasks and submissions.";
+  document.getElementById("teacherUnlockInput").value = "";
+  document.getElementById("teacherUnlockModal").style.display = "flex";
+  setTimeout(()=> document.getElementById("teacherUnlockInput").focus(), 30);
+}
+function closeTeacherUnlock(){
+  document.getElementById("teacherUnlockModal").style.display = "none";
+  document.getElementById("teacherUnlockInput").value = "";
+}
+async function submitTeacherUnlock(){
+  const input = document.getElementById("teacherUnlockInput");
+  const btn = document.getElementById("teacherUnlockGoBtn");
+  const pass = input.value;
+  if(!pass) return;
+  btn.disabled = true; btn.textContent = "Checking…";
+  try{
+    const resp = await fetch("/api/teacher/unlock", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      // The code this browser already uses, so the first sign-in adopts the
+      // classes that exist today instead of starting a second, empty identity.
+      body: JSON.stringify({ passphrase: pass, adoptTeacherCode: getTeacherCode() })
+    });
+    const data = await resp.json().catch(()=>({}));
+    if(!resp.ok) throw new Error(data.error || ("Server responded with " + resp.status));
+    saveAdminAuth({ token: data.token, expiresAt: data.expiresAt });
+    if(data.teacherCode) localStorage.setItem("score_studio_teacher_code", data.teacherCode);
+    unlockConfigured = true;
+    closeTeacherUnlock();
+    showTeacher();
+  }catch(err){
+    document.getElementById("teacherUnlockBody").textContent = err.message;
+    input.value = "";
+    input.focus();
+  }finally{
+    btn.disabled = false; btn.textContent = "Sign in";
+  }
+}
+document.getElementById("teacherUnlockGoBtn").addEventListener("click", submitTeacherUnlock);
+document.getElementById("teacherUnlockCancelBtn").addEventListener("click", closeTeacherUnlock);
+document.getElementById("teacherUnlockInput").addEventListener("keydown", (e)=>{
+  if(e.key === "Enter") submitTeacherUnlock();
+  if(e.key === "Escape") closeTeacherUnlock();
+});
+document.getElementById("teacherUnlockModal").addEventListener("click", (e)=>{
+  if(e.target.id === "teacherUnlockModal") closeTeacherUnlock();
+});
+document.getElementById("teacherDoorBtn").addEventListener("click", async ()=>{
+  if(unlockConfigured === null) await refreshUnlockConfigured();
+  if(isSignedIn() || unlockConfigured === false) showTeacher();
+  else openTeacherUnlock();
+});
+// What the deployment is holding, read straight from the server rather than
+// from anything cached here. Admin-only, like the endpoint behind it.
+async function showServerStorage(){
+  const body = document.getElementById("serverStorageBody");
+  const sweep = document.getElementById("serverStorageSweepBtn");
+  sweep.style.display = "none";
+  body.textContent = "Reading…";
+  document.getElementById("serverStorageModal").style.display = "flex";
+  let report;
+  try{
+    const resp = await teacherFetch("/api/maintenance?teacherCode=" + encodeURIComponent(getTeacherCode()));
+    const data = await resp.json();
+    if(!resp.ok) throw new Error(data.error || ("Server responded with " + resp.status));
+    report = data.report;
+  }catch(err){
+    body.innerHTML = '<div style="color:var(--bad);">' + escapeHtml(err.message) + '</div>';
+    return;
+  }
+  const o = report.orphans;
+  const orphanTotal = o.tasks.length + o.submissions.length + o.joinCodes.length + o.blobs.length;
+  const row = (k,v)=> '<div class="ss-row"><span>'+k+'</span><strong>'+v+'</strong></div>';
+  body.innerHTML =
+    row("Classes", report.live.classes) +
+    row("Tasks", report.live.tasks) +
+    row("Student submissions", report.live.submissions) +
+    row("Score PDFs", report.live.scorePdfs) +
+    row("Student cloud backups", report.studentCloudBackups) +
+    '<div class="ss-row" style="border-top:1px solid var(--line);margin-top:8px;padding-top:8px;">' +
+      '<span>Orphaned records</span><strong>' + orphanTotal + '</strong></div>' +
+    '<p style="margin:10px 0 0;font-size:0.78rem;">Cloud backups are counted but never swept: the server ' +
+    'cannot tell whether a student still has that project on their device.</p>';
+  if(orphanTotal > 0){
+    sweep.style.display = "";
+    sweep.onclick = async ()=>{
+      const ok = await askConfirm("Delete orphaned records?",
+        "This removes <strong>" + orphanTotal + "</strong> record" + (orphanTotal===1?"":"s") +
+        " that nothing points at any more — tasks whose class is gone, submissions whose task is gone, " +
+        "dead join codes and unreferenced score PDFs. Nothing reachable from a class is touched.",
+        "Delete them");
+      if(!ok) return;
+      try{
+        const resp = await teacherFetch("/api/maintenance", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ teacherCode: getTeacherCode(), confirm: true })
+        });
+        const data = await resp.json();
+        if(!resp.ok) throw new Error(data.error || ("Server responded with " + resp.status));
+      }catch(err){ alert("Sweep failed: " + err.message); }
+      showServerStorage();
+    };
+  }
+}
+document.getElementById("teacherStorageBtn").addEventListener("click", showServerStorage);
+document.getElementById("serverStorageCloseBtn").addEventListener("click", ()=>{
+  document.getElementById("serverStorageModal").style.display = "none";
+});
+document.getElementById("serverStorageModal").addEventListener("click", (e)=>{
+  if(e.target.id === "serverStorageModal") document.getElementById("serverStorageModal").style.display = "none";
+});
+
+document.getElementById("teacherLockBtn").addEventListener("click", ()=>{
+  saveAdminAuth(null);
+  showClassHub();
+});
+
 let teacherClasses = [];
 let teacherSelectedClass = null; // {id, name, joinCode, taskCount, createdAt}
 let teacherSelectedClassTasks = [];
@@ -7580,7 +7852,7 @@ async function teacherShowClassList(){
   document.getElementById("teacherClassDetailPanel").style.display = "none";
   document.getElementById("teacherClassGrid").innerHTML = "<div style=\"color:var(--ink-soft);\">Loading your classes…</div>";
   try{
-    const resp = await fetch("/api/class?teacherCode=" + encodeURIComponent(getTeacherCode()));
+    const resp = await teacherFetch("/api/class?teacherCode=" + encodeURIComponent(getTeacherCode()));
     if(!resp.ok) throw new Error((await resp.json().catch(()=>({}))).error || "Server error");
     const data = await resp.json();
     teacherClasses = data.classes || [];
@@ -7620,7 +7892,7 @@ async function teacherDeleteClass(c){
   const q = "teacherCode=" + encodeURIComponent(getTeacherCode()) + "&classId=" + encodeURIComponent(c.id);
   let plan;
   try{
-    const resp = await fetch("/api/class?" + q + "&dryRun=1", { method: "DELETE" });
+    const resp = await teacherFetch("/api/class?" + q + "&dryRun=1", { method: "DELETE" });
     plan = await resp.json();
     if(!resp.ok) throw new Error(plan.error || ("Server responded with " + resp.status));
   }catch(err){
@@ -7639,7 +7911,7 @@ async function teacherDeleteClass(c){
     "Delete the class");
   if(!ok) return;
   try{
-    const resp = await fetch("/api/class?" + q, { method: "DELETE" });
+    const resp = await teacherFetch("/api/class?" + q, { method: "DELETE" });
     const data = await resp.json();
     if(!resp.ok) throw new Error(data.error || ("Server responded with " + resp.status));
     if(data.blobErrors && data.blobErrors.length){
@@ -7708,7 +7980,7 @@ async function teacherDeleteTask(t){
   const base = "/api/task/" + encodeURIComponent(t.id) + "?" + q;
   let plan;
   try{
-    const resp = await fetch(base + "&dryRun=1", { method: "DELETE" });
+    const resp = await teacherFetch(base + "&dryRun=1", { method: "DELETE" });
     plan = await resp.json();
     if(!resp.ok) throw new Error(plan.error || ("Server responded with " + resp.status));
   }catch(err){
@@ -7723,7 +7995,7 @@ async function teacherDeleteTask(t){
     "Delete the task");
   if(!ok) return;
   try{
-    const resp = await fetch(base, { method: "DELETE" });
+    const resp = await teacherFetch(base, { method: "DELETE" });
     const data = await resp.json();
     if(!resp.ok) throw new Error(data.error || ("Server responded with " + resp.status));
     if(data.blobError) console.warn("Score PDF could not be deleted:", data.blobError);
@@ -7750,7 +8022,7 @@ document.getElementById("newClassCreateBtn").addEventListener("click", async ()=
   const btn = document.getElementById("newClassCreateBtn");
   btn.disabled = true;
   try{
-    const resp = await fetch("/api/class", {
+    const resp = await teacherFetch("/api/class", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ teacherCode: getTeacherCode(), name })
@@ -7800,7 +8072,7 @@ async function uploadTaskPdf(file, teacherCode){
   const blob = await uploadPresigned(file.name, file, {
     access: "public",
     handleUploadUrl: "/api/task/upload",
-    clientPayload: JSON.stringify({ teacherCode })
+    clientPayload: JSON.stringify({ teacherCode, token: adminAuth && adminAuth.token })
   });
   return blob.url;
 }
@@ -7824,7 +8096,7 @@ document.getElementById("newTaskCreateBtn").addEventListener("click", async ()=>
     const pdfBlobUrl = await uploadTaskPdf(pdfFile, teacherCode);
 
     status.textContent = "Saving task…";
-    const resp = await fetch("/api/task", {
+    const resp = await teacherFetch("/api/task", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -7862,7 +8134,7 @@ document.getElementById("publishTaskBtn").addEventListener("click", async ()=>{
   btn.disabled = true;
   btn.textContent = "Publishing…";
   try{
-    const putResp = await fetch("/api/task/" + encodeURIComponent(currentTaskId), {
+    const putResp = await teacherFetch("/api/task/" + encodeURIComponent(currentTaskId), {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -7926,7 +8198,7 @@ async function teacherOpenSubmissions(task){
   document.getElementById("submissionsModal").style.display = "flex";
   let submissions;
   try{
-    const resp = await fetch("/api/task/" + encodeURIComponent(task.id) + "/submissions?teacherCode=" + encodeURIComponent(getTeacherCode()));
+    const resp = await teacherFetch("/api/task/" + encodeURIComponent(task.id) + "/submissions?teacherCode=" + encodeURIComponent(getTeacherCode()));
     if(!resp.ok) throw new Error((await resp.json().catch(()=>({}))).error || "Server error");
     submissions = (await resp.json()).submissions || [];
   }catch(err){
@@ -7979,10 +8251,35 @@ function getJoinedClasses(){
 function saveJoinedClasses(list){
   localStorage.setItem("score_studio_joined_classes", JSON.stringify(list));
 }
+// Merges rather than skips: a class joined before membership tokens existed
+// has to be able to pick one up on its next refresh, silently, without the
+// student re-entering anything.
 function addJoinedClass(cls){
   const list = getJoinedClasses();
-  if(!list.some(c=>c.classId===cls.classId)) list.push(cls);
+  const existing = list.find(c=>c.classId===cls.classId);
+  if(existing) Object.assign(existing, cls);
+  else list.push(cls);
   saveJoinedClasses(list);
+}
+function rememberClassToken(classId, token){
+  if(!classId || !token) return;
+  const list = getJoinedClasses();
+  const cls = list.find(c=>c.classId===classId);
+  if(cls && cls.classToken !== token){ cls.classToken = token; saveJoinedClasses(list); }
+}
+// Who is submitting. The name is the student's own to type — without a roster
+// there is nothing to check it against — but the id is stable per browser, so
+// a teacher can tell one student's two attempts from two students who happen
+// to share a first name.
+function getStudentId(){
+  let id = localStorage.getItem("score_studio_student_id");
+  if(!id){ id = uid() + uid(); localStorage.setItem("score_studio_student_id", id); }
+  return id;
+}
+function getStudentName(){ return localStorage.getItem("score_studio_student_name") || ""; }
+function setStudentName(name){
+  const clean = (name || "").trim().slice(0, 80);
+  if(clean) localStorage.setItem("score_studio_student_name", clean);
 }
 
 function myClassesShowList(){
@@ -8022,7 +8319,11 @@ async function myClassesRenderTaskGrid(cls){
   try{
     const resp = await fetch("/api/class/" + encodeURIComponent(cls.joinCode));
     if(!resp.ok) throw new Error((await resp.json().catch(()=>({}))).error || "Server error");
-    tasks = (await resp.json()).tasks || [];
+    const data = await resp.json();
+    tasks = data.tasks || [];
+    // Silent self-heal: a student who joined before membership tokens existed
+    // gets one here, so submitting keeps working with nothing to re-enter.
+    rememberClassToken(cls.classId, data.classToken);
   }catch(err){
     grid.innerHTML = "<div style=\"color:var(--bad);\">Couldn't load tasks: " + escapeHtml(err.message) + "</div>";
     return;
@@ -8108,8 +8409,10 @@ async function joinClassLookup(){
     const resp = await fetch("/api/class/" + encodeURIComponent(code));
     if(!resp.ok) throw new Error((await resp.json().catch(()=>({}))).error || "Server error");
     const data = await resp.json();
-    const cls = { classId: data.classId, joinCode: code.toUpperCase(), className: data.className };
+    const cls = { classId: data.classId, joinCode: code.toUpperCase(), className: data.className,
+                  classToken: data.classToken || null };
     addJoinedClass(cls);
+    setStudentName(document.getElementById("joinClassNameInput").value);
     document.getElementById("joinClassModal").style.display = "none";
     showMyClasses();
     myClassesOpenClass(cls);
@@ -8131,6 +8434,9 @@ document.getElementById("joinClassCodeInput").addEventListener("keydown", (e)=>{
   renderModePicker();
   applyTheme();
   await migrateOldSingleProjectData();
+  loadAdminAuth();
+  renderTeacherAccessUi();
+  refreshUnlockConfigured();   // not awaited: the start screen shouldn't wait on the network
   showChooser();
   // Backups whose delete couldn't be sent last time (offline, server down).
   // Not awaited: the app is usable immediately, and the queue keeps until it
