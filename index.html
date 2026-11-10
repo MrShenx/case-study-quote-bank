@@ -3862,11 +3862,31 @@ function onEditableKeydown(e){
   range.deleteContents();
   const br = document.createElement("br");
   range.insertNode(br);
+  // A <br> with nothing after it isn't drawn as a new line — browsers only
+  // render a trailing break once something follows it — so the first Enter
+  // at the end of a field seemed to do nothing and it took a second press.
+  // A placeholder break after it gives the caret a real empty line to sit
+  // on; the blur handler's trim() drops it when the text is saved.
+  if(!hasContentAfter(br, e.currentTarget)){
+    br.parentNode.insertBefore(document.createElement("br"), br.nextSibling);
+  }
   range.setStartAfter(br);
   range.setEndAfter(br);
   range.collapse(true);
   sel.removeAllRanges();
   sel.addRange(range);
+}
+
+// Whether anything that takes up a line (text or another break) comes after
+// `node` inside `root`.
+function hasContentAfter(node, root){
+  for(let n = node; n && n !== root; n = n.parentNode){
+    for(let s = n.nextSibling; s; s = s.nextSibling){
+      if(s.nodeName === "BR" || (s.textContent && s.textContent.length)) return true;
+      if(s.nodeType === 1 && s.querySelector("br")) return true;
+    }
+  }
+  return false;
 }
 
 // =====================================================================
