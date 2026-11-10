@@ -2257,6 +2257,15 @@ function secToClock(total){
   const ss = String(s).padStart(2,'0');
   return h>0 ? (h+":"+mm+":"+ss) : (mm+":"+ss);
 }
+// The note timing boxes always show two-digit minutes ("00:49", "01:15",
+// "1:02:05" past an hour), so every box in the list lines up and reads the
+// same however the student typed it.
+function secToBoxClock(total){
+  total = Math.max(0, Math.round(total));
+  const h = Math.floor(total/3600), m = Math.floor((total%3600)/60), s = total%60;
+  const mm = String(m).padStart(2,'0'), ss = String(s).padStart(2,'0');
+  return h>0 ? (h+":"+mm+":"+ss) : (mm+":"+ss);
+}
 function clockToSec(str){
   if(!str || !str.trim()) return null;
   const parts = str.trim().split(":").map(p=>parseInt(p,10));
@@ -3702,10 +3711,10 @@ function buildNoteCard(n){
       </div>
       <div class="note-listen">
         <span class="field-label" style="margin:0;">From</span>
-        <input type="text" class="ts-input" data-field="start" placeholder="mm:ss" value="${n.startSec!=null?secToClock(n.startSec):''}">
+        <input type="text" class="ts-input" data-field="start" placeholder="mm:ss" value="${n.startSec!=null?secToBoxClock(n.startSec):''}">
         <button class="link-btn now-btn" type="button" data-action="now-start" title="Capture the video's current time">Now</button>
         <span class="field-label" style="margin:0;">To</span>
-        <input type="text" class="ts-input" data-field="end" placeholder="mm:ss (optional)" value="${n.endSec!=null?secToClock(n.endSec):''}">
+        <input type="text" class="ts-input" data-field="end" placeholder="mm:ss (optional)" value="${n.endSec!=null?secToBoxClock(n.endSec):''}">
         <button class="link-btn now-btn" type="button" data-action="now-end" title="Capture the video's current time">Now</button>
         <button class="link-btn play" type="button" ${n.startSec==null?'disabled':''}>${icon("play",12)} Play</button>
       </div>
@@ -3816,9 +3825,14 @@ function buildNoteCard(n){
       const raw = input.value;
       if(!raw.trim()){ n[field] = null; }
       else {
+        // A bare number is seconds and rolls over into minutes ("49" → 00:49,
+        // "75" → 01:15); "m:ss" and "h:mm:ss" work as typed. Whatever the
+        // form, the box is rewritten in the standard one once the student
+        // presses Enter or leaves it — never while they're still typing.
         const sec = clockToSec(raw);
-        if(sec==null){ input.value = n[field]!=null?secToClock(n[field]):''; return; }
+        if(sec==null || sec<0){ input.value = n[field]!=null?secToBoxClock(n[field]):''; return; }
         n[field] = sec;
+        input.value = secToBoxClock(sec);
       }
       playBtn.disabled = n.startSec==null;
       persist();
@@ -3835,7 +3849,7 @@ function buildNoteCard(n){
 
     function captureCurrentTime(input, field){
       if(!mediaPlayer.isReady()) return;
-      input.value = secToClock(mediaPlayer.getCurrentTime());
+      input.value = secToBoxClock(mediaPlayer.getCurrentTime());
       commitTimestamp(input, field);
     }
     card.querySelector('[data-action="now-start"]').addEventListener("click", ()=> captureCurrentTime(startInput, "startSec"));
