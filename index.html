@@ -282,16 +282,24 @@
   #notesToolbar input[type=text]{flex:1 1 100%;min-width:140px;padding:8px 12px;font-size:0.82rem;border-radius:10px;border:1px solid var(--line);background:var(--panel);}
   #notesScroll{flex:1;overflow:auto;padding:14px;}
   #notesEmpty{color:var(--ink-soft);font-size:0.85rem;text-align:center;padding:40px 20px;border:1px dashed var(--line);border-radius:var(--radius);}
-    /* Notes read as entries on a page, not as boxes: no fill, no shadow, just
-     space and a hairline between them. The student's own sentence is the
-     largest thing here, which is the point of the whole app. */
-  .note-card{background:transparent;border-radius:var(--radius);padding:16px 14px 18px;margin-bottom:0;
-    border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:7px;transition:background .14s ease;}
-  .note-card:hover{background:var(--panel-2);}
+    /* Each note is its own card, in three bands: a tinted header saying where
+     it is, a white body holding the student's own writing (What, then Why),
+     and a tinted footer for the tags and timing. The earlier borderless
+     "entries on a page" look ran neighbouring notes — and the parts of one
+     note — together into a single undifferentiated form. */
+  .note-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    margin-bottom:14px;display:flex;flex-direction:column;overflow:hidden;
+    box-shadow:var(--shadow-sm);transition:border-color .14s ease,box-shadow .14s ease;}
+  .note-card:hover{border-color:color-mix(in srgb,var(--ink-soft) 45%,var(--line));}
+  .note-card:focus-within{border-color:color-mix(in srgb,var(--accent) 55%,var(--line));box-shadow:var(--shadow-md);}
+  .note-body{display:flex;flex-direction:column;gap:14px;padding:14px 14px 16px;}
+  .note-foot{display:flex;flex-direction:column;gap:10px;padding:10px 14px 12px;
+    background:var(--panel-2);border-top:1px solid var(--line);}
   .note-card.flash{animation:flashHi 1.1s ease;}
   @keyframes flashHi{0%{box-shadow:0 0 0 3px var(--accent);}100%{box-shadow:0 0 0 0px transparent;}}
   .note-card.dragging{opacity:0.4;}
-  .note-top{display:flex;flex-wrap:wrap;align-items:center;gap:8px;}
+  .note-top{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 10px 8px 6px;
+    background:var(--panel-2);border-bottom:1px solid var(--line);}
   .drag-handle{cursor:grab;color:var(--ink-soft);font-size:0.9rem;line-height:1;padding:2px 4px;user-select:none;touch-action:none;}
   .drag-handle:active{cursor:grabbing;}
 
@@ -328,9 +336,14 @@
     /* Sentence case, not capitals. Small uppercase letter-spaced labels are the
      single loudest dated signal in the old design. */
   .field-label{font-size:0.74rem;color:var(--ink-soft);display:block;margin-bottom:3px;font-weight:500;}
+  /* What and Why are the two halves of the note, so their labels read as
+     headings in the ink colour, with the prompt beside them kept quiet. */
+  .note-body .field-label{font-size:0.8rem;font-weight:700;color:var(--ink);margin-bottom:6px;}
+  .field-hint{font-weight:400;color:var(--ink-soft);margin-left:6px;}
+  .note-foot .field-label:first-child{min-width:58px;}
   .note-concepts{display:flex;flex-wrap:wrap;align-items:center;gap:5px;}
   .concept-chip{font-size:0.72rem;font-weight:600;padding:3px 9px;border-radius:999px;cursor:pointer;
-    border:1px solid var(--line);background:var(--bg);color:var(--ink-soft);}
+    border:1px solid var(--line);background:var(--panel);color:var(--ink-soft);}
   .concept-chip:hover{border-color:var(--accent);color:var(--ink);}
   .concept-chip.on{background:var(--accent);border-color:var(--accent);color:#fff;}
   .concept-suggest{font-size:0.72rem;padding:3px 10px;}
@@ -355,7 +368,7 @@
   [contenteditable="true"]:empty::before{content:attr(data-placeholder);color:var(--ink-soft);
     font-weight:400;font-style:italic;pointer-events:none;}
   .field-what:empty::before{font-family:var(--font);font-size:0.9rem;font-weight:400;}
-  .note-listen{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding-top:8px;border-top:1px dashed var(--line);}
+  .note-listen{display:flex;flex-wrap:wrap;align-items:center;gap:8px;}
   .ts-input{width:82px;padding:5px 9px;font-size:0.8rem;border-radius:8px;border:1px solid var(--line);background:var(--panel);}
   .link-btn{font-size:0.78rem;padding:5px 11px;border-radius:999px;border:1px solid var(--line);background:var(--panel);cursor:pointer;display:inline-flex;align-items:center;gap:4px;}
   .link-btn.play{background:var(--good-soft);color:var(--good);border-color:transparent;font-weight:600;}
@@ -393,7 +406,8 @@
     font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:0.01em;}
   #vwDuration{font-size:0.72rem;color:var(--ink-soft);white-space:nowrap;flex-shrink:0;
     font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
-  .now-btn{background:var(--accent-soft);color:var(--accent);border-color:transparent;font-weight:600;padding:5px 9px;}
+  .now-btn{background:var(--panel);color:var(--ink-soft);border-color:var(--line);font-weight:600;padding:5px 9px;}
+  .now-btn:hover{color:var(--ink);border-color:var(--ink-soft);}
   /* touch-action:none so a drag scrubs instead of panning the page */
   #vwRailTrack{position:relative;flex:1;min-width:60px;height:12px;background:var(--accent-soft);border-radius:6px;cursor:pointer;touch-action:none;}
   .vw-progress{position:absolute;top:0;left:0;height:100%;background:var(--accent);opacity:0.3;border-radius:6px 0 0 6px;pointer-events:none;}
@@ -3665,16 +3679,19 @@ function buildNoteCard(n){
         <input type="text" class="section-field" data-field="section" placeholder="Section label (e.g. Intro, Verse, Solo)…" value="${escapeHtml(n.section)}">
         <button class="note-del" data-action="delete">${icon("trash-2",13)} Delete</button>
       </div>
+      <div class="note-body">
       <div>
-        <span class="field-label">What (compositional / theoretical / notational)</span>
+        <span class="field-label">What<span class="field-hint">compositional / theoretical / notational</span></span>
         <div class="field-what" contenteditable="true" data-field="what"
           data-placeholder="What is actually happening here — the technique, the notation, the device?">${nl2br(n.what)}</div>
       </div>
       <div>
-        <span class="field-label">Why (effect)</span>
+        <span class="field-label">Why<span class="field-hint">the effect</span></span>
         <div class="field-why" contenteditable="true" data-field="why"
           data-placeholder="What effect does it create, and why does the composer do it?">${nl2br(n.why)}</div>
       </div>
+      </div>
+      <div class="note-foot">
       <div class="note-concepts">
         <span class="field-label" style="margin:0;">Concepts</span>
         ${CONCEPT_KEYS.map(k=>'<button type="button" class="concept-chip'
@@ -3691,6 +3708,7 @@ function buildNoteCard(n){
         <input type="text" class="ts-input" data-field="end" placeholder="mm:ss (optional)" value="${n.endSec!=null?secToClock(n.endSec):''}">
         <button class="link-btn now-btn" type="button" data-action="now-end" title="Capture the video's current time">Now</button>
         <button class="link-btn play" type="button" ${n.startSec==null?'disabled':''}>${icon("play",12)} Play</button>
+      </div>
       </div>
     `;
 
