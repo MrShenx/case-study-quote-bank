@@ -400,6 +400,16 @@
   .vw-tick{position:absolute;top:1px;bottom:1px;width:2px;background:var(--good);cursor:pointer;}
   .vw-range{position:absolute;top:1px;bottom:1px;background:var(--good);opacity:0.35;border-radius:3px;cursor:pointer;}
   .vw-playhead{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ink);opacity:0.7;pointer-events:none;}
+  /* With a local recording the rail becomes its waveform: taller, no pill
+     background, and the canvas itself shows what's been played, so the
+     translucent progress fill steps aside. YouTube keeps the plain rail —
+     the iframe never hands over its audio, so there's nothing to draw. */
+  #vwWave{position:absolute;inset:0;width:100%;height:100%;display:none;pointer-events:none;}
+  #vwRailTrack.has-wave{height:30px;background:transparent;border-radius:0;}
+  #vwRailTrack.has-wave #vwWave{display:block;}
+  #vwRailTrack.has-wave .vw-progress{display:none;}
+  #vwRailTrack.has-wave .vw-tick,#vwRailTrack.has-wave .vw-range{top:0;bottom:0;}
+  #vwRailTrack.has-wave .vw-playhead{top:-2px;bottom:-2px;}
 
   @media(max-width:860px){
     #main{flex-direction:column;overflow:auto;}
@@ -1020,6 +1030,7 @@
           <button class="vw-toggle" id="vwPlayPauseBtn" title="Play/pause"><span data-icon="play" data-icon-size="15"></span></button>
           <div id="vwNow">–:––</div>
           <div id="vwRailTrack">
+            <canvas id="vwWave"></canvas>
             <div class="vw-progress" id="vwProgress"></div>
             <div class="vw-playhead" id="vwPlayhead" style="display:none;"></div>
           </div>
@@ -2131,6 +2142,7 @@ function resetVideoPlayer(){
   document.getElementById("vwNow").textContent = "–:––";
   vwPlayhead.style.display = "none";
   vwProgress.style.width = "0%";
+  clearWaveform();
 }
 
 async function openProject(id){
@@ -4690,6 +4702,7 @@ const mediaPlayer = {
     ytPlayer = null; ytReady = false;
     if(this.el){ this.el.pause(); this.el.removeAttribute("src"); this.el.load(); this.el = null; }
     if(audioObjectUrl){ URL.revokeObjectURL(audioObjectUrl); audioObjectUrl = null; }
+    clearWaveform();
     this.kind = null; this.ready = false;
   }
 };
@@ -4732,6 +4745,7 @@ function scrubFromRail(clientX){
   // Painted immediately rather than waiting on the 250ms ticker, so the
   // playhead tracks the finger instead of lagging behind it.
   vwProgress.style.width = (frac*100) + "%";
+  drawWaveform(frac);
   vwPlayhead.style.left = (frac*100) + "%";
   vwPlayhead.style.display = "block";
   document.getElementById("vwNow").textContent = secToClock(frac*durationSec);
@@ -4809,6 +4823,117 @@ function createYtPlayer(){
   });
 }
 
+// ---------- waveform ----------
+// For a local recording the scrub rail shows the recording's own shape, so a
+// student can see the loud tutti, the quiet bridge, the gap before the coda,
+// and drag straight to them. The file is decoded once, off the main path —
+// playback works the moment metadata arrives; the waveform fades in when the
+// decode finishes. Only the peaks are kept (a few KB), never the PCM.
+const WAVE_BUCKETS = 2000;
+let wavePeaks = null;          // Float32Array of 0..1 peak levels, or null
+let waveToken = 0;             // bumped on every load/clear so a slow decode can't land on the wrong file
+let waveLastFrac = -1, waveLastW = 0, waveLastH = 0, waveLastTheme = "";
+
+async function buildWaveform(blob){
+  const token = ++waveToken;
+  clearWaveform(true);
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if(!Ctx || !blob) return;
+  let ctx = null;
+  try{
+    const buf = await blob.arrayBuffer();
+    ctx = new Ctx();
+    const audio = await new Promise((res, rej)=>{
+      // callback form as well as the promise, for older Safari
+      const p = ctx.decodeAudioData(buf, res, rej);
+      if(p && p.then) p.then(res, rej);
+    });
+    if(token !== waveToken) return;
+    const len = audio.length, chans = audio.numberOfChannels;
+    const data = [];
+    for(let c=0; c<chans; c++) data.push(audio.getChannelData(c));
+    const peaks = new Float32Array(WAVE_BUCKETS);
+    const per = len / WAVE_BUCKETS;
+    // Sampling a stride inside each bucket rather than every sample: an hour
+    // of stereo audio is ~300M samples, and the eye can't tell the difference.
+    const stride = Math.max(1, Math.floor(per / 400));
+    let max = 0;
+    for(let b=0; b<WAVE_BUCKETS; b++){
+      const s0 = Math.floor(b*per), s1 = Math.min(len, Math.floor((b+1)*per));
+      let m = 0;
+      for(let c=0; c<chans; c++){
+        const d = data[c];
+        for(let i=s0; i<s1; i+=stride){ const v = d[i] < 0 ? -d[i] : d[i]; if(v > m) m = v; }
+      }
+      peaks[b] = m;
+      if(m > max) max = m;
+    }
+    if(max > 0) for(let b=0; b<WAVE_BUCKETS; b++) peaks[b] /= max;
+    wavePeaks = peaks;
+    vwRailTrackEl.classList.add("has-wave");
+    waveLastFrac = -1;
+    drawWaveform(mediaPlayer.getDuration() ? mediaPlayer.getCurrentTime()/durationSec : 0);
+  }catch(err){
+    // An undecodable file still plays through <audio> on the plain rail.
+    console.warn("Couldn't build the waveform:", err);
+  }finally{
+    if(ctx && ctx.close) ctx.close().catch(()=>{});
+  }
+}
+
+function clearWaveform(keepToken){
+  if(!keepToken) waveToken++;
+  wavePeaks = null;
+  waveLastFrac = -1;
+  vwRailTrackEl.classList.remove("has-wave");
+}
+
+function drawWaveform(frac){
+  if(!wavePeaks) return;
+  const canvas = document.getElementById("vwWave");
+  const dpr = window.devicePixelRatio || 1;
+  const w = Math.round(canvas.clientWidth * dpr), h = Math.round(canvas.clientHeight * dpr);
+  if(!w || !h) return;
+  const theme = document.documentElement.getAttribute("data-theme") || "" ;
+  const themeKey = theme + (window.matchMedia("(prefers-color-scheme: dark)").matches ? "d" : "l");
+  frac = Math.min(1, Math.max(0, frac || 0));
+  // The ticker calls this four times a second; skip the repaint when nothing
+  // visible has moved.
+  if(w === waveLastW && h === waveLastH && themeKey === waveLastTheme && Math.abs(frac - waveLastFrac) * w < 0.5) return;
+  waveLastW = w; waveLastH = h; waveLastTheme = themeKey; waveLastFrac = frac;
+  if(canvas.width !== w) canvas.width = w;
+  if(canvas.height !== h) canvas.height = h;
+
+  const css = getComputedStyle(document.documentElement);
+  const played = css.getPropertyValue("--accent").trim() || "#6c4cff";
+  const unplayed = css.getPropertyValue("--ink-soft").trim() || "#888";
+  const g = canvas.getContext("2d");
+  g.clearRect(0, 0, w, h);
+
+  const barW = Math.max(1, Math.round(2 * dpr)), gap = Math.max(1, Math.round(1 * dpr));
+  const bars = Math.max(1, Math.floor((w + gap) / (barW + gap)));
+  const mid = h / 2, minH = Math.max(1, dpr);
+  const cut = frac * w;
+  for(let i=0; i<bars; i++){
+    // the loudest bucket under each bar, so short accents aren't averaged away
+    const b0 = Math.floor(i / bars * WAVE_BUCKETS), b1 = Math.max(b0+1, Math.floor((i+1) / bars * WAVE_BUCKETS));
+    let m = 0;
+    for(let b=b0; b<b1; b++) if(wavePeaks[b] > m) m = wavePeaks[b];
+    const bh = Math.max(minH, m * (h - 2*dpr));
+    const x = i * (barW + gap);
+    g.fillStyle = x + barW/2 <= cut ? played : unplayed;
+    g.globalAlpha = x + barW/2 <= cut ? 1 : 0.45;
+    g.fillRect(x, mid - bh/2, barW, bh);
+  }
+  g.globalAlpha = 1;
+}
+if(window.ResizeObserver){
+  new ResizeObserver(()=>{
+    if(!wavePeaks) return;
+    drawWaveform(durationSec ? mediaPlayer.getCurrentTime()/durationSec : 0);
+  }).observe(vwRailTrackEl);
+}
+
 // ---------- local audio ----------
 // Stored as a Blob in its own object store, exactly like the score PDF, and
 // like the PDF it can't ride along in the ~900KB cloud backup — a student
@@ -4825,6 +4950,7 @@ async function loadAudioBlob(blob, name, isRestore){
   el.src = audioObjectUrl;
   mediaPlayer.el = el;
   mediaPlayer.kind = "audio";
+  buildWaveform(blob);
 
   el.addEventListener("loadedmetadata", ()=>{
     mediaPlayer.ready = true;
@@ -4946,6 +5072,7 @@ setInterval(()=>{
   const pct = Math.min(100, Math.max(0, t/durationSec*100));
   vwPlayhead.style.left = pct + "%"; vwPlayhead.style.display = "block";
   vwProgress.style.width = pct + "%";
+  drawWaveform(pct/100);
   document.getElementById("vwNow").textContent = secToClock(t);
   if(activeEndSec!=null && t>=activeEndSec){
     mediaPlayer.pause();
