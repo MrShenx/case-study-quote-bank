@@ -330,7 +330,21 @@
   #notesScroll.reordering-groups .group-body{display:none;}
   #notesScroll.reordering-groups .group-section{margin-bottom:10px;}
   #notesScroll.reordering-groups{user-select:none;}
-  .group-section.dragging .group-header{background:var(--accent-soft);border-radius:8px 8px 0 0;}
+  /* The heading being dragged is lifted off the list: it rides under the
+     pointer (a transform set from script), on top of its neighbours, with a
+     shadow — and the empty slot it leaves is where it will land. */
+  .group-section.dragging{position:relative;z-index:20;will-change:transform;}
+  .group-section.dragging .group-header{background:var(--panel);border-radius:10px;
+    box-shadow:var(--shadow-md),0 0 0 1px var(--line);padding-left:6px;padding-right:6px;}
+  .group-section.dragging .drag-handle{cursor:grabbing;color:var(--accent);}
+  .group-header{transition:box-shadow .2s ease,background .2s ease;}
+  body.grabbing,body.grabbing *{cursor:grabbing !important;}
+  /* on release the notes come back in with a short fade rather than popping */
+  #notesScroll.unfolding .group-body{animation:groupBodyIn .32s ease both;}
+  @keyframes groupBodyIn{from{opacity:0;transform:translateY(-6px);}to{opacity:1;transform:none;}}
+  @media (prefers-reduced-motion: reduce){
+    #notesScroll.unfolding .group-body{animation:none;}
+  }
   .group-header .drag-handle{margin-left:-4px;}
   .group-collapse-btn{background:none;border:none;color:inherit;cursor:pointer;padding:2px 4px;font-size:0.7rem;line-height:1;flex-shrink:0;transition:transform 0.12s;}
   .group-section.collapsed .group-collapse-btn{transform:rotate(-90deg);}
@@ -3607,39 +3621,138 @@ document.addEventListener("pointercancel", ()=>{
 // moving it within `groups` — its notes follow it untouched, in the same
 // order, with nothing about them rewritten. "Ungrouped" isn't a heading and
 // stays last.
-function startGroupDrag(groupId){
+//
+// Motion: the list re-renders on every reorder, so everything is animated
+// FLIP-style — note where each section was on screen, re-render, then start
+// each one back at its old spot and let it glide to its new one. The heading
+// being dragged is the exception: it's pinned under the pointer the whole
+// time, and only glides into its slot when let go.
+const GROUP_SLIDE_MS = 220;
+let groupDragGrabOffset = 0;   // pointer's distance below the dragged section's top when picked up
+let groupDragPointerY = 0;
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+function sectionKey(el){ return el.dataset.flipKey; }
+function captureSectionTops(){
+  const tops = {};
+  document.querySelectorAll("#notesScroll .group-section[data-flip-key]").forEach(el=>{
+    tops[sectionKey(el)] = el.getBoundingClientRect().top;
+  });
+  return tops;
+}
+function playSectionSlide(before, includeDragged){
+  if(reduceMotion.matches) return;
+  const moving = [];
+  document.querySelectorAll("#notesScroll .group-section[data-flip-key]").forEach(el=>{
+    const key = sectionKey(el);
+    if(!includeDragged && key === dragGroupId) return;
+    if(!(key in before)) return;
+    const dy = before[key] - el.getBoundingClientRect().top;
+    if(Math.abs(dy) < 0.5) return;
+    el.style.transition = "none";
+    el.style.transform = "translateY(" + dy + "px)";
+    moving.push(el);
+  });
+  if(!moving.length) return;
+  void document.body.offsetHeight; // commit the start positions before animating away from them
+  moving.forEach(el=>{
+    el.style.transition = "transform " + GROUP_SLIDE_MS + "ms cubic-bezier(.2,.8,.2,1)";
+    el.style.transform = "";
+  });
+}
+// Where a section sits in the layout, ignoring any slide it's partway through —
+// so a neighbour gliding past the pointer can't flip the drop target back and forth.
+function layoutTop(el){
+  const t = getComputedStyle(el).transform;
+  const shift = (t && t !== "none") ? new DOMMatrixReadOnly(t).m42 : 0;
+  return el.getBoundingClientRect().top - shift;
+}
+function draggedSectionEl(){
+  return document.querySelector('#notesScroll .group-section[data-flip-key="' + dragGroupId + '"]');
+}
+function pinDraggedSection(){
+  const el = draggedSectionEl();
+  if(!el) return;
+  el.style.transition = "none";
+  el.style.transform = "";
+  const scroller = document.getElementById("notesScroll").getBoundingClientRect();
+  // kept inside the notes panel rather than sliding over the toolbar
+  const wanted = Math.min(scroller.bottom - el.offsetHeight, Math.max(scroller.top, groupDragPointerY - groupDragGrabOffset));
+  const dy = wanted - el.getBoundingClientRect().top;
+  el.style.transform = "translateY(" + dy + "px) scale(1.015)";
+}
+
+function startGroupDrag(groupId, clientY){
+  const listEl = document.getElementById("notesScroll");
+  const pickedUp = listEl.querySelector('.group-section[data-flip-key="' + groupId + '"]');
+  groupDragGrabOffset = pickedUp ? clientY - pickedUp.getBoundingClientRect().top : 0;
+  groupDragPointerY = clientY;
+  const before = captureSectionTops();
   dragGroupId = groupId;
   lastGroupDragKey = null;
-  document.getElementById("notesScroll").classList.add("reordering-groups");
+  listEl.classList.remove("unfolding");
+  listEl.classList.add("reordering-groups");
+  document.body.classList.add("grabbing");
   renderNotes();
+  playSectionSlide(before, false); // the others glide up as their notes fold away
+  pinDraggedSection();
 }
 function handleGroupDragMove(clientY){
-  const sections = [...document.querySelectorAll("#notesScroll .group-section[data-group-id]")]
+  groupDragPointerY = clientY;
+  const listEl = document.getElementById("notesScroll");
+  // nudge the list along when dragging near its top or bottom edge
+  const box = listEl.getBoundingClientRect();
+  if(clientY < box.top + 36) listEl.scrollTop -= 14;
+  else if(clientY > box.bottom - 36) listEl.scrollTop += 14;
+
+  const sections = [...listEl.querySelectorAll(".group-section[data-group-id]")]
     .filter(s=> s.dataset.groupId !== dragGroupId);
   // Lands before the first heading whose middle is below the pointer, or at
   // the end of the headings if there isn't one.
   let beforeId = null;
   for(const s of sections){
-    const r = s.getBoundingClientRect();
-    if(clientY < r.top + r.height/2){ beforeId = s.dataset.groupId; break; }
+    if(clientY < layoutTop(s) + s.offsetHeight/2){ beforeId = s.dataset.groupId; break; }
   }
   const key = beforeId || "end";
-  if(key === lastGroupDragKey) return;
-  lastGroupDragKey = key;
-  const idx = groups.findIndex(g=>g.id===dragGroupId);
-  if(idx === -1) return;
-  const [g] = groups.splice(idx, 1);
-  const at = beforeId ? groups.findIndex(x=>x.id===beforeId) : -1;
-  if(at === -1) groups.push(g); else groups.splice(at, 0, g);
-  renderNotes();
+  if(key !== lastGroupDragKey){
+    lastGroupDragKey = key;
+    const idx = groups.findIndex(g=>g.id===dragGroupId);
+    if(idx !== -1){
+      const order = groups.map(g=>g.id).join();
+      const [g] = groups.splice(idx, 1);
+      const at = beforeId ? groups.findIndex(x=>x.id===beforeId) : -1;
+      if(at === -1) groups.push(g); else groups.splice(at, 0, g);
+      if(groups.map(g=>g.id).join() !== order){
+        const before = captureSectionTops();
+        renderNotes();
+        playSectionSlide(before, false);
+      }
+    }
+  }
+  pinDraggedSection();
 }
 function finishGroupDrag(){
   if(!dragGroupId) return;
+  const listEl = document.getElementById("notesScroll");
+  const before = captureSectionTops(); // includes the dragged heading where the pointer left it
+  const droppedId = dragGroupId;
   dragGroupId = null;
   lastGroupDragKey = null;
-  document.getElementById("notesScroll").classList.remove("reordering-groups");
+  listEl.classList.remove("reordering-groups");
+  document.body.classList.remove("grabbing");
   persist();
   renderNotes();
+  // Unfolding everyone's notes grows the list; scroll so the heading just
+  // dropped stays where it was let go instead of being shoved off screen.
+  const dropped = listEl.querySelector('.group-section[data-flip-key="' + droppedId + '"]');
+  if(dropped && droppedId in before){
+    listEl.scrollTop += dropped.getBoundingClientRect().top - before[droppedId];
+  }
+  if(!reduceMotion.matches){
+    listEl.classList.add("unfolding");
+    setTimeout(()=> listEl.classList.remove("unfolding"), 400);
+  }
+  playSectionSlide(before, true); // it settles into its slot; the rest make room for their notes
 }
 document.addEventListener("pointermove", (e)=>{ if(dragGroupId) handleGroupDragMove(e.clientY); });
 document.addEventListener("pointerup", ()=>{ if(dragGroupId) finishGroupDrag(); });
@@ -3651,6 +3764,7 @@ function buildGroupSection(group, groupNotes){
   section.className = "group-section" + (collapsed ? " collapsed" : "")
     + (group && group.id===dragGroupId ? " dragging" : "");
   if(group) section.dataset.groupId = group.id;
+  section.dataset.flipKey = group ? group.id : "__ungrouped";
 
   if(group || groups.length>0){
     const header = document.createElement("div");
@@ -3663,7 +3777,7 @@ function buildGroupSection(group, groupNotes){
       handle.addEventListener("pointerdown", (e)=>{
         if(e.button !== 0) return;
         e.preventDefault();
-        startGroupDrag(group.id);
+        startGroupDrag(group.id, e.clientY);
       });
       header.appendChild(handle);
     }
