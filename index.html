@@ -324,6 +324,14 @@
   .group-body.drop-target{background:var(--accent-soft);outline:2px dashed var(--accent);outline-offset:4px;}
   .group-body-empty{font-size:0.78rem;color:var(--ink-soft);text-align:center;padding:14px;border:1px dashed var(--line);border-radius:var(--radius);}
   .group-section.collapsed .group-body{display:none;}
+  /* Dragging a heading folds every section down to its header (display only —
+     each heading's own collapsed setting is untouched) so the headings are
+     short targets that fit on screen together, then unfolds on release. */
+  #notesScroll.reordering-groups .group-body{display:none;}
+  #notesScroll.reordering-groups .group-section{margin-bottom:10px;}
+  #notesScroll.reordering-groups{user-select:none;}
+  .group-section.dragging .group-header{background:var(--accent-soft);border-radius:8px 8px 0 0;}
+  .group-header .drag-handle{margin-left:-4px;}
   .group-collapse-btn{background:none;border:none;color:inherit;cursor:pointer;padding:2px 4px;font-size:0.7rem;line-height:1;flex-shrink:0;transition:transform 0.12s;}
   .group-section.collapsed .group-collapse-btn{transform:rotate(-90deg);}
     .where-badge{font-family:var(--font-mono);font-size:0.72rem;font-weight:500;letter-spacing:0.02em;
@@ -1551,6 +1559,8 @@ let currentTaskRole = null;
 let currentTaskQuestionText = null; // shown read-only in Studio for taskRole "student"
 let barCounter = 0;
 let dragNoteId = null;    // note.id currently being dragged, or null
+let dragGroupId = null;    // heading (group.id) currently being dragged, or null
+let lastGroupDragKey = null;
 let selectedMarkerId = null;
 let tagMode = false;
 let systemMode = false;
@@ -3591,14 +3601,72 @@ document.addEventListener("pointercancel", ()=>{
   if(dragNoteId) finishDrag();
 });
 
+// ---------- dragging a whole heading ----------
+// Notes only record which heading they belong to (groupId); the order on
+// screen comes from the order of `groups`. So reordering a heading is just
+// moving it within `groups` — its notes follow it untouched, in the same
+// order, with nothing about them rewritten. "Ungrouped" isn't a heading and
+// stays last.
+function startGroupDrag(groupId){
+  dragGroupId = groupId;
+  lastGroupDragKey = null;
+  document.getElementById("notesScroll").classList.add("reordering-groups");
+  renderNotes();
+}
+function handleGroupDragMove(clientY){
+  const sections = [...document.querySelectorAll("#notesScroll .group-section[data-group-id]")]
+    .filter(s=> s.dataset.groupId !== dragGroupId);
+  // Lands before the first heading whose middle is below the pointer, or at
+  // the end of the headings if there isn't one.
+  let beforeId = null;
+  for(const s of sections){
+    const r = s.getBoundingClientRect();
+    if(clientY < r.top + r.height/2){ beforeId = s.dataset.groupId; break; }
+  }
+  const key = beforeId || "end";
+  if(key === lastGroupDragKey) return;
+  lastGroupDragKey = key;
+  const idx = groups.findIndex(g=>g.id===dragGroupId);
+  if(idx === -1) return;
+  const [g] = groups.splice(idx, 1);
+  const at = beforeId ? groups.findIndex(x=>x.id===beforeId) : -1;
+  if(at === -1) groups.push(g); else groups.splice(at, 0, g);
+  renderNotes();
+}
+function finishGroupDrag(){
+  if(!dragGroupId) return;
+  dragGroupId = null;
+  lastGroupDragKey = null;
+  document.getElementById("notesScroll").classList.remove("reordering-groups");
+  persist();
+  renderNotes();
+}
+document.addEventListener("pointermove", (e)=>{ if(dragGroupId) handleGroupDragMove(e.clientY); });
+document.addEventListener("pointerup", ()=>{ if(dragGroupId) finishGroupDrag(); });
+document.addEventListener("pointercancel", ()=>{ if(dragGroupId) finishGroupDrag(); });
+
 function buildGroupSection(group, groupNotes){
   const section = document.createElement("div");
   const collapsed = group ? !!group.collapsed : !!ungroupedCollapsed;
-  section.className = "group-section" + (collapsed ? " collapsed" : "");
+  section.className = "group-section" + (collapsed ? " collapsed" : "")
+    + (group && group.id===dragGroupId ? " dragging" : "");
+  if(group) section.dataset.groupId = group.id;
 
   if(group || groups.length>0){
     const header = document.createElement("div");
     header.className = "group-header" + (group ? "" : " ungrouped");
+    if(group){
+      const handle = document.createElement("span");
+      handle.className = "drag-handle";
+      handle.title = "Drag to move this heading — its notes come with it";
+      handle.innerHTML = icon("grip-vertical",15);
+      handle.addEventListener("pointerdown", (e)=>{
+        if(e.button !== 0) return;
+        e.preventDefault();
+        startGroupDrag(group.id);
+      });
+      header.appendChild(handle);
+    }
     const collapseBtn = document.createElement("button");
     collapseBtn.className = "group-collapse-btn";
     collapseBtn.innerHTML = icon("chevron-down",14);
