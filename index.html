@@ -398,6 +398,11 @@
   [contenteditable="true"]:empty::before{content:attr(data-placeholder);color:var(--ink-soft);
     font-weight:400;font-style:italic;pointer-events:none;}
   .field-what:empty::before{font-family:var(--font);font-size:0.82rem;font-weight:400;}
+  /* Inside the editor each line is its own block (see linesHtml), so a dot
+     point can be indented on its own: the "•" sits a little in from the
+     edge, and when the point runs onto a second line the text lines up
+     under its first word rather than back under the bullet. */
+  .field-what .ln.bullet,.field-why .ln.bullet{padding-left:1em;text-indent:-0.62em;}
   .note-listen{display:flex;flex-wrap:wrap;align-items:center;gap:8px;}
   .ts-input{width:82px;padding:5px 9px;font-size:0.8rem;border-radius:8px;border:1px solid var(--line);background:var(--panel);}
   .link-btn{font-size:0.78rem;padding:5px 11px;border-radius:999px;border:1px solid var(--line);background:var(--panel);cursor:pointer;display:inline-flex;align-items:center;gap:4px;}
@@ -1593,6 +1598,16 @@ function escapeHtml(str){
     .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
 }
 function nl2br(str){ return escapeHtml(str).replace(/\n/g,"<br>"); }
+// The What/Why editors hold one <div class="ln"> per line rather than text
+// separated by <br>s, so a dot-point line can carry its own indent. What's
+// saved is still plain text (read back with innerText), unchanged.
+function isBulletLine(text){ return /^\s*•/.test(text); }
+function linesHtml(str){
+  if(!str) return ""; // empty stays :empty, so the placeholder shows
+  return String(str).split("\n").map(line=>
+    '<div class="ln' + (isBulletLine(line) ? ' bullet' : '') + '">' + (line ? escapeHtml(line) : '<br>') + '</div>'
+  ).join("");
+}
 
 // A dialog-free "click again to confirm" pattern for destructive-but-typed-
 // content actions (project delete, note delete). Native confirm()/prompt()
@@ -3909,12 +3924,12 @@ function buildNoteCard(n){
       <div>
         <span class="field-label">What<span class="field-hint">compositional / theoretical / notational</span></span>
         <div class="field-what" contenteditable="true" data-field="what"
-          data-placeholder="What is actually happening here — the technique, the notation, the device?">${nl2br(n.what)}</div>
+          data-placeholder="What is actually happening here — the technique, the notation, the device?">${linesHtml(n.what)}</div>
       </div>
       <div>
         <span class="field-label">Why<span class="field-hint">the effect</span></span>
         <div class="field-why" contenteditable="true" data-field="why"
-          data-placeholder="What effect does it create, and why does the composer do it?">${nl2br(n.why)}</div>
+          data-placeholder="What effect does it create, and why does the composer do it?">${linesHtml(n.why)}</div>
       </div>
       </div>
       <div class="note-foot">
@@ -4029,8 +4044,10 @@ function buildNoteCard(n){
     ["what","why"].forEach(field=>{
       const el = card.querySelector('[data-field="'+field+'"]');
       el.addEventListener("keydown", onEditableKeydown);
+      el.addEventListener("input", ()=> normalizeLines(el));
       el.addEventListener("blur", ()=>{
         n[field] = el.innerText.replace(/\n{3,}/g,"\n\n").trim();
+        if(!n[field]) el.innerHTML = ""; // back to :empty, so the prompt reappears
         persist();
       });
     });
@@ -4075,67 +4092,118 @@ function buildNoteCard(n){
     return card;
 }
 
+// Keeps an editor in its one-block-per-line shape. Typing into an empty
+// field, pasting, or the browser merging two lines on Backspace can leave
+// bare text or <br>s at the top level; those are gathered into line blocks
+// (moving the existing nodes, so the caret stays where it was), and each
+// line's dot-point indent is set from whether it now starts with "•".
+function normalizeLines(el){
+  const sel = window.getSelection();
+  let aNode = null, aOff = 0;
+  if(sel.rangeCount && el.contains(sel.anchorNode) && sel.anchorNode !== el){
+    aNode = sel.anchorNode; aOff = sel.anchorOffset;
+  }
+  let moved = false, line = null;
+  for(const node of [...el.childNodes]){
+    if(node.nodeType === 1 && node.tagName === "DIV"){ line = null; continue; }
+    if(!line){ line = document.createElement("div"); el.insertBefore(line, node); }
+    line.appendChild(node);
+    moved = true;
+    if(node.nodeName === "BR") line = null; // a bare <br> ends its line
+  }
+  // Chrome wraps text in <span style="…"> when Backspace joins two lines, to
+  // keep the look of where it came from; these fields are plain text, so
+  // unwrap them (keeping the same text nodes, so the caret survives).
+  el.querySelectorAll("span[style], font").forEach(sp=>{
+    while(sp.firstChild) sp.parentNode.insertBefore(sp.firstChild, sp);
+    sp.remove();
+    moved = true;
+  });
+  for(const d of el.children){
+    if(d.tagName !== "DIV") continue;
+    d.classList.add("ln");
+    d.classList.toggle("bullet", isBulletLine(d.textContent));
+    if(!d.textContent && !d.querySelector("br")) d.appendChild(document.createElement("br"));
+  }
+  if(moved && aNode && el.contains(aNode)){
+    try{ sel.collapse(aNode, Math.min(aOff, aNode.nodeType === 3 ? aNode.length : aNode.childNodes.length)); }catch(err){ /* caret lost; harmless */ }
+  }
+}
+function currentLine(el, node){
+  while(node && node.parentNode !== el) node = node.parentNode;
+  return (node && node.nodeType === 1 && node.tagName === "DIV") ? node : null;
+}
+
 // typing "- " or "* " at the start of a line turns it into a "• " bullet,
 // the same shorthand Google Docs uses — these fields are plain text (no real
 // list markup), so a literal bullet character is the manual way to get a dot
 // point too: type it directly, paste one, or use this "- " shortcut.
 function onEditableKeydown(e){
+  const el = e.currentTarget;
   if(e.key === " "){
     const sel = window.getSelection();
     if(sel.rangeCount && sel.getRangeAt(0).collapsed){
+      normalizeLines(el);
       const range = sel.getRangeAt(0);
-      const pre = document.createRange();
-      pre.selectNodeContents(e.currentTarget);
-      pre.setEnd(range.startContainer, range.startOffset);
-      const frag = pre.cloneContents();
-      let before = "";
-      (function collect(node){
-        if(node.nodeType === Node.TEXT_NODE) before += node.textContent;
-        else if(node.nodeName === "BR") before += "\n";
-        else node.childNodes.forEach(collect);
-      })(frag);
-      const lastLine = before.split("\n").pop();
-      if(lastLine === "-" || lastLine === "*"){
-        e.preventDefault();
-        document.execCommand("delete", false, null); // remove the "-"/"*" just typed
-        document.execCommand("insertText", false, "• ");
-        return;
+      const line = currentLine(el, range.startContainer);
+      if(line){
+        const pre = document.createRange();
+        pre.selectNodeContents(line);
+        pre.setEnd(range.startContainer, range.startOffset);
+        const typed = pre.toString();
+        if(typed === "-" || typed === "*"){
+          e.preventDefault();
+          document.execCommand("delete", false, null); // remove the "-"/"*" just typed
+          document.execCommand("insertText", false, "• ");
+          normalizeLines(el);
+          return;
+        }
       }
     }
   }
   if(e.key !== "Enter") return;
+  // Our own Enter rather than the browser's, which differs between browsers
+  // (some insert <br>s, some nest <div>s): split the current line block at
+  // the caret into two, and put the caret at the start of the second.
   e.preventDefault();
   const sel = window.getSelection();
   if(!sel.rangeCount) return;
+  normalizeLines(el);
   const range = sel.getRangeAt(0);
   range.deleteContents();
-  const br = document.createElement("br");
-  range.insertNode(br);
-  // A <br> with nothing after it isn't drawn as a new line — browsers only
-  // render a trailing break once something follows it — so the first Enter
-  // at the end of a field seemed to do nothing and it took a second press.
-  // A placeholder break after it gives the caret a real empty line to sit
-  // on; the blur handler's trim() drops it when the text is saved.
-  if(!hasContentAfter(br, e.currentTarget)){
-    br.parentNode.insertBefore(document.createElement("br"), br.nextSibling);
-  }
-  range.setStartAfter(br);
-  range.setEndAfter(br);
-  range.collapse(true);
-  sel.removeAllRanges();
-  sel.addRange(range);
-}
-
-// Whether anything that takes up a line (text or another break) comes after
-// `node` inside `root`.
-function hasContentAfter(node, root){
-  for(let n = node; n && n !== root; n = n.parentNode){
-    for(let s = n.nextSibling; s; s = s.nextSibling){
-      if(s.nodeName === "BR" || (s.textContent && s.textContent.length)) return true;
-      if(s.nodeType === 1 && s.querySelector("br")) return true;
+  let line = currentLine(el, range.startContainer);
+  if(!line && range.startContainer === el && el.children.length){
+    // caret between lines rather than inside one (e.g. after Cmd+End):
+    // treat it as the end of the line before it, or the start of the first
+    const i = range.startOffset;
+    if(i > 0){ line = el.childNodes[i-1]; range.setStart(line, line.childNodes.length); }
+    else { line = el.childNodes[0]; range.setStart(line, 0); }
+    if(line.lastChild && line.lastChild.nodeName === "BR" && range.startOffset === line.childNodes.length){
+      range.setStart(line, line.childNodes.length - 1); // before an empty line's placeholder <br>
     }
   }
-  return false;
+  if(!line){
+    // caret sits directly in the (empty) field — give it a first line
+    line = document.createElement("div");
+    line.className = "ln";
+    el.appendChild(line);
+    range.setStart(line, 0);
+  }
+  const tail = document.createRange();
+  tail.setStart(range.startContainer, range.startOffset);
+  tail.setEnd(line, line.childNodes.length);
+  const next = document.createElement("div");
+  next.className = "ln";
+  next.appendChild(tail.extractContents());
+  line.after(next);
+  // an empty line needs a <br> to keep its height (and to hold the caret)
+  [line, next].forEach(d=>{ if(!d.textContent && !d.querySelector("br")) d.appendChild(document.createElement("br")); });
+  normalizeLines(el);
+  const caret = document.createRange();
+  caret.setStart(next, 0);
+  caret.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(caret);
 }
 
 // =====================================================================
