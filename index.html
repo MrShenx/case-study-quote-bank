@@ -1126,7 +1126,7 @@
     <label>Barline sensitivity <span id="barSensVal">30%</span>
       <input type="range" id="barSens" min="15" max="98" value="30">
     </label>
-    <span style="color:var(--ink-soft);max-width:340px;">Auto-detection is a heuristic — it looks for long horizontal lines (staves) and long vertical lines that span them (barlines). Dense scans, ornate fonts, or low contrast will need manual cleanup in Tag mode.</span>
+    <span style="color:var(--ink-soft);max-width:340px;">A score exported from notation software (MuseScore, Sibelius, Finale, Dorico) is read straight from its drawing, and these sliders don't apply. They only tune scanned pages, where detection looks for long horizontal lines (staves) and the vertical lines that span them (barlines). Scans usually need some cleanup in Tag mode.</span>
   </div>
 
   <div id="main">
@@ -2675,8 +2675,23 @@ document.getElementById("zoomResetBtn").addEventListener("click", ()=>{
 
 window.addEventListener("resize", ()=>{ if(pdfDoc) renderPage(currentPage); });
 
+// ==BAR-DETECTION-BEGIN== (tests/bar-detection/ loads everything between
+// these two markers and runs it against hand-checked scores — keep it free of
+// app state)
 // =====================================================================
-// bar / staff auto-detection (pure function of a canvas — testable standalone)
+// bar / staff auto-detection
+// =====================================================================
+// detectBarsOnPage() at the end of this block is the entry point. It reads
+// the PDF's own drawing first: a score exported from notation software draws
+// every staff line and barline as an exact line, so nothing needs guessing.
+// Only a page with no drawn staves (a scan or photo) falls back to looking at
+// the rendered picture, which is what everything up to detectBarsOnCanvas()
+// does.
+//
+// What comes back is where each BAR STARTS — the app's marker model: the
+// first bar of a system starts at the line that opens the system, every other
+// bar at a barline inside it, and the barline that closes a system starts
+// nothing.
 // =====================================================================
 // Ink density (not a binary luminance cutoff) for one pixel: anti-aliased
 // PDF rendering means a "black" hairline is often several partially-gray
@@ -2717,6 +2732,27 @@ function longestRunInRow(data, w, y){
     else if(run){ if(++gap > 1){ run = 0; gap = 0; } }
   }
   return best;
+}
+
+// Where the longest dark run in a row begins and ends — for a staff line,
+// where the staff itself begins and ends.
+function longestRunExtentInRow(data, w, y){
+  let best = 0, bestStart = 0, run = 0, start = 0, gap = 0;
+  const off = y*w*4;
+  for(let x=0; x<w; x++){
+    if(inkAt(data, off + x*4) > DARK){
+      if(!run) start = x;
+      run += gap + 1; gap = 0;
+      if(run > best){ best = run; bestStart = start; }
+    }
+    else if(run){ if(++gap > 1){ run = 0; gap = 0; } }
+  }
+  return { x0: bestStart, x1: bestStart + best - 1 };
+}
+
+function medianOf(values){
+  const s = values.slice().sort((a,b)=>a-b);
+  return s.length ? s[Math.floor(s.length/2)] : 0;
 }
 
 function detectStaffLines(imgData, w, h, relativeSensitivity){
@@ -2893,77 +2929,396 @@ function detectBarsOnCanvas(canvas, opts){
     }
     // Pad the band so a marker drawn on it clears the outermost staff lines.
     const pad = sys.staves[0].lineGap * 0.6;
-    return { yTop: sys.top - pad, yBottom: sys.bottom + pad, barX: merged };
+    // Where the system's staves begin and end, so the line that opens the
+    // system and the barline that closes it can be told from the rest.
+    const ext = sys.staves.map(st=>{
+      const e = st.lines.map(y=> longestRunExtentInRow(imgData.data, w, y));
+      return { x0: medianOf(e.map(r=>r.x0)), x1: medianOf(e.map(r=>r.x1)) };
+    });
+    const x0 = Math.min(...ext.map(e=>e.x0)), x1 = Math.max(...ext.map(e=>e.x1));
+    const gap = sys.staves[0].lineGap;
+    return { yTop: sys.top - pad, yBottom: sys.bottom + pad, barX: merged,
+             x0, x1, gap, barStarts: barStartsFromBarlines(merged, x0, x1, gap, w) };
   });
   return { width:w, height:h, systems: results };
 }
+
+// Turn a system's barlines into where its bars start.
+//  - The first bar starts where the system starts. A barline found at (or a
+//    little before) the staves' left end is the line that opens the system,
+//    so it is that start rather than a bar of its own.
+//  - The last barline closes the last bar and starts nothing — the next bar
+//    starts on the next system. It is normally right at the staves' right
+//    end, but a courtesy key or time signature can sit after it, so anything
+//    within a short distance of the end counts. (A last bar that is narrower
+//    than that and has no barline of its own is rare enough to accept.)
+function barStartsFromBarlines(barlines, x0, x1, gap, pageWidth){
+  const xs = barlines.filter(x=> x >= x0 - 3*gap && x <= x1 + 3*gap).sort((a,b)=>a-b);
+  let start = x0;
+  while(xs.length && xs[0] <= x0 + 1.5*gap) start = Math.min(start, xs.shift());
+  if(xs.length && x1 - xs[xs.length-1] < Math.min(15*gap, 0.1*pageWidth)) xs.pop();
+  return [start].concat(xs);
+}
+
+// ---------------------------------------------------------------------
+// Reading the PDF's own drawing (engraved scores)
+// ---------------------------------------------------------------------
+// Every straight, axis-aligned line the page paints, in page points with the
+// origin at the top left: { H: [{x0,x1,y,t}], V: [{y0,y1,x,t}] }, t being
+// thickness. Notation programs draw a line either as a stroked path or as a
+// thin filled rectangle, and both are read. Curves (slurs, noteheads) are
+// skipped, and text — including music-font glyphs — is never seen here.
+// Also returned: `fills`, the box around every other straight-edged filled
+// shape — chiefly beams, which is how a stem is told from a barline.
+function linesFromOperatorList(opList, viewport, OPS){
+  const fn = opList.fnArray, args = opList.argsArray;
+  const H = [], V = [], fills = [];
+  const compose = (m, n)=> [
+    m[0]*n[0] + m[2]*n[1], m[1]*n[0] + m[3]*n[1],
+    m[0]*n[2] + m[2]*n[3], m[1]*n[2] + m[3]*n[3],
+    m[0]*n[4] + m[2]*n[5] + m[4], m[1]*n[4] + m[3]*n[5] + m[5]
+  ];
+  let ctm = viewport.transform.slice();
+  let lineWidth = 1;
+  const stack = [];
+  let path = [], cur = null, inAnnotation = 0;
+  const at = (x, y)=> [ctm[0]*x + ctm[2]*y + ctm[4], ctm[1]*x + ctm[3]*y + ctm[5]];
+
+  const paint = (fill, stroke, close)=>{
+    // A PDF line width is in the units of whatever transform is in force.
+    // Notation programs often draw at a tenth or a twentieth of a point, so a
+    // raw width of "5" can be a quarter of a point on the page.
+    const t = lineWidth * Math.sqrt(Math.abs(ctm[0]*ctm[3] - ctm[1]*ctm[2]));
+    path.forEach(sp=>{
+      if(sp.curved || sp.pts.length < 2) return;
+      let bx0 = Infinity, bx1 = -Infinity, by0 = Infinity, by1 = -Infinity;
+      sp.pts.forEach(([x,y])=>{ bx0 = Math.min(bx0,x); bx1 = Math.max(bx1,x); by0 = Math.min(by0,y); by1 = Math.max(by1,y); });
+      const w = bx1 - bx0, h = by1 - by0;
+      if(fill){
+        if(h <= 3 && w >= 4*Math.max(h, 0.1)){
+          H.push({ x0:bx0, x1:bx1, y:(by0+by1)/2, t:h });
+          fills.push({ x0:bx0, x1:bx1, y0:by0, y1:by1 });
+        }
+        else if(w <= 5 && h >= 4*Math.max(w, 0.1)) V.push({ y0:by0, y1:by1, x:(bx0+bx1)/2, t:w });
+        else fills.push({ x0:bx0, x1:bx1, y0:by0, y1:by1 });
+      }
+      if(stroke){
+        const pts = (sp.closed || close) ? sp.pts.concat([sp.pts[0]]) : sp.pts;
+        for(let k=1; k<pts.length; k++){
+          const [ax, ay] = pts[k-1], [bx, by] = pts[k];
+          if(Math.abs(ay - by) <= 0.25 && Math.abs(ax - bx) > 1) H.push({ x0:Math.min(ax,bx), x1:Math.max(ax,bx), y:(ay+by)/2, t });
+          else if(Math.abs(ax - bx) <= 0.25 && Math.abs(ay - by) > 1) V.push({ y0:Math.min(ay,by), y1:Math.max(ay,by), x:(ax+bx)/2, t });
+        }
+      }
+    });
+    path = []; cur = null;
+  };
+
+  for(let i=0; i<fn.length; i++){
+    const op = fn[i], a = args[i];
+    if(op === OPS.beginAnnotation){ inAnnotation++; continue; }
+    if(op === OPS.endAnnotation){ inAnnotation = Math.max(0, inAnnotation-1); continue; }
+    if(inAnnotation) continue;
+    switch(op){
+      case OPS.save: stack.push({ ctm, lineWidth }); break;
+      case OPS.restore: { const s = stack.pop(); if(s){ ctm = s.ctm; lineWidth = s.lineWidth; } break; }
+      case OPS.transform: ctm = compose(ctm, a); break;
+      case OPS.setLineWidth: lineWidth = a[0]; break;
+      case OPS.setGState: (a[0] || []).forEach(([k, v])=>{ if(k === "LW") lineWidth = v; }); break;
+      case OPS.paintFormXObjectBegin:
+        stack.push({ ctm, lineWidth });
+        if(Array.isArray(a[0]) && a[0].length === 6) ctm = compose(ctm, a[0]);
+        break;
+      case OPS.paintFormXObjectEnd: { const s = stack.pop(); if(s){ ctm = s.ctm; lineWidth = s.lineWidth; } break; }
+      case OPS.beginGroup:
+        stack.push({ ctm, lineWidth });
+        if(a[0] && Array.isArray(a[0].matrix)) ctm = compose(ctm, a[0].matrix);
+        break;
+      case OPS.endGroup: { const s = stack.pop(); if(s){ ctm = s.ctm; lineWidth = s.lineWidth; } break; }
+      case OPS.constructPath: {
+        const ops = a[0], c = a[1];
+        let j = 0;
+        for(const p of ops){
+          if(p === OPS.moveTo){ cur = { pts:[at(c[j], c[j+1])], curved:false, closed:false }; path.push(cur); j += 2; }
+          else if(p === OPS.lineTo){
+            if(!cur){ cur = { pts:[], curved:false, closed:false }; path.push(cur); }
+            cur.pts.push(at(c[j], c[j+1])); j += 2;
+          }
+          else if(p === OPS.curveTo){ if(cur){ cur.curved = true; cur.pts.push(at(c[j+4], c[j+5])); } j += 6; }
+          else if(p === OPS.curveTo2 || p === OPS.curveTo3){ if(cur){ cur.curved = true; cur.pts.push(at(c[j+2], c[j+3])); } j += 4; }
+          else if(p === OPS.closePath){ if(cur) cur.closed = true; }
+          else if(p === OPS.rectangle){
+            const x = c[j], y = c[j+1], w = c[j+2], h = c[j+3]; j += 4;
+            path.push({ pts:[at(x,y), at(x+w,y), at(x+w,y+h), at(x,y+h)], curved:false, closed:true });
+            cur = null;
+          }
+        }
+        break;
+      }
+      case OPS.stroke: paint(false, true, false); break;
+      case OPS.closeStroke: paint(false, true, true); break;
+      case OPS.fill: case OPS.eoFill: paint(true, false, false); break;
+      case OPS.fillStroke: case OPS.eoFillStroke: paint(true, true, false); break;
+      case OPS.closeFillStroke: case OPS.closeEOFillStroke: paint(true, true, true); break;
+      case OPS.endPath: path = []; cur = null; break;
+    }
+  }
+  return { H, V, fills };
+}
+
+// Join pieces of one drawn line: some programs draw a staff line bar by bar,
+// or a barline staff by staff.
+function mergeCollinear(list, pos, from, to, sameTol, joinTol){
+  const sorted = list.slice().sort((a,b)=> a[pos] - b[pos] || a[from] - b[from]);
+  const out = [];
+  for(let i=0; i<sorted.length; ){
+    let j = i;
+    while(j+1 < sorted.length && sorted[j+1][pos] - sorted[i][pos] <= sameTol) j++;
+    const row = sorted.slice(i, j+1).sort((a,b)=> a[from] - b[from]);
+    let open = null;
+    row.forEach(s=>{
+      if(open && s[from] <= open[to] + joinTol){ open[to] = Math.max(open[to], s[to]); open.t = Math.max(open.t, s.t); }
+      else { open = Object.assign({}, s); out.push(open); }
+    });
+    i = j+1;
+  }
+  return out;
+}
+
+// Five evenly spaced long horizontal lines that start and end together.
+// Single-line (percussion) staves are left out: barlines and systems are
+// read from the five-line staves, and nearly every score has some.
+function stavesFromLines(H, pageWidth){
+  const L = H.filter(l=> l.t <= 3 && l.x1 - l.x0 >= Math.max(40, 0.08*pageWidth)).sort((a,b)=> a.y - b.y);
+  // The five lines of a staff start and end together. Requiring similar
+  // lengths, not just overlap, keeps out a row of ledger lines or a long beam
+  // lying a staff space above or below.
+  const overlapOK = (a, b)=>{
+    const la = a.x1 - a.x0, lb = b.x1 - b.x0;
+    return Math.min(la, lb) >= 0.6 * Math.max(la, lb) &&
+           Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0) >= 0.7 * Math.min(la, lb);
+  };
+  const used = new Set(), staves = [];
+  for(let i=0; i<L.length; i++){
+    if(used.has(i)) continue;
+    let chain = null;
+    for(let j=i+1; j<L.length && !chain; j++){
+      const g = L[j].y - L[i].y;
+      if(g < 1.5 || used.has(j) || !overlapOK(L[i], L[j])) continue;
+      if(g > 25) break;
+      const found = [i, j];
+      for(let k=2; k<=4; k++){
+        const y = L[i].y + k*g, tol = Math.max(0.6, 0.12*g);
+        let hit = -1;
+        for(let m=j+1; m<L.length && L[m].y <= y + tol; m++)
+          if(!used.has(m) && Math.abs(L[m].y - y) <= tol && overlapOK(L[i], L[m])){ hit = m; break; }
+        if(hit < 0) break;
+        found.push(hit);
+      }
+      if(found.length === 5) chain = found;
+    }
+    if(!chain) continue;
+    chain.forEach(k=> used.add(k));
+    const ls = chain.map(k=> L[k]);
+    staves.push({ top: ls[0].y, bottom: ls[4].y, gap: (ls[4].y - ls[0].y)/4,
+                  x0: medianOf(ls.map(l=>l.x0)), x1: medianOf(ls.map(l=>l.x1)) });
+  }
+  return staves.sort((a,b)=> a.top - b.top);
+}
+
+function detectBarsFromPdfDrawing(opList, viewport, OPS){
+  const W = viewport.width, Hpage = viewport.height;
+  const raw = linesFromOperatorList(opList, viewport, OPS);
+  // Only pieces that actually meet are joined: ledger lines at one height sit
+  // a few points apart and must stay separate short lines.
+  const staves = stavesFromLines(mergeCollinear(raw.H, "y", "x0", "x1", 0.4, 0.8), W);
+  if(!staves.length) return { systems: [] };
+  const V = mergeCollinear(raw.V, "x", "y0", "y1", 0.4, 1);
+
+  // Staves belong to one system when a vertical line joins them: the line
+  // that opens every system, and barlines drawn through a whole group. Two
+  // lead-sheet staves one above the other share no such line.
+  const systems = [];
+  staves.forEach(s=>{
+    const prev = systems.length ? systems[systems.length-1] : null;
+    const p = prev ? prev[prev.length-1] : null;
+    if(p){
+      const lo = Math.max(p.x0, s.x0) - 2*p.gap, hi = Math.min(p.x1, s.x1) + 2*p.gap;
+      if(lo < hi && V.some(v=> v.x >= lo && v.x <= hi && v.y0 <= p.bottom + 1 && v.y1 >= s.top - 1)){ prev.push(s); return; }
+    }
+    systems.push([s]);
+  });
+
+  const out = systems.map((sys, si)=>{
+    const g = medianOf(sys.map(s=> s.gap));
+    const x0 = Math.min(...sys.map(s=> s.x0)), x1 = Math.max(...sys.map(s=> s.x1));
+    // A barline ends exactly on a staff's top line and on a staff's bottom
+    // line. Most stems stop wherever their note is — but engravers settle
+    // beams onto staff lines, so a stem running from a note on one outer line
+    // to a beam on the other ends on lines too. Beams never touch a barline,
+    // so a vertical line with a beam at either end is a stem.
+    const tol = Math.max(0.12*g, 0.35);
+    const beams = raw.fills.filter(f=> f.y1 - f.y0 >= 0.3*g && f.y1 - f.y0 <= 5*g &&
+                                       f.x1 - f.x0 >= 0.8*g && f.x1 - f.x0 <= 0.4*W);
+    const endsOnBeam = v=> beams.some(b=> v.x >= b.x0 - 0.5 && v.x <= b.x1 + 0.5 &&
+      ((v.y0 >= b.y0 - 0.5*g && v.y0 <= b.y1 + 0.5) || (v.y1 >= b.y0 - 0.5 && v.y1 <= b.y1 + 0.5*g)));
+    const cands = [];
+    V.forEach(v=>{
+      if(v.t > Math.max(4, 1.2*g) || v.x < x0 - g || v.x > x1 + g) return;
+      if(endsOnBeam(v)) return;
+      let first = -1, last = -1;
+      sys.forEach((s, k)=>{
+        if(first < 0 && Math.abs(v.y0 - s.top) <= tol + v.t/2) first = k;
+        if(Math.abs(v.y1 - s.bottom) <= tol + v.t/2) last = k;
+      });
+      if(first < 0 || last < first) return;
+      let c = cands.find(c=> Math.abs(c.x - v.x) <= 0.6);
+      if(!c){ c = { x: v.x, staves: new Set() }; cands.push(c); }
+      for(let k=first; k<=last; k++) c.staves.add(k);
+    });
+    // A real barline runs through most of the system's staves — both, in a
+    // two-staff system such as a piano part — while a stem that happens to
+    // line up with one staff's outer lines does not.
+    const need = sys.length <= 2 ? sys.length : Math.ceil(sys.length / 2);
+    const xs = cands.filter(c=> c.staves.size >= need).map(c=> c.x).sort((a,b)=>a-b);
+    // A double, final or repeat barline is two strokes close together: one bar line.
+    const barlines = [];
+    xs.forEach(x=>{ if(!barlines.length || x - barlines[barlines.length-1].last > 1.2*g) barlines.push({ x, last:x }); else barlines[barlines.length-1].last = x; });
+
+    let top = sys[0].top, bottom = sys[sys.length-1].bottom;
+    // Stretch the band down over any single-line percussion staves the
+    // system's opening line reaches, stopping short of the next system.
+    const nextTop = si+1 < systems.length ? systems[si+1][0].top : Hpage;
+    V.forEach(v=>{ if(Math.abs(v.x - x0) <= 2*g && v.y0 <= top + g && v.y1 > bottom && v.y1 < nextTop) bottom = Math.max(bottom, v.y1); });
+    const pad = g;
+    return {
+      yTopFrac: Math.max(0, (top - pad) / Hpage), yBotFrac: Math.min(1, (bottom + pad) / Hpage),
+      barStarts: barStartsFromBarlines(barlines.map(b=> b.x), x0, x1, g, W).map(x=> x / W)
+    };
+  });
+  return { systems: out };
+}
+
+// The entry point. `page` is a pdf.js page. Resolves to
+//   { source: "drawn lines" | "page image",
+//     systems: [{ yTopFrac, yBotFrac, barStarts: [xFrac, ...] }] }
+// with everything as a fraction of the page, so it doesn't matter how big
+// the page happens to be on screen. opts.staffThreshold / opts.barThreshold
+// (0–100) tune the page-image fallback only.
+async function detectBarsOnPage(page, opts){
+  opts = opts || {};
+  const OPS = opts.OPS || pdfjsLib.OPS;
+  const viewport = page.getViewport({ scale: 1 });
+  try {
+    const opList = await page.getOperatorList();
+    const v = detectBarsFromPdfDrawing(opList, viewport, OPS);
+    if(v.systems.length) return { source: "drawn lines", systems: v.systems };
+  } catch(err){
+    console.warn("Couldn't read the PDF's drawing; looking at the page image instead.", err);
+  }
+  // A scan: draw the page at a fixed size, independent of the on-screen zoom,
+  // and look for lines in the picture.
+  const view = page.getViewport({ scale: (opts.rasterWidth || 2000) / viewport.width });
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(view.width); canvas.height = Math.round(view.height);
+  // "print" intent: pdf.js paces on-screen ("display") rendering by animation
+  // frames, which stop in a background tab — this drawing is never shown, so
+  // it shouldn't wait for one.
+  await page.render({ canvasContext: canvas.getContext("2d"), viewport: view, intent: "print" }).promise;
+  const r = detectBarsOnCanvas(canvas, opts);
+  canvas.width = canvas.height = 0;
+  return { source: "page image", systems: r.systems.map(s=>({
+    yTopFrac: Math.max(0, s.yTop / r.height), yBotFrac: Math.min(1, s.yBottom / r.height),
+    barStarts: s.barStarts.map(x=> x / r.width)
+  }))};
+}
+
+// ==BAR-DETECTION-END==
 
 // =====================================================================
 // wiring detection into the app (page-fraction coordinates)
 // =====================================================================
 document.getElementById("detectBtn").addEventListener("click", runDetectionOnCurrentPage);
 
-function runDetectionOnCurrentPage(){
+// Markers placed by detection carry `auto: true`. Bars tagged by hand look
+// identical otherwise (`manual` only means "renamed"), so without it a re-run
+// couldn't tell its own earlier guesses from a student's work.
+async function runDetectionOnCurrentPage(){
   if(!pdfDoc) return;
-  const canvas = document.getElementById("pdfCanvas");
+  const statusEl = document.getElementById("detectStatus");
+  const pageNum = currentPage, forProject = currentProjectId;
   const staffThreshold = parseInt(document.getElementById("staffSens").value,10);
   const barThreshold = parseInt(document.getElementById("barSens").value,10);
-  document.getElementById("detectStatus").style.display = "block";
-  document.getElementById("detectStatus").textContent = "Detecting…";
-  // Page rendering is async, so a click landing a moment too early used to
-  // scan a blank canvas and report "0 staff systems found" — indistinguishable
-  // from a page it genuinely couldn't read. Wait for ink before scanning.
-  let waited = 0;
-  const runWhenPainted = ()=>{
-    if(!canvasHasInk(canvas)){
-      if(waited < 4000){ waited += 120; setTimeout(runWhenPainted, 120); return; }
-      document.getElementById("detectStatus").textContent =
-        "The page hasn't finished drawing yet — give it a moment and try again.";
-      return;
-    }
-    const result = detectBarsOnCanvas(canvas, { staffThreshold, barThreshold });
-    const w = result.width, h = result.height;
-    if(!markersByPage[currentPage]) markersByPage[currentPage] = [];
-    if(!pageSystems[currentPage]) pageSystems[currentPage] = [];
-    pageSystems[currentPage] = result.systems.map(s=>({ yTopFrac: s.yTop/h, yBotFrac: s.yBottom/h }));
+  statusEl.style.display = "block";
+  statusEl.textContent = "Detecting…";
+  let result;
+  try {
+    const page = await pdfDoc.getPage(pageNum);
+    result = await detectBarsOnPage(page, { staffThreshold, barThreshold });
+  } catch(err){
+    console.error("Bar detection failed:", err);
+    statusEl.textContent = "Detection couldn't read this page. Tag the bars by hand in Tag mode.";
+    return;
+  }
+  if(currentProjectId !== forProject) return; // switched project while it ran
 
-    let added = 0;
-    result.systems.forEach(sys=>{
-      const yTopFrac = sys.yTop/h, yBotFrac = sys.yBottom/h;
-      sys.barX.forEach(x=>{
-        const xFrac = x/w;
-        const existing = markersByPage[currentPage].find(m=> Math.abs(m.xFrac - xFrac) < 0.008 && !(m.yBotFrac < yTopFrac || m.yTopFrac > yBotFrac));
-        if(existing) return;
-        markersByPage[currentPage].push({ id: uid(), type: "point", xFrac, yTopFrac, yBotFrac, number: 0, manual: false, label: null });
-        added++;
-      });
-    });
-    sortMarkersByPosition(markersByPage[currentPage]);
-    renumberAllBars();
-    const totalBars = result.systems.reduce((n,s)=>n+s.barX.length,0);
-    document.getElementById("detectStatus").textContent =
-      result.systems.length + " staff system" + (result.systems.length===1?"":"s") + " found, " +
-      totalBars + " barline" + (totalBars===1?"":"s") + " detected (" + added + " new). Switch to Tag mode to fix anything missed or wrong.";
-    persist();
-    renderMarkerOverlay();
-    renderNotes();
-  };
-  setTimeout(runWhenPainted, 20);
-}
+  const list = markersByPage[pageNum] || (markersByPage[pageNum] = []);
+  const sameSystem = (m, s)=> !(m.yBotFrac < s.yTopFrac || m.yTopFrac > s.yBotFrac);
 
-// Has this canvas been painted yet? Every row is visited but only every eighth
-// column: notation is mostly white space and a staff line is two pixels thick,
-// so a square sampling grid steps straight over the lines and reports a fully
-// drawn page as blank.
-function canvasHasInk(canvas){
-  const w = canvas.width, h = canvas.height;
-  if(!w || !h) return false;
-  const data = canvas.getContext("2d").getImageData(0,0,w,h).data;
-  let dark = 0;
-  for(let y=0; y<h; y++)
-    for(let x=0; x<w; x+=8)
-      if(inkAt(data, (y*w+x)*4) > DARK && ++dark > 12) return true;
-  return false;
+  // Match each detected bar start to a marker already there, closest first,
+  // so nothing is doubled up and existing markers (and their note links) stay.
+  const found = [];
+  result.systems.forEach(s=> s.barStarts.forEach(xFrac=> found.push({ xFrac, yTopFrac: s.yTopFrac, yBotFrac: s.yBotFrac })));
+  const points = list.filter(m=> m.type !== "region");
+  const pairs = [];
+  found.forEach((f, i)=> points.forEach((m, j)=>{
+    const dx = Math.abs(m.xFrac - f.xFrac);
+    if(dx < 0.012 && sameSystem(m, f)) pairs.push([dx, i, j]);
+  }));
+  pairs.sort((a,b)=> a[0]-b[0]);
+  const fUsed = new Set(), mUsed = new Set();
+  pairs.forEach(([, i, j])=>{ if(!fUsed.has(i) && !mUsed.has(j)){ fUsed.add(i); mUsed.add(j); } });
+
+  // An earlier detection's marker that this run no longer finds is dropped —
+  // unless a note points at it or it has been renamed or labelled since.
+  let removed = 0;
+  points.forEach((m, j)=>{
+    if(mUsed.has(j) || !m.auto || m.manual || m.label || barIsLinked(m.id)) return;
+    list.splice(list.indexOf(m), 1);
+    removed++;
+  });
+  let added = 0;
+  found.forEach((f, i)=>{
+    if(fUsed.has(i)) return;
+    list.push({ id: uid(), type: "point", xFrac: f.xFrac, yTopFrac: f.yTopFrac, yBotFrac: f.yBotFrac, number: 0, manual: false, label: null, auto: true });
+    added++;
+  });
+
+  // System bands: ones drawn by hand stay; detected ones are replaced.
+  const handBands = (pageSystems[pageNum] || []).filter(s=> s.manual);
+  pageSystems[pageNum] = handBands.concat(
+    result.systems
+      .filter(s=> !handBands.some(b=> sameSystem({ yTopFrac: b.yTopFrac, yBotFrac: b.yBotFrac }, s)))
+      .map(s=> ({ yTopFrac: s.yTopFrac, yBotFrac: s.yBotFrac }))
+  ).sort((a,b)=> a.yTopFrac - b.yTopFrac);
+
+  sortMarkersByPosition(list);
+  renumberAllBars();
+  const nSys = result.systems.length, nBars = found.length;
+  const plural = (n, word)=> n + " " + word + (n===1 ? "" : "s");
+  const changes = " (" + added + " new" + (removed ? ", " + removed + " earlier guess" + (removed===1?"":"es") + " removed" : "") + ")";
+  if(!nSys){
+    statusEl.textContent = "No staves found on this page. If it has music on it, tag the bars by hand in Tag mode.";
+  } else if(result.source === "drawn lines"){
+    statusEl.textContent = "Read from the score's own drawing: " + plural(nSys, "system") + ", " + plural(nBars, "bar") + changes +
+      ". Check the bar numbers match the printed ones; if this page doesn't start where the last one ended, rename its first bar in Tag mode.";
+  } else {
+    statusEl.textContent = "This page is a scan, so bars were found by looking at the picture: " + plural(nSys, "system") + ", " + plural(nBars, "bar") + changes +
+      ". Scans often need fixing — switch to Tag mode to remove extra markers and add missed ones.";
+  }
+  persist();
+  if(currentPage === pageNum) renderMarkerOverlay();
+  renderNotes();
 }
 
 function updateDetectStatus(){
