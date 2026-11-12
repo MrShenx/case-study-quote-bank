@@ -130,6 +130,28 @@
     background:var(--warn-bg);color:var(--warn);font-size:0.82rem;line-height:1.5;}
   .btn.danger:hover{filter:brightness(1.06);}
   #confirmModal .modal-box{width:420px;}
+  /* ---------- share links ---------- */
+  #shareModal .modal-box,#shareOpenModal .modal-box{width:440px;}
+  .share-desc{font-size:0.85rem;color:var(--ink-soft);margin:-6px 0 14px;line-height:1.5;}
+  .share-code{font-family:var(--font-mono);font-size:1.5rem;font-weight:500;letter-spacing:0.12em;
+    text-align:center;padding:10px;border-radius:10px;background:var(--accent-soft);color:var(--accent);margin-bottom:12px;}
+  .share-row{display:flex;gap:8px;align-items:center;margin-bottom:12px;}
+  .share-row input[type=text]{margin:0 !important;flex:1;min-width:0;font-size:0.8rem;}
+  .share-status{font-size:0.78rem;color:var(--ink-soft);margin-bottom:14px;}
+  .share-status.stale{color:var(--warn);}
+  .share-error{font-size:0.8rem;color:var(--bad);margin:-4px 0 12px;}
+  .share-actions-split{justify-content:space-between;}
+  .share-actions-split .right{display:flex;gap:8px;}
+  .btn.share-stop{color:var(--bad);}
+  .btn.share-stop.armed{background:var(--bad);color:#fff;border-color:transparent;}
+  .share-preview{border:1px solid var(--line);border-radius:10px;background:var(--panel-2);padding:10px 12px;
+    margin-bottom:14px;max-height:220px;overflow:auto;}
+  .share-preview-title{font-family:var(--font-display);font-weight:700;font-size:1.05rem;margin-bottom:2px;}
+  .share-preview-meta{font-size:0.75rem;color:var(--ink-soft);margin-bottom:8px;}
+  .share-preview-group{font-size:0.72rem;font-weight:700;color:var(--accent);margin:8px 0 3px;}
+  .share-preview-note{font-size:0.8rem;line-height:1.4;padding:4px 0;border-top:1px solid var(--line);
+    white-space:pre-wrap;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+  .share-preview-more{font-size:0.75rem;color:var(--ink-soft);padding-top:6px;}
   #confirmBody{font-size:0.88rem;color:var(--ink-soft);line-height:1.55;margin:-4px 0 16px;}
   #confirmBody strong{color:var(--ink);}
 
@@ -850,6 +872,7 @@
     <div class="bar-side end">
       <div class="theme-picker"><span class="theme-label">Theme</span></div>
       <div class="mode-picker"></div>
+      <button class="btn" id="openSharedBtn" title="Open notes someone shared with you"><span data-icon="link"></span> Open shared</button>
       <button class="btn primary" id="newProjectBtn">+ New project</button>
     </div>
   </div>
@@ -958,6 +981,57 @@
   </div>
 </div>
 
+<!-- Sharing: the owner's side. One dialog, two states — not shared yet
+     (explains, offers to make a link) and shared (link, code, update/stop). -->
+<div id="shareModal" class="modal-overlay" style="display:none;">
+  <div class="modal-box">
+    <h2 id="shareTitle">Share these notes</h2>
+    <div id="shareIntro">
+      <p class="share-desc">Makes a link anyone can open to get <b>their own copy</b> of this project's notes, headings and bar tags. They can't change yours.<br><br>The score PDF isn't included — they add their own copy of the score, and the bar tags line up with it.</p>
+    </div>
+    <div id="shareLive" style="display:none;">
+      <p class="share-desc">Anyone with this link or code can open these notes and add a copy to their own projects.</p>
+      <div class="share-code" id="shareCodeDisplay"></div>
+      <div class="share-row">
+        <input type="text" id="shareLinkDisplay" readonly>
+        <button class="btn" id="shareCopyLinkBtn"><span data-icon="copy"></span> Copy link</button>
+      </div>
+      <div class="share-status" id="shareStatus"></div>
+    </div>
+    <div class="share-error" id="shareError" style="display:none;"></div>
+    <div class="modal-actions" id="shareIntroActions">
+      <button class="btn ghost" id="shareCancelBtn">Cancel</button>
+      <button class="btn primary" id="shareCreateBtn"><span data-icon="link"></span> Create link</button>
+    </div>
+    <div class="modal-actions share-actions-split" id="shareLiveActions" style="display:none;">
+      <button class="btn ghost share-stop" id="shareStopBtn">Stop sharing</button>
+      <div class="right">
+        <button class="btn" id="shareUpdateBtn" title="Replace the shared copy with this project as it is now"><span data-icon="refresh-cw"></span> Update link</button>
+        <button class="btn primary" id="shareDoneBtn">Done</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Sharing: the receiving side. Reached from a shared link, or by typing
+     the code into "Open shared" on Quotation studies. -->
+<div id="shareOpenModal" class="modal-overlay" style="display:none;">
+  <div class="modal-box">
+    <h2>Open shared notes</h2>
+    <div id="shareOpenEntry">
+      <p class="share-desc">Type the code you were given, or paste the whole link.</p>
+      <input type="text" id="shareOpenCodeInput" placeholder="e.g. K7M4-QX9P" autocomplete="off" spellcheck="false">
+    </div>
+    <div id="shareOpenPreview" style="display:none;"></div>
+    <div class="share-error" id="shareOpenError" style="display:none;"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="shareOpenCancelBtn">Cancel</button>
+      <button class="btn primary" id="shareOpenFindBtn">Find</button>
+      <button class="btn primary" id="shareOpenAddBtn" style="display:none;"><span data-icon="plus"></span> Add to my projects</button>
+    </div>
+  </div>
+</div>
+
 <div id="leaveReminderModal" class="modal-overlay" style="display:none;">
   <div class="modal-box">
     <h2>Back this project up?</h2>
@@ -992,6 +1066,8 @@
     <div class="dropdown-wrap">
       <button class="btn" id="fileMenuBtn"><span data-icon="folder"></span> Project data <span data-icon="chevron-down"></span></button>
       <div class="dropdown-menu" id="fileMenu">
+        <div class="dropdown-section-label">Share</div>
+        <button class="btn" id="shareBtn" title="Make a link others can open to get their own copy of these notes"><span data-icon="share-2"></span> Share notes…</button>
         <div class="dropdown-section-label">Local file</div>
         <button class="btn" id="exportBtn" title="Downloads a .json file containing this project's bar tags, notes, and headings (not the score PDF)"><span data-icon="download"></span> Export project (.json)</button>
         <button class="btn" id="importBtn" title="Loads a .json file previously exported from this page"><span data-icon="upload"></span> Import project (.json)</button>
@@ -1567,6 +1643,13 @@ let notes = [];           // {id, groupId|null, startBarId|null, startPage, star
 let groups = [];          // {id, name, collapsed} — student-created sub-headings notes can be dragged into
 let ungroupedCollapsed = false;
 let cloudId = null; // this project's cloud-backup code, once one exists (see saveToCloud())
+// This project's share link, once it has one (see "share links" below):
+// the code, the edit key that alone can update or remove it, and when the
+// shared copy was last sent.
+let shareInfo = null; // {code, editKey, updatedAt, sentAt} or null
+// When this project was last edited: the record's updatedAt on open, then
+// bumped by every persist() — lets the Share dialog say the link is behind.
+let shareProjectEditedAt = 0;
 // Set only for a project that came from a teacher-authored class task (see
 // "Teacher mode" below) — null for every ordinary student-created project.
 // taskRole distinguishes the teacher's own authoring copy ("teacher", shows
@@ -1769,6 +1852,7 @@ function normalizeProjectRecord(rec){
   rec.audioName = rec.audioName || null;
   rec.ungroupedCollapsed = rec.ungroupedCollapsed || false;
   rec.cloudId = rec.cloudId || null;
+  rec.share = (rec.share && rec.share.code && rec.share.editKey) ? rec.share : null;
   rec.taskId = rec.taskId || null;
   rec.classId = rec.classId || null;
   rec.taskRole = rec.taskRole || null;
@@ -1795,10 +1879,12 @@ function persist(){
     updatedAt: Date.now(),
     pdfName: currentProjectPdfName,
     markersByPage, pageSystems, notes, groups, barCounter, videoId, audioName, ungroupedCollapsed, cloudId,
+    share: shareInfo,
     taskId: currentTaskId, classId: currentClassId, taskRole: currentTaskRole,
     taskQuestionText: currentTaskQuestionText
   });
   scheduleAutoBackup(); // no-op until this project has a cloud code
+  shareProjectEditedAt = Date.now(); // so the Share dialog can say "changed since the link was updated"
 }
 function persistPdfBlob(blob){
   if(!currentProjectId) return;
@@ -1879,10 +1965,14 @@ async function retryPendingCloudDeletes(){
 async function deleteProjectCompletely(id){
   const rec = await dbGet(META_STORE, id);
   const code = rec && rec.cloudId; // the only copy of it — read before the record goes
+  const share = rec && rec.share && rec.share.code ? rec.share : null; // likewise the only edit key
   await dbDelete(META_STORE, id);
   await dbDelete(PDF_STORE, id);
   await dbDelete(AUDIO_STORE, id);
   if(code && !await deleteFromCloud(code)) queueCloudDelete(code);
+  // The edit key goes with the record, so after this nobody could ever stop
+  // the link — stop it now (copies people already made are theirs to keep).
+  if(share && !await stopShareOnServer(share)) queueShareStop(share);
 }
 
 async function migrateOldSingleProjectData(){
@@ -2227,6 +2317,8 @@ async function openProject(id){
   audioName = rec.audioName;
   ungroupedCollapsed = rec.ungroupedCollapsed;
   cloudId = rec.cloudId;
+  shareInfo = rec.share;
+  shareProjectEditedAt = rec.updatedAt || 0;
   currentTaskId = rec.taskId;
   currentClassId = rec.classId;
   currentTaskRole = rec.taskRole;
@@ -4980,6 +5072,338 @@ document.getElementById("cloudLoadConfirmBtn").addEventListener("click", loadFro
 document.getElementById("cloudLoadCodeInput").addEventListener("keydown", (e)=>{
   if(e.key==="Enter") loadFromCloud();
   if(e.key==="Escape") document.getElementById("cloudLoadModal").style.display = "none";
+});
+
+// =====================================================================
+// share links — hand someone a link (or a short code) and they get their
+// own copy of this project's notes, headings and bar tags. Unlike a cloud
+// backup code, a share can only be READ by whoever holds it: changing or
+// removing it needs the edit key that only this project record keeps (see
+// api/share/). So sharing can never let someone else's edits land on yours.
+// The score PDF is never included; the recipient adds their own copy.
+// =====================================================================
+const SHARE_PARAM = "share";
+function formatShareCode(code){ return code.slice(0,4) + "-" + code.slice(4); }
+function shareLinkFor(code){ return location.origin + location.pathname + "?" + SHARE_PARAM + "=" + code; }
+// Pulls the 8-character code out of whatever was typed or pasted: "k7m4 qx9p",
+// "K7M4-QX9P", or a whole link.
+function parseShareCode(raw){
+  raw = String(raw || "").trim();
+  try{
+    const u = new URL(raw);
+    if(u.searchParams.get(SHARE_PARAM)) raw = u.searchParams.get(SHARE_PARAM);
+  }catch(e){ /* not a link */ }
+  const code = raw.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return /^[A-HJ-NP-Z2-9]{8}$/.test(code) ? code : null;
+}
+function shareTimeAgo(t){
+  const mins = Math.floor((Date.now() - t) / 60000);
+  if(mins < 1) return "just now";
+  if(mins < 60) return mins + " min ago";
+  const hrs = Math.floor(mins / 60);
+  if(hrs < 24) return hrs + " hour" + (hrs===1?"":"s") + " ago";
+  const days = Math.floor(hrs / 24);
+  return days + " day" + (days===1?"":"s") + " ago";
+}
+async function shareApi(path, opts){
+  let resp;
+  try{ resp = await fetch("/api/share" + path, opts); }
+  catch(e){ throw new Error("Couldn't reach the server — check the internet connection and try again."); }
+  const data = await resp.json().catch(()=>({}));
+  if(!resp.ok){
+    const err = new Error(data.error || ("Server responded with " + resp.status));
+    err.status = resp.status;
+    throw err;
+  }
+  return data;
+}
+
+// ---------- owner side ----------
+function showShareError(msg){
+  const el = document.getElementById("shareError");
+  el.textContent = msg || "";
+  el.style.display = msg ? "" : "none";
+}
+let shareStopArmed = false, shareStopTimer = null;
+function resetShareStop(){
+  shareStopArmed = false;
+  clearTimeout(shareStopTimer);
+  const b = document.getElementById("shareStopBtn");
+  b.classList.remove("armed");
+  b.textContent = "Stop sharing";
+}
+function renderShareModal(){
+  const live = !!shareInfo;
+  document.getElementById("shareTitle").textContent = live ? "Shared" : "Share these notes";
+  document.getElementById("shareIntro").style.display = live ? "none" : "";
+  document.getElementById("shareIntroActions").style.display = live ? "none" : "";
+  document.getElementById("shareLive").style.display = live ? "" : "none";
+  document.getElementById("shareLiveActions").style.display = live ? "" : "none";
+  resetShareStop();
+  if(!live) return;
+  document.getElementById("shareCodeDisplay").textContent = formatShareCode(shareInfo.code);
+  document.getElementById("shareLinkDisplay").value = shareLinkFor(shareInfo.code);
+  const status = document.getElementById("shareStatus");
+  // The shared copy is a snapshot; say so when the project has moved on since.
+  // Both times from this device's clock (sentAt), never the server's, so a
+  // skewed clock can't make a fresh link look out of date. The 2s margin
+  // covers the save that records the link itself.
+  const editedSince = shareProjectEditedAt > (shareInfo.sentAt || 0) + 2000;
+  status.classList.toggle("stale", !!editedSince);
+  status.textContent = editedSince
+    ? "You've changed these notes since the link was last updated " + shareTimeAgo(shareInfo.updatedAt) + ". Press Update link to share the changes."
+    : "Shared copy last updated " + shareTimeAgo(shareInfo.updatedAt) + ". Changes you make from now on aren't shared until you press Update link.";
+}
+function openShareModal(){
+  if(!currentProjectId) return;
+  document.getElementById("fileMenu").classList.remove("open");
+  showShareError("");
+  renderShareModal();
+  document.getElementById("shareModal").style.display = "flex";
+}
+function closeShareModal(){ document.getElementById("shareModal").style.display = "none"; resetShareStop(); }
+function sharePayloadOrError(){
+  const payload = cloudProjectPayload();
+  if(new Blob([JSON.stringify(payload)]).size > CLOUD_PAYLOAD_LIMIT){
+    showShareError("This project has too much analysis to share in one link (limit ~900KB). Splitting it into two projects will fix it.");
+    return null;
+  }
+  return payload;
+}
+async function withBusy(btn, label, fn){
+  const original = btn.innerHTML;
+  btn.disabled = true; btn.textContent = label;
+  try{ await fn(); }
+  finally{ btn.disabled = false; btn.innerHTML = original; }
+}
+async function createShareLink(){
+  showShareError("");
+  const payload = sharePayloadOrError();
+  if(!payload) return;
+  const projectId = currentProjectId;
+  await withBusy(document.getElementById("shareCreateBtn"), "Creating…", async ()=>{
+    try{
+      const d = await shareApi("", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ payload }) });
+      if(currentProjectId !== projectId) return; // switched project mid-request
+      shareInfo = { code: d.code, editKey: d.editKey, updatedAt: d.updatedAt, sentAt: Date.now() };
+      persist();
+      renderShareModal();
+    }catch(err){ showShareError("Couldn't create the link: " + err.message); }
+  });
+}
+async function updateShareLink(){
+  if(!shareInfo) return;
+  showShareError("");
+  const payload = sharePayloadOrError();
+  if(!payload) return;
+  const info = shareInfo;
+  await withBusy(document.getElementById("shareUpdateBtn"), "Updating…", async ()=>{
+    try{
+      const d = await shareApi("/" + info.code, { method: "PUT",
+        headers: { "Content-Type": "application/json", "X-Share-Key": info.editKey },
+        body: JSON.stringify({ payload }) });
+      if(shareInfo !== info) return;
+      shareInfo = { ...info, updatedAt: d.updatedAt, sentAt: Date.now() };
+      persist();
+      renderShareModal();
+    }catch(err){
+      if(err.status === 404){
+        // Lapsed after a year untouched, or removed elsewhere: start over.
+        shareInfo = null; persist(); renderShareModal();
+        showShareError("That link had expired, so it can't be updated. Create a new one.");
+      }else showShareError("Couldn't update the link: " + err.message);
+    }
+  });
+}
+// Resolves true once the server confirms the share is gone.
+async function stopShareOnServer(info){
+  try{
+    await shareApi("/" + info.code, { method: "DELETE", headers: { "X-Share-Key": info.editKey } });
+    return true;
+  }catch(err){
+    return err.status === 404; // already gone counts
+  }
+}
+async function stopSharing(){
+  if(!shareInfo) return;
+  if(!shareStopArmed){
+    // two clicks, like other deletes — and the second says what it does
+    shareStopArmed = true;
+    const b = document.getElementById("shareStopBtn");
+    b.classList.add("armed");
+    b.textContent = "Click again to stop";
+    shareStopTimer = setTimeout(resetShareStop, 3500);
+    return;
+  }
+  resetShareStop();
+  showShareError("");
+  const info = shareInfo;
+  await withBusy(document.getElementById("shareStopBtn"), "Stopping…", async ()=>{
+    if(await stopShareOnServer(info)){
+      if(shareInfo === info){ shareInfo = null; persist(); }
+      renderShareModal();
+    }else showShareError("Couldn't stop sharing — check the connection and try again.");
+  });
+}
+
+// A share whose project was deleted while offline: stop it next time we can.
+const PENDING_SHARE_STOPS_KEY = "scoreStudioPendingShareStops";
+function pendingShareStops(){
+  try{ return JSON.parse(localStorage.getItem(PENDING_SHARE_STOPS_KEY) || "[]"); }catch{ return []; }
+}
+function savePendingShareStops(list){
+  try{ localStorage.setItem(PENDING_SHARE_STOPS_KEY, JSON.stringify(list.slice(-50))); }catch(e){ /* best-effort */ }
+}
+function queueShareStop(info){
+  const list = pendingShareStops();
+  if(!list.some(x=>x.code===info.code)){ list.push({ code: info.code, editKey: info.editKey }); savePendingShareStops(list); }
+}
+async function retryPendingShareStops(){
+  const list = pendingShareStops();
+  if(!list.length) return;
+  const still = [];
+  for(const info of list){ if(!await stopShareOnServer(info)) still.push(info); }
+  savePendingShareStops(still);
+}
+
+document.getElementById("shareBtn").addEventListener("click", openShareModal);
+document.getElementById("shareCancelBtn").addEventListener("click", closeShareModal);
+document.getElementById("shareDoneBtn").addEventListener("click", closeShareModal);
+document.getElementById("shareCreateBtn").addEventListener("click", createShareLink);
+document.getElementById("shareUpdateBtn").addEventListener("click", updateShareLink);
+document.getElementById("shareStopBtn").addEventListener("click", stopSharing);
+document.getElementById("shareModal").addEventListener("click", (e)=>{ if(e.target.id === "shareModal") closeShareModal(); });
+document.getElementById("shareCopyLinkBtn").addEventListener("click", ()=>{
+  const input = document.getElementById("shareLinkDisplay");
+  input.select();
+  const btn = document.getElementById("shareCopyLinkBtn");
+  const done = ()=>{ btn.innerHTML = icon("check",16) + " Copied"; setTimeout(()=>{ btn.innerHTML = icon("copy",16) + " Copy link"; }, 1600); };
+  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(input.value).then(done, ()=>{ document.execCommand("copy"); done(); });
+  else { document.execCommand("copy"); done(); }
+});
+
+// ---------- receiving side ----------
+let shareOpenData = null; // the share being previewed, once found
+function showShareOpenError(msg){
+  const el = document.getElementById("shareOpenError");
+  el.textContent = msg || "";
+  el.style.display = msg ? "" : "none";
+}
+function openShareOpenModal(prefill){
+  shareOpenData = null;
+  showShareOpenError("");
+  document.getElementById("shareOpenEntry").style.display = "";
+  document.getElementById("shareOpenPreview").style.display = "none";
+  document.getElementById("shareOpenFindBtn").style.display = "";
+  document.getElementById("shareOpenAddBtn").style.display = "none";
+  const input = document.getElementById("shareOpenCodeInput");
+  input.value = prefill ? formatShareCode(prefill) : "";
+  document.getElementById("shareOpenModal").style.display = "flex";
+  if(prefill) findSharedNotes();
+  else input.focus();
+}
+function closeShareOpenModal(){ document.getElementById("shareOpenModal").style.display = "none"; shareOpenData = null; }
+async function findSharedNotes(){
+  showShareOpenError("");
+  const code = parseShareCode(document.getElementById("shareOpenCodeInput").value);
+  if(!code){ showShareOpenError("A share code is 8 letters and numbers, like K7M4-QX9P."); return; }
+  await withBusy(document.getElementById("shareOpenFindBtn"), "Finding…", async ()=>{
+    try{
+      const d = await shareApi("/" + code);
+      shareOpenData = d;
+      renderSharePreview(d);
+    }catch(err){ showShareOpenError(err.message); }
+  });
+}
+function renderSharePreview(d){
+  const p = d.payload || {};
+  const notesList = Array.isArray(p.notes) ? p.notes : [];
+  const groupsList = Array.isArray(p.groups) ? p.groups : [];
+  const tagged = Object.values(p.markersByPage || {}).reduce((n, list)=> n + (Array.isArray(list) ? list.length : 0), 0);
+  const meta = [
+    notesList.length + " note" + (notesList.length===1?"":"s"),
+    groupsList.length ? groupsList.length + " heading" + (groupsList.length===1?"":"s") : null,
+    tagged ? tagged + " bar" + (tagged===1?"":"s") + " tagged" : null,
+    "shared " + shareTimeAgo(d.updatedAt || d.createdAt)
+  ].filter(Boolean).join(" · ");
+
+  // A glimpse, not the whole thing: the first few notes, in heading order.
+  const ordered = [];
+  groupsList.forEach(g=> notesList.filter(n=>n.groupId===g.id).forEach(n=> ordered.push({ n, g })));
+  notesList.filter(n=> !groupsList.some(g=>g.id===n.groupId)).forEach(n=> ordered.push({ n, g: null }));
+  const SHOW = 5;
+  let html = '<div class="share-preview-title">' + escapeHtml(p.name || "Shared notes") + '</div>'
+    + '<div class="share-preview-meta">' + escapeHtml(meta) + '</div>';
+  let lastGroup;
+  ordered.slice(0, SHOW).forEach(({ n, g })=>{
+    if(g && g !== lastGroup) html += '<div class="share-preview-group">' + escapeHtml(g.name || "") + '</div>';
+    lastGroup = g;
+    const text = (n.what || n.why || "").trim() || "(empty note)";
+    html += '<div class="share-preview-note">' + escapeHtml(text) + '</div>';
+  });
+  if(ordered.length > SHOW) html += '<div class="share-preview-more">…and ' + (ordered.length - SHOW) + ' more</div>';
+  if(!ordered.length) html += '<div class="share-preview-more">No notes yet — just bar tags.</div>';
+  const note = '<p class="share-desc" style="margin:0 0 4px;">Adding makes your own copy. You can change it freely; the person who shared it won\'t see your changes, and theirs won\'t change yours.'
+    + (p.pdfName ? ' Add your copy of the score (' + escapeHtml(p.pdfName) + ') once it opens.' : '') + '</p>';
+
+  const box = document.getElementById("shareOpenPreview");
+  box.innerHTML = '<div class="share-preview">' + html + '</div>' + note;
+  box.style.display = "";
+  document.getElementById("shareOpenEntry").style.display = "none";
+  document.getElementById("shareOpenFindBtn").style.display = "none";
+  document.getElementById("shareOpenAddBtn").style.display = "";
+}
+async function addSharedToMyProjects(){
+  if(!shareOpenData) return;
+  const p = shareOpenData.payload || {};
+  await withBusy(document.getElementById("shareOpenAddBtn"), "Adding…", async ()=>{
+    // Same name as the original, unless that would sit beside one already
+    // called that — then "(copy)", so the two can be told apart.
+    let name = (p.name || "Shared notes").trim();
+    const existing = (await listProjects()).map(r=>r.name);
+    if(existing.includes(name)) name += " (copy)";
+    const id = await createProject(name);
+    const rec = await dbGet(META_STORE, id);
+    Object.assign(rec, {
+      pdfName: null,               // the score comes from them, not the share
+      markersByPage: p.markersByPage || {},
+      pageSystems: p.pageSystems || {},
+      notes: Array.isArray(p.notes) ? p.notes : [],
+      groups: Array.isArray(p.groups) ? p.groups : [],
+      barCounter: p.barCounter || 0,
+      videoId: p.videoId || null,
+      updatedAt: Date.now()
+    });
+    await dbPut(META_STORE, rec);
+    closeShareOpenModal();
+    showHome();               // so Back from the new project lands on Quotation studies
+    await showStudio(id);
+    document.getElementById("topStatus").textContent = "Shared notes added — upload your copy of the score to see the bar tags on it.";
+  });
+}
+// A link like …/?share=K7M4QX9P: take the code out of the address (so a
+// refresh or a bookmark doesn't keep reopening it) and offer the copy.
+function openShareFromUrl(){
+  const params = new URLSearchParams(location.search);
+  if(!params.has(SHARE_PARAM)) return;
+  const code = parseShareCode(params.get(SHARE_PARAM));
+  try{
+    const u = new URL(location.href);
+    u.searchParams.delete(SHARE_PARAM);
+    history.replaceState(null, "", u.pathname + u.search + u.hash);
+  }catch(e){ /* address can't be rewritten; harmless */ }
+  if(code) openShareOpenModal(code);
+  else { openShareOpenModal(); showShareOpenError("That link's share code looks incomplete — type the code you were given instead."); }
+}
+
+document.getElementById("openSharedBtn").addEventListener("click", ()=> openShareOpenModal());
+document.getElementById("shareOpenCancelBtn").addEventListener("click", closeShareOpenModal);
+document.getElementById("shareOpenFindBtn").addEventListener("click", findSharedNotes);
+document.getElementById("shareOpenAddBtn").addEventListener("click", addSharedToMyProjects);
+document.getElementById("shareOpenModal").addEventListener("click", (e)=>{ if(e.target.id === "shareOpenModal") closeShareOpenModal(); });
+document.getElementById("shareOpenCodeInput").addEventListener("keydown", (e)=>{
+  if(e.key === "Enter") findSharedNotes();
+  if(e.key === "Escape") closeShareOpenModal();
 });
 
 // =====================================================================
@@ -8906,6 +9330,9 @@ document.getElementById("joinClassCodeInput").addEventListener("keydown", (e)=>{
   // Not awaited: the app is usable immediately, and the queue keeps until it
   // succeeds.
   retryPendingCloudDeletes();
+  retryPendingShareStops();
+  // Opened from a shared link (…/?share=K7M4QX9P): offer the copy straight away.
+  openShareFromUrl();
 })();
 </script>
 </body>
