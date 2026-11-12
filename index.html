@@ -2693,61 +2693,454 @@ window.addEventListener("resize", ()=>{ if(pdfDoc) renderPage(currentPage); });
 // bar at a barline inside it, and the barline that closes a system starts
 // nothing.
 // =====================================================================
-// Ink density (not a binary luminance cutoff) for one pixel: anti-aliased
-// PDF rendering means a "black" hairline is often several partially-gray
-// pixels wide, so a hard threshold systematically undercounts real lines.
-// Weighting by how dark each pixel actually is gives a far more decisive,
-// stable signal — measured on a real scanned score, a true barline reached
-// ~0.9 ink density vs ~0.05 background noise, while a binary count blurred
-// that gap down to ~0.25 vs ~0.15 and was unusable.
-function inkAt(data, i){
-  // Composite onto white before measuring. A transparent pixel is RGB 0,0,0
-  // with alpha 0 — reading the colour alone scores bare canvas as the darkest
-  // possible ink, so an unpainted canvas, or any PDF that draws no background
-  // of its own, would read as solid black everywhere.
-  const a = data[i+3] / 255;
-  const lum = (0.299*data[i] + 0.587*data[i+1] + 0.114*data[i+2]) * a + 255 * (1 - a);
-  return Math.max(0, (230 - lum) / 230);
-}
-
 // ---------------------------------------------------------------------
-// Auto-detection of staves and barlines.
+// Reading a scanned page (no drawing to read, only the picture)
+// ---------------------------------------------------------------------
+// Checked against a hand-tagged scan (Rojas Piano Concerto, 14 pages, 149
+// bars — all found, one extra) and by eye on about twenty pages of fifteen
+// other scans: orchestral, choral, chamber, piano, annotated in pen, and
+// low-quality photocopies. A hand-copied lead sheet on a bent, tilted page
+// is still beyond it.
 //
-// Everything here works on runs of dark pixels rather than on how much ink a
-// row or column holds on average. That distinction is the whole game: a row
-// of noteheads and beams can carry more ink than a staff line without
-// containing a single long stroke, and a note stem is every bit as dark and
-// as narrow as a barline. What separates them is geometry — a staff line is
-// one long horizontal stroke, and a barline is one unbroken vertical stroke
-// touching both the top and bottom lines of its staff.
-// ---------------------------------------------------------------------
-const DARK = 0.35;  // ink level counted as "a mark", not paper or a faint scan
+// The steps, each in a function below:
+//  1. Ink and paper: an automatic threshold (Otsu), plus a lighter "faint
+//     ink" mask for questions like "is there a line here at all?".
+//  2. Staff size: the commonest dark run down a column is a staff line's
+//     thickness, the commonest light run a staff space.
+//  3. Tilt: photocopies are rarely straight. The angle that makes long thin
+//     horizontal strokes (staff lines) line up best across the page.
+//  4. Staves, strip by strip: in a narrow vertical strip even a bent page is
+//     straight, so rows of ink give clean peaks for staff lines; five evenly
+//     spaced peaks are a staff. Pieces are then linked across strips into
+//     whole staves that may bend.
+//  5. Systems: staves belong together when a line (the one that opens the
+//     system, or barlines through a group) runs unbroken between them.
+//  6. Barlines: a thin stroke crossing a staff from its top line to its
+//     bottom line, ending there (or running on to the next staff), with
+//     paper beside it — and lining up across most of the system's staves,
+//     which note stems never do.
 
-// Longest run of dark pixels in a row, tolerating 1px breaks from antialiasing.
-function longestRunInRow(data, w, y){
-  let best = 0, run = 0, gap = 0;
-  const off = y*w*4;
-  for(let x=0; x<w; x++){
-    if(inkAt(data, off + x*4) > DARK){ run += gap + 1; gap = 0; if(run > best) best = run; }
-    else if(run){ if(++gap > 1){ run = 0; gap = 0; } }
+function grayFromCanvas(canvas){
+  const w = canvas.width, h = canvas.height;
+  const data = canvas.getContext("2d").getImageData(0, 0, w, h).data;
+  const gray = new Uint8Array(w*h);
+  for(let i=0, p=0; p<gray.length; i+=4, p++){
+    // Composite onto white: an unpainted (transparent) pixel is paper, not ink.
+    const a = data[i+3] / 255;
+    gray[p] = Math.round((0.299*data[i] + 0.587*data[i+1] + 0.114*data[i+2]) * a + 255 * (1 - a));
   }
-  return best;
+  return { gray, w, h };
 }
 
-// Where the longest dark run in a row begins and ends — for a staff line,
-// where the staff itself begins and ends.
-function longestRunExtentInRow(data, w, y){
-  let best = 0, bestStart = 0, run = 0, start = 0, gap = 0;
-  const off = y*w*4;
-  for(let x=0; x<w; x++){
-    if(inkAt(data, off + x*4) > DARK){
-      if(!run) start = x;
-      run += gap + 1; gap = 0;
-      if(run > best){ best = run; bestStart = start; }
-    }
-    else if(run){ if(++gap > 1){ run = 0; gap = 0; } }
+function otsuThreshold(gray){
+  const hist = new Float64Array(256);
+  for(let i=0; i<gray.length; i++) hist[gray[i]]++;
+  const total = gray.length;
+  let sum = 0; for(let i=0; i<256; i++) sum += i * hist[i];
+  let wB = 0, sumB = 0, best = 0, thr = 128;
+  for(let i=0; i<256; i++){
+    wB += hist[i]; if(!wB) continue;
+    const wF = total - wB; if(!wF) break;
+    sumB += i * hist[i];
+    const mB = sumB / wB, mF = (sum - sumB) / wF;
+    const between = wB * wF * (mB - mF) * (mB - mF);
+    if(between > best){ best = between; thr = i; }
   }
-  return { x0: bestStart, x1: bestStart + best - 1 };
+  return thr;
+}
+
+function staffLineSize(dark, w, h){
+  const black = new Uint32Array(201), white = new Uint32Array(201);
+  for(let x=0; x<w; x+=5){
+    let run = 0, last = -1, prevEnd = -1;
+    for(let y=0; y<=h; y++){
+      const on = y < h && dark[y*w + x];
+      if(on){ if(!run && prevEnd >= 0){ const gp = y - prevEnd; if(gp < 200) white[gp]++; } run++; }
+      else if(run){ black[Math.min(run, 200)]++; prevEnd = y; run = 0; }
+    }
+  }
+  let t = 1; for(let i=1; i<201; i++) if(black[i] > black[t]) t = i;
+  let sp = 1; for(let i=1; i<201; i++) if(white[i] > white[sp]) sp = i;
+  return { t, s: t + sp };
+}
+
+function pageTilt(dark, w, h, s){
+  // Long, thin horizontal runs only: staff lines, not text, handwriting or
+  // the edge of a solid dark area.
+  const L = Math.max(2*s, 20), r = Math.max(3, Math.floor(s/3));
+  const xs = [], ys = [];
+  for(let y=r; y<h-r; y++){
+    let start = -1;
+    for(let x=0; x<=w; x++){
+      const on = x < w && dark[y*w + x];
+      if(on && start < 0) start = x;
+      else if(!on && start >= 0){
+        if(x - start >= L){
+          for(let xx=start; xx<x; xx+=2)
+            if(!dark[(y-r)*w + xx] && !dark[(y+r)*w + xx]){ xs.push(xx); ys.push(y); }
+        }
+        start = -1;
+      }
+    }
+  }
+  if(xs.length < 100) return 0;
+  const n = xs.length, hist = new Float64Array(h + 2*Math.ceil(w*0.1) + 4);
+  const off = Math.ceil(w*0.1) + 2;
+  const score = deg=>{
+    const k = Math.tan(deg * Math.PI/180);
+    hist.fill(0);
+    for(let i=0; i<n; i++) hist[Math.round(ys[i] + xs[i]*k) + off]++;
+    let sc = 0; for(let i=0; i<hist.length; i++) sc += hist[i]*hist[i];
+    return sc;
+  };
+  let best = 0, bestScore = -1;
+  for(let d=-5; d<=5.0001; d+=0.25){ const sc = score(d); if(sc > bestScore){ bestScore = sc; best = d; } }
+  const around = best;
+  for(let d=around-0.25; d<=around+0.2501; d+=0.025){ const sc = score(d); if(sc > bestScore){ bestScore = sc; best = d; } }
+  return Math.tan(best * Math.PI/180);
+}
+
+// A staff is a list of measured points along it: [x, [y of its 5 lines]].
+// Between points the lines are interpolated; beyond the ends, extended along
+// the nearest slope.
+function scanLineY(pts, q, x, sloped){
+  if(pts.length === 1) return pts[0][1][q];
+  if(x <= pts[0][0]){
+    if(sloped === false) return pts[0][1][q];
+    const [xa, ya] = pts[0], [xb, yb] = pts[1];
+    return ya[q] + (x - xa) * (yb[q] - ya[q]) / (xb - xa);
+  }
+  const lastP = pts[pts.length-1];
+  if(x >= lastP[0]){
+    if(sloped === false) return lastP[1][q];
+    const [xa, ya] = pts[pts.length-2], [xb, yb] = lastP;
+    return yb[q] + (x - xb) * (yb[q] - ya[q]) / (xb - xa);
+  }
+  for(let i=1; i<pts.length; i++){
+    const [xa, ya] = pts[i-1], [xb, yb] = pts[i];
+    if(x <= xb) return ya[q] + (x - xa) * (yb[q] - ya[q]) / (xb - xa);
+  }
+  return lastP[1][q];
+}
+
+function findScanStaves(dark, ink, w, h, t, s, k, lineFactor){
+  const nStrips = Math.max(8, Math.round(w / (30*s)));
+  const pieces = [];
+  const P = new Float64Array(h);
+  for(let j=0; j<nStrips; j++){
+    const xa = Math.floor(j*w/nStrips), xb = Math.floor((j+1)*w/nStrips), sw = xb - xa, cx = (xa + xb)/2;
+    const px = [], py = [];
+    for(let y=0; y<h; y++){ const row = y*w; for(let x=xa; x<xb; x++) if(dark[row + x]){ px.push(x - cx); py.push(y); } }
+    // Each strip settles its own tilt near the page's: a page can bend.
+    const profile = kk=>{
+      P.fill(0);
+      for(let i=0; i<px.length; i++){ const yy = Math.round(py[i] + px[i]*kk); if(yy >= 0 && yy < h) P[yy]++; }
+    };
+    let kBest = k, bestSc = -1;
+    if(px.length){
+      for(let d=-2; d<=2.0001; d+=0.25){
+        const kk = k + Math.tan(d * Math.PI/180); profile(kk);
+        let sc = 0; for(let y=0; y<h; y++) sc += P[y]*P[y];
+        if(sc > bestSc){ bestSc = sc; kBest = kk; }
+      }
+    }
+    profile(kBest);
+    // Lines are the peaks of the row profile.
+    const lt = lineFactor * sw, L = [], Lw = [];
+    for(let y=1; y<h-1; y++){
+      if(P[y] > lt && P[y] >= P[y-1] && P[y] > P[y+1]){
+        if(L.length && y - L[L.length-1] <= Math.max(2, t)){ if(P[y] > Lw[Lw.length-1]){ L[L.length-1] = y; Lw[Lw.length-1] = P[y]; } }
+        else { L.push(y); Lw.push(P[y]); }
+      }
+    }
+    // Every run of five evenly spaced lines is a candidate staff; the
+    // strongest win. (A staff's five lines are about equally strong; a
+    // ledger line or beam standing in for one is weaker.)
+    const cands = [];
+    for(let i=0; i<L.length; i++){
+      for(let jj=i+1; jj<L.length; jj++){
+        const g = L[jj] - L[i];
+        if(g < 0.5*s) continue;
+        if(g > 2.5*s) break;
+        const ch = [i, jj];
+        for(let kk=2; kk<5; kk++){
+          const y = L[ch[ch.length-1]] + g, tol = Math.max(1.5, 0.2*g);
+          let pick = -1, pd = Infinity;
+          for(let m=ch[ch.length-1]+1; m<L.length && L[m] <= y + tol; m++){
+            const dd = Math.abs(L[m] - y);
+            if(dd <= tol && dd < pd){ pd = dd; pick = m; }
+          }
+          if(pick < 0) break;
+          ch.push(pick);
+        }
+        if(ch.length !== 5) continue;
+        const ys5 = ch.map(m=> L[m]), gg = (ys5[4] - ys5[0]) / 4;
+        let even = true;
+        for(let q=0; q<4; q++) if(Math.abs((ys5[q+1] - ys5[q]) - gg) > Math.max(1.5, 0.2*gg)) even = false;
+        if(!even) continue;
+        const ws = ch.map(m=> Lw[m]);
+        cands.push({ score: ws.reduce((a,b)=>a+b, 0) + 5*Math.min(...ws), ch, ys5 });
+      }
+    }
+    cands.sort((a,b)=> b.score - a.score);
+    const used = new Set(), found = [];
+    cands.forEach(c=>{
+      if(c.ch.some(m=> used.has(m))) return;
+      if(found.some(f=> !(c.ys5[4] < f[0] - 0.5*s || c.ys5[0] > f[4] + 0.5*s))) return;
+      c.ch.forEach(m=> used.add(m)); found.push(c.ys5);
+    });
+    found.sort((a,b)=> a[0] - b[0]);
+    pieces.push({ cx, found });
+  }
+
+  // Link pieces strip to strip; a strip where the staff is buried under
+  // dense notes may be skipped.
+  const chains = [];
+  pieces.forEach(({ cx, found }, j)=>{
+    found.forEach(ys5=>{
+      const gg = (ys5[4] - ys5[0]) / 4;
+      let best = null, bestD = Infinity;
+      chains.forEach(c=>{
+        const { j: lj, ys: lys } = c.last;
+        if(lj >= j || j - lj > 2) return;
+        const d = Math.abs(lys[0] - ys5[0]);
+        if(d <= 0.5*gg*(j - lj) && Math.abs((lys[4] - lys[0])/4 - gg) <= Math.max(1.5, 0.15*gg) && d < bestD){ bestD = d; best = c; }
+      });
+      if(best){ best.pts.push([cx, ys5]); best.last = { j, ys: ys5 }; }
+      else chains.push({ pts: [[cx, ys5]], last: { j, ys: ys5 } });
+    });
+  });
+
+  // Merge chains that are one staff: pieces either side of a stretch the
+  // linking couldn't bridge, or the same staff linked twice.
+  let groups = chains.map(c=> c.pts);
+  const gapOf = pts=> medianOf(pts.map(([, y])=> (y[4] - y[0]) / 4));
+  for(let merged=true; merged; ){
+    merged = false;
+    outer:
+    for(let a=0; a<groups.length; a++){
+      for(let b=a+1; b<groups.length; b++){
+        const A = groups[a], B = groups[b], gA = gapOf(A), gB = gapOf(B);
+        if(Math.abs(gA - gB) > Math.max(1.5, 0.15*gA)) continue;
+        const agree = (Pp, Qq, sl)=> Qq.every(([x, y])=> Math.abs(scanLineY(Pp, 0, x, sl) - y[0]) <= 0.45*gA);
+        if([false, true].some(sl=> agree(A, B, sl) && agree(B, A, sl))){
+          const byX = new Map();
+          A.concat(B).forEach(([x, y])=>{ if(!byX.has(x)) byX.set(x, []); byX.get(x).push(y); });
+          groups[a] = [...byX.entries()].sort((p, q)=> p[0] - q[0])
+            .map(([x, list])=> [x, [0,1,2,3,4].map(q=> list.reduce((sum, y)=> sum + y[q], 0) / list.length)]);
+          groups.splice(b, 1); merged = true; break outer;
+        }
+        // Two real staves are never within a staff space of each other:
+        // pieces that close are one staff, one of them misread (ledger lines
+        // or a beam taken for staff lines). The shorter goes.
+        if(B.every(([x, y])=> Math.abs(scanLineY(A, 0, x, false) - y[0]) <= 1.3*gA)){
+          groups.splice(B.length <= A.length ? b : a, 1); merged = true; break outer;
+        }
+      }
+    }
+  }
+  groups = groups.filter(pts=> pts.length >= 2).sort((p, q)=> q.length - p.length);
+  // Two staves can't overlap; where they do, keep the longer.
+  const keep = [];
+  groups.forEach(pts=>{
+    const clash = keep.some(K=> pts.some(([x, y])=>{
+      if(x < K[0][0] - 1 || x > K[K.length-1][0] + 1) return false;
+      const top = scanLineY(K, 0, x), bot = scanLineY(K, 4, x);
+      return !(y[4] < top - 2 || y[0] > bot + 2);
+    }));
+    if(!clash) keep.push(pts);
+  });
+
+  // Where each staff begins and ends: where at least four of its lines are
+  // there (faint ink counts — line ends are often light).
+  const staves = keep.map(pts=>{
+    const gap = gapOf(pts);
+    let bestLen = -1, bx0 = 0, bx1 = 0, start = -1, last = -1;
+    for(let x=0; x<w; x++){
+      let cnt = 0;
+      for(let q=0; q<5; q++){
+        const y = Math.round(scanLineY(pts, q, x));
+        for(let d=-1; d<=1; d++){ const yy = y + d; if(yy >= 0 && yy < h && ink[yy*w + x]){ cnt++; break; } }
+      }
+      if(cnt >= 4){
+        if(start < 0 || x - last > s) start = x;
+        last = x;
+        if(last - start > bestLen){ bestLen = last - start; bx0 = start; bx1 = last; }
+      }
+    }
+    return { pts, gap, x0: bx0, x1: bx1 };
+  }).filter(st=> st.x1 - st.x0 > Math.max(10*s, 0.08*w));
+  staves.forEach(st=>{ st.top = scanLineY(st.pts, 0, (st.x0 + st.x1)/2); });
+  return staves.sort((a, b)=> a.top - b.top);
+}
+
+function detectBarsOnCanvas(canvas, opts){
+  opts = opts || {};
+  // Sensitivity sliders (0–100, default 30): lower finds only the clearest
+  // lines, higher accepts fainter ones.
+  const staffSens = opts.staffThreshold != null ? opts.staffThreshold : 30;
+  const barSens = opts.barThreshold != null ? opts.barThreshold : 30;
+  const lineFactor = Math.min(0.5, Math.max(0.12, 0.35 + (30 - staffSens) * 0.005));
+  const colThr = Math.min(0.95, Math.max(0.6, 0.85 + (30 - barSens) * 0.003));
+
+  const { gray, w, h } = grayFromCanvas(canvas);
+  const thr = Math.min(otsuThreshold(gray), 200);
+  const inkThr = Math.min(thr + Math.floor((255 - thr) / 2), 215);
+  const dark = new Uint8Array(w*h), ink = new Uint8Array(w*h);
+  for(let i=0; i<gray.length; i++){ dark[i] = gray[i] < thr ? 1 : 0; ink[i] = gray[i] < inkThr ? 1 : 0; }
+  const D = (y, x)=> y >= 0 && y < h && x >= 0 && x < w && dark[y*w + x] === 1;
+  const I = (y, x)=> y >= 0 && y < h && x >= 0 && x < w && ink[y*w + x] === 1;
+
+  const { t, s } = staffLineSize(dark, w, h);
+  const k = pageTilt(dark, w, h, s);
+  const staves = findScanStaves(dark, ink, w, h, t, s, k, lineFactor);
+  const lineY = (st, q, x)=> scanLineY(st.pts, q, x);
+  if(!staves.length) return { width: w, height: h, systems: [] };
+
+  // Systems: consecutive staves joined by an unbroken line between them. A
+  // vertical line leans with the page, and which way depends on how the page
+  // was scanned, so straight and both leans are tried.
+  const leftMargin = [...staves.map(st=> st.x0)].sort((a,b)=>a-b)[Math.floor(staves.length * 0.1)];
+  const joined = (a, b)=>{
+    const lo = Math.floor(Math.min(a.x0, b.x0, leftMargin) - 2*s), hi = Math.ceil(Math.max(a.x1, b.x1) + s);
+    const m = (lineY(a, 0, a.x1) - lineY(a, 0, a.x0)) / Math.max(1, a.x1 - a.x0);
+    for(let x=Math.max(lo, 1); x<Math.min(hi, w-1); x++){
+      const y0 = Math.round(lineY(a, 4, x)), y1 = Math.round(lineY(b, 0, x));
+      if(y1 <= y0) continue;
+      const len = y1 - y0 + 1, allowed = Math.floor(0.05 * len);
+      for(const lean of [-m, 0, m]){
+        let miss = 0;
+        for(let y=y0; y<=y1 && miss <= allowed; y++){
+          const xx = Math.round(x + lean*(y - y0));
+          if(!(I(y, xx) || I(y, xx-1) || I(y, xx+1))) miss++;
+        }
+        if(miss <= allowed) return true;
+      }
+    }
+    return false;
+  };
+  const systems = [];
+  staves.forEach(st=>{
+    const prev = systems.length ? systems[systems.length-1] : null;
+    if(prev && joined(prev[prev.length-1], st)) prev.push(st); else systems.push([st]);
+  });
+
+  const results = systems.map(sy=>{
+    const n = sy.length, g = medianOf(sy.map(st=> st.gap));
+    const x0 = Math.min(...sy.map(st=> st.x0)), x1 = Math.max(...sy.map(st=> st.x1));
+    // How much of the column from y0 to y1 is ink — straight down, or drifting
+    // a pixel either way (a printed barline can lean that much).
+    const colFrac = (x, y0f, y1f)=>{
+      const y0 = Math.round(y0f), y1 = Math.round(y1f);
+      if(y1 <= y0 || x < 1 || x >= w-1) return 0;
+      let best = 0;
+      for(const d of [0, -1, 1]){
+        let c = 0;
+        for(let y=y0; y<=y1; y++) if(dark[y*w + x + Math.round(d*(y - y0)/(y1 - y0))]) c++;
+        best = Math.max(best, c / (y1 - y0 + 1));
+        if(d === 0 && best < 0.4) return best;
+      }
+      return best;
+    };
+    const raw = [];
+    sy.forEach((st, kIdx)=>{
+      const hits = [];
+      for(let x=Math.max(0, Math.floor(st.x0 - g)); x<Math.min(w, st.x1 + g); x++)
+        if(colFrac(x, lineY(st, 0, x), lineY(st, 4, x)) >= colThr) hits.push(x);
+      for(let i=0; i<hits.length; ){
+        let j = i;
+        while(j+1 < hits.length && hits[j+1] - hits[j] <= 1) j++;
+        const wdt = hits[j] - hits[i] + 1, xc = (hits[i] + hits[j]) / 2;
+        i = j+1;
+        if(wdt > Math.max(2, 0.7*g)) continue;
+        // Ink beside the stroke, in the staff spaces (not on the lines).
+        // Also reports the fullest single space: a notehead fills one space
+        // and barely moves the average over four.
+        const sideMax = { v: 0 };
+        const side = (from, to)=>{
+          let sum = 0, n = 0;
+          const perSpace = [0, 0, 0, 0], perN = [0, 0, 0, 0];
+          for(let dx=from; dx<=to; dx++){
+            const x = Math.round(xc + dx);
+            if(x < 0 || x >= w) continue;
+            for(let q=0; q<4; q++){
+              const ya = Math.round(lineY(st, q, x) + t + 1), yb = Math.round(lineY(st, q+1, x) - t - 1);
+              if(yb < ya) continue;
+              let c = 0; for(let y=ya; y<=yb; y++) if(D(y, x)) c++;
+              const f = c / (yb - ya + 1);
+              sum += f; n++; perSpace[q] += f; perN[q]++;
+            }
+          }
+          sideMax.v = Math.max(...perSpace.map((v, q)=> perN[q] ? v / perN[q] : 0));
+          return n ? sum / n : 0;
+        };
+        const half = Math.floor(wdt/2 + 2), reach = Math.max(2, Math.floor(0.5*g)), nr = Math.max(1, Math.round(0.2*g));
+        // Paper on both sides over half a staff space: clearly not a stem.
+        const isoL = side(-half - reach, -half) <= 0.2 && sideMax.v <= 0.5;
+        const iso = isoL && side(half, half + reach) <= 0.2 && sideMax.v <= 0.5;
+        // Right beside a barline is paper; beside the upright of a
+        // time-signature digit, there's the rest of the digit.
+        const thin = side(-half - nr + 1, -half + 1) <= 0.35 && side(half - 1, half + nr - 1) <= 0.35;
+        // How far the stroke carries on past the staff's outer lines.
+        const xi = Math.round(xc);
+        const runFrom = (y, step)=>{
+          let n = 0, yy = Math.round(y) + step*(t + 1);
+          while(yy >= 0 && yy < h && (D(yy, xi) || D(yy, xi-1) || D(yy, xi+1))){ n++; yy += step; }
+          return n;
+        };
+        raw.push({ xc, k: kIdx, iso, thin,
+          up: runFrom(lineY(st, 0, xi), -1), dn: runFrom(lineY(st, 4, xi), +1),
+          pg: kIdx > 0 ? lineY(st, 0, xi) - lineY(sy[kIdx-1], 4, xi) : null,
+          ng: kIdx+1 < n ? lineY(sy[kIdx+1], 0, xi) - lineY(st, 4, xi) : null });
+      }
+    });
+    // A barline either stops at the staff's outer lines or carries on through
+    // the gap to the next staff — possibly broken there by a dynamic, so the
+    // strokes reaching in from both staves together need only bridge half.
+    const partners = (c, dk)=> raw.filter(o=> o.k === c.k + dk && Math.abs(o.xc - c.xc) <= 2);
+    const cands = [];
+    raw.forEach(c=>{
+      const tu = c.pg != null && (c.up >= c.pg - t - 3 || partners(c, -1).some(o=> c.up + o.dn >= 0.5*c.pg));
+      const td = c.ng != null && (c.dn >= c.ng - t - 3 || partners(c, +1).some(o=> c.dn + o.up >= 0.5*c.ng));
+      if(!((c.up <= 0.35*g || tu) && (c.dn <= 0.35*g || td))) return;
+      // A time signature can sit flush against a barline, but it never
+      // carries on to the next staff.
+      if(!c.thin && !(tu || td)) return;
+      cands.push({ x: c.xc, k: c.k, iso: c.iso, thru: tu || td });
+    });
+    // Vote across the system's staves.
+    cands.sort((a, b)=> a.x - b.x);
+    const groups = [];
+    cands.forEach(c=>{
+      const G = groups[groups.length-1];
+      if(G && c.x - G.xs[G.xs.length-1] <= Math.max(2, 0.5*g)){
+        G.xs.push(c.x);
+        if(!G.ks.has(c.k)){ G.good += (c.iso || c.thru) ? 1 : 0; G.ks.add(c.k); }
+        G.iso = G.iso && c.iso; G.thru = G.thru || c.thru;
+      } else groups.push({ xs: [c.x], ks: new Set([c.k]), iso: c.iso, thru: c.thru, good: (c.iso || c.thru) ? 1 : 0 });
+    });
+    const accept = G=>{
+      // Big systems: most staves, and stems of notes struck together line up
+      // too — but each has a notehead beside it and stops inside its staff.
+      if(n >= 3) return G.ks.size >= Math.ceil(0.6*n) && G.good >= Math.ceil(G.ks.size/2);
+      // Two staves (a piano part): through both, joining them or clear of notes.
+      if(n === 2) return G.ks.size === 2 && (G.thru || G.iso);
+      return G.iso;
+    };
+    const xs = groups.filter(accept).map(G=> medianOf(G.xs)).sort((a, b)=> a - b);
+    // A double, final or repeat barline is two strokes close together.
+    const barlines = [], doubles = [];
+    xs.forEach(x=>{
+      if(barlines.length && x - barlines[barlines.length-1].last <= 1.2*g){ barlines[barlines.length-1].last = x; doubles[doubles.length-1] = true; }
+      else { barlines.push({ x, last: x }); doubles.push(false); }
+    });
+    const xm = (x0 + x1) / 2;
+    const top = lineY(sy[0], 0, xm), bottom = lineY(sy[n-1], 4, xm);
+    const barX = barlines.map(b=> b.x);
+    return { yTop: top - g, yBottom: bottom + g, barX, x0, x1, gap: g,
+             barStarts: barStartsFromBarlines(barX, x0, x1, g, w, doubles) };
+  });
+  return { width: w, height: h, systems: results };
 }
 
 function medianOf(values){
@@ -2755,209 +3148,26 @@ function medianOf(values){
   return s.length ? s[Math.floor(s.length/2)] : 0;
 }
 
-function detectStaffLines(imgData, w, h, relativeSensitivity){
-  const data = imgData.data;
-  const runs = new Float32Array(h);
-  let maxRun = 0;
-  for(let y=0; y<h; y++){
-    runs[y] = longestRunInRow(data, w, y);
-    if(runs[y] > maxRun) maxRun = runs[y];
-  }
-  if(maxRun < w*0.1) return []; // nothing long enough to be a staff line
-  // Relative to the longest stroke on the page, so it travels between a
-  // full-width orchestral staff and a short incipit. Beams and slurs are long
-  // but nowhere near a staff line's width, so they fall below this.
-  //
-  // The floor matters: below about a quarter, beams start counting as staff
-  // lines, which drags a staff's measured top and bottom out to the beam and
-  // then no barline reaches both — detection degrades to nothing found rather
-  // than to something wrong. Staying proportional keeps short incipits working.
-  const threshold = maxRun * Math.max(relativeSensitivity, 0.25);
-  const rows = [];
-  for(let y=0; y<h; y++) if(runs[y] > threshold) rows.push(y);
-  // Merge the 2-3 rows a single drawn line covers into one centre.
-  const lines = [];
-  for(let i=0; i<rows.length; ){
-    let j = i;
-    while(j+1 < rows.length && rows[j+1]-rows[j] <= 3) j++;
-    lines.push(Math.round((rows[i]+rows[j])/2));
-    i = j+1;
-  }
-  return lines;
-}
-
-function groupIntoStaves(lines){
-  if(lines.length < 4) return [];
-  const gaps = lines.slice(1).map((y,i)=> y - lines[i]);
-  // The line spacing of a staff is the *small* gap. Taking a median across all
-  // gaps lets the large between-staff gaps drag the estimate up, which is how
-  // several staves used to end up merged into one.
-  const sorted = [...gaps].sort((a,b)=>a-b);
-  const small = sorted.slice(0, Math.max(1, Math.ceil(sorted.length/2)));
-  const spacing = small[Math.floor(small.length/2)] || 1;
-  const splitAt = spacing * 1.8;
-
-  const clusters = [];
-  let cur = [lines[0]];
-  for(let i=1;i<lines.length;i++){
-    if(lines[i]-lines[i-1] <= splitAt) cur.push(lines[i]);
-    else { clusters.push(cur); cur = [lines[i]]; }
-  }
-  clusters.push(cur);
-
-  const staves = [];
-  clusters.forEach(cluster=>{
-    if(cluster.length < 4) return;  // 4 allows one line lost under a beam
-    const top = cluster[0], bottom = cluster[cluster.length-1];
-    const lineGap = (bottom - top) / (cluster.length - 1);
-    if(lineGap <= 0) return;
-    staves.push({ top, bottom, lineGap, lines: cluster });
-  });
-  return staves;
-}
-
-function groupIntoSystems(staves){
-  if(staves.length === 0) return [];
-  const asOwn = ()=> staves.map(s=>({ top:s.top, bottom:s.bottom, staves:[s] }));
-  if(staves.length === 1) return asOwn();
-
-  const gaps = [];
-  for(let k=1;k<staves.length;k++) gaps.push(staves[k].top - staves[k-1].bottom);
-  const minG = Math.min(...gaps), maxG = Math.max(...gaps);
-  // Only braced staves (a piano part, a choral score) belong to one system, and
-  // those produce two clearly different gap sizes. When every gap is much the
-  // same the music is one staff per system — the common case for a lead sheet
-  // or a single line — and grouping would swallow the whole page into one band.
-  if(maxG < minG * 1.8) return asOwn();
-
-  const splitAt = Math.sqrt(Math.max(minG, 1) * maxG);
-  const systems = [];
-  let cur = [staves[0]];
-  for(let k=1;k<staves.length;k++){
-    if(gaps[k-1] <= splitAt) cur.push(staves[k]);
-    else { systems.push(cur); cur = [staves[k]]; }
-  }
-  systems.push(cur);
-  return systems.map(group=>({
-    top: group[0].top, bottom: group[group.length-1].bottom, staves: group
-  }));
-}
-
-// Longest unbroken vertical run of dark pixels in a column, returned as the
-// span it covers. Tolerates 1px breaks so a staff line crossing a stroke, or
-// antialiasing, doesn't chop it in half.
-function longestRunInColumn(data, w, x, yFrom, yTo){
-  let bestTop = -1, bestBot = -1, best = 0;
-  let start = -1, gap = 0;
-  for(let y=yFrom; y<=yTo; y++){
-    if(inkAt(data, (y*w+x)*4) > DARK){
-      if(start < 0) start = y;
-      gap = 0;
-      const len = y - start + 1;
-      if(len > best){ best = len; bestTop = start; bestBot = y; }
-    } else if(start >= 0){
-      if(++gap > 1){ start = -1; gap = 0; }
-    }
-  }
-  return { len: best, top: bestTop, bottom: bestBot };
-}
-
-// A barline is a stroke that touches both outer lines of the staff. A stem
-// does not: it runs about three and a half spaces from its notehead, so
-// whichever end it starts from, it stops short of the other. That single test
-// is what stops stems being read as barlines — they are just as dark and just
-// as narrow, so ink and width can't tell them apart.
-function detectBarlinesInStaff(imgData, w, h, staff, tolInGaps){
-  const data = imgData.data;
-  const top = Math.max(0, Math.round(staff.top));
-  const bottom = Math.min(h-1, Math.round(staff.bottom));
-  if(bottom - top < 4) return [];
-  const tol = Math.max(1.5, staff.lineGap * tolInGaps);
-  // Look a little beyond the staff so a barline drawn slightly proud of it
-  // still reads as one continuous stroke.
-  const scanTop = Math.max(0, Math.round(top - staff.lineGap));
-  const scanBot = Math.min(h-1, Math.round(bottom + staff.lineGap));
-
-  const hits = [];
-  for(let x=0; x<w; x++){
-    const r = longestRunInColumn(data, w, x, scanTop, scanBot);
-    if(r.len <= 0) continue;
-    if(r.top <= top + tol && r.bottom >= bottom - tol) hits.push(x);
-  }
-  // Cluster the 2-3 columns one stroke covers, and keep barlines apart by a
-  // couple of staff spaces so a thick double bar counts once.
-  const minSpacing = Math.max(4, staff.lineGap * 1.5);
-  const out = [];
-  for(let i=0; i<hits.length; ){
-    let j = i;
-    while(j+1 < hits.length && hits[j+1]-hits[j] <= 3) j++;
-    const centre = Math.round((hits[i] + hits[j]) / 2);
-    if(!out.length || centre - out[out.length-1] >= minSpacing) out.push(centre);
-    i = j+1;
-  }
-  return out;
-}
-
-function detectBarsOnCanvas(canvas, opts){
-  opts = opts || {};
-  const staffThreshold = (opts.staffThreshold!=null ? opts.staffThreshold : 30)/100;
-  const barSens = (opts.barThreshold!=null ? opts.barThreshold : 30);
-  // Higher sensitivity = more forgiving about a stroke falling short of a
-  // staff line, so more candidates survive.
-  const tolInGaps = 0.2 + (barSens/100) * 0.5;
-  const ctx = canvas.getContext("2d");
-  const w = canvas.width, h = canvas.height;
-  const imgData = ctx.getImageData(0,0,w,h);
-  const lines = detectStaffLines(imgData, w, h, staffThreshold);
-  const staves = groupIntoStaves(lines);
-  const systems = groupIntoSystems(staves);
-
-  const results = systems.map(sys=>{
-    // Barlines are found per staff, then merged: in a braced system a barline
-    // may be drawn through every staff, through only the outer ones, or once
-    // through the whole height, and all three should give the same answer.
-    const all = [];
-    sys.staves.forEach(st=> detectBarlinesInStaff(imgData, w, h, st, tolInGaps).forEach(x=> all.push(x)));
-    all.sort((a,b)=>a-b);
-    const gapTol = Math.max(4, sys.staves[0].lineGap * 1.5);
-    const merged = [];
-    for(let i=0;i<all.length;){
-      let j=i;
-      while(j+1<all.length && all[j+1]-all[j] <= gapTol) j++;
-      merged.push(Math.round((all[i]+all[j])/2));
-      i=j+1;
-    }
-    // Pad the band so a marker drawn on it clears the outermost staff lines.
-    const pad = sys.staves[0].lineGap * 0.6;
-    // Where the system's staves begin and end, so the line that opens the
-    // system and the barline that closes it can be told from the rest.
-    const ext = sys.staves.map(st=>{
-      const e = st.lines.map(y=> longestRunExtentInRow(imgData.data, w, y));
-      return { x0: medianOf(e.map(r=>r.x0)), x1: medianOf(e.map(r=>r.x1)) };
-    });
-    const x0 = Math.min(...ext.map(e=>e.x0)), x1 = Math.max(...ext.map(e=>e.x1));
-    const gap = sys.staves[0].lineGap;
-    return { yTop: sys.top - pad, yBottom: sys.bottom + pad, barX: merged,
-             x0, x1, gap, barStarts: barStartsFromBarlines(merged, x0, x1, gap, w) };
-  });
-  return { width:w, height:h, systems: results };
-}
-
 // Turn a system's barlines into where its bars start.
 //  - The first bar starts where the system starts. A barline found at (or a
-//    little before) the staves' left end is the line that opens the system,
-//    so it is that start rather than a bar of its own.
+//    little either side of) the staves' left end is the line that opens the
+//    system, so it is that start rather than a bar of its own. So is a
+//    start-repeat or other double barline just after the clefs and key
+//    signatures, before any music.
 //  - The last barline closes the last bar and starts nothing — the next bar
 //    starts on the next system. It is normally right at the staves' right
 //    end, but a courtesy key or time signature can sit after it, so anything
 //    within a short distance of the end counts. (A last bar that is narrower
 //    than that and has no barline of its own is rare enough to accept.)
-function barStartsFromBarlines(barlines, x0, x1, gap, pageWidth){
-  const xs = barlines.filter(x=> x >= x0 - 3*gap && x <= x1 + 3*gap).sort((a,b)=>a-b);
+// `doubles` (optional) marks which barlines are double/repeat barlines.
+function barStartsFromBarlines(barlines, x0, x1, gap, pageWidth, doubles){
+  const list = barlines.map((x, i)=> ({ x, dbl: !!(doubles && doubles[i]) }))
+    .filter(b=> b.x >= x0 - 3*gap && b.x <= x1 + 3*gap).sort((a,b)=> a.x - b.x);
   let start = x0;
-  while(xs.length && xs[0] <= x0 + 1.5*gap) start = Math.min(start, xs.shift());
-  if(xs.length && x1 - xs[xs.length-1] < Math.min(15*gap, 0.1*pageWidth)) xs.pop();
-  return [start].concat(xs);
+  while(list.length && list[0].x <= x0 + 3*gap) start = list.shift().x;
+  if(list.length && list[0].dbl && list[0].x <= start + 12*gap) list.shift();
+  if(list.length && x1 - list[list.length-1].x < Math.min(15*gap, 0.1*pageWidth)) list.pop();
+  return [start].concat(list.map(b=> b.x));
 }
 
 // ---------------------------------------------------------------------
@@ -3193,7 +3403,7 @@ function detectBarsFromPdfDrawing(opList, viewport, OPS){
     const pad = g;
     return {
       yTopFrac: Math.max(0, (top - pad) / Hpage), yBotFrac: Math.min(1, (bottom + pad) / Hpage),
-      barStarts: barStartsFromBarlines(barlines.map(b=> b.x), x0, x1, g, W).map(x=> x / W)
+      barStarts: barStartsFromBarlines(barlines.map(b=> b.x), x0, x1, g, W, barlines.map(b=> b.last !== b.x)).map(x=> x / W)
     };
   });
   return { systems: out };
@@ -3218,7 +3428,7 @@ async function detectBarsOnPage(page, opts){
   }
   // A scan: draw the page at a fixed size, independent of the on-screen zoom,
   // and look for lines in the picture.
-  const view = page.getViewport({ scale: (opts.rasterWidth || 2000) / viewport.width });
+  const view = page.getViewport({ scale: (opts.rasterWidth || 2400) / viewport.width });
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(view.width); canvas.height = Math.round(view.height);
   // "print" intent: pdf.js paces on-screen ("display") rendering by animation
@@ -3314,7 +3524,7 @@ async function runDetectionOnCurrentPage(){
       ". Check the bar numbers match the printed ones; if this page doesn't start where the last one ended, rename its first bar in Tag mode.";
   } else {
     statusEl.textContent = "This page is a scan, so bars were found by looking at the picture: " + plural(nSys, "system") + ", " + plural(nBars, "bar") + changes +
-      ". Scans often need fixing — switch to Tag mode to remove extra markers and add missed ones.";
+      ". Check the bar numbers against the printed ones — a smudged or handwritten page can fool it — and fix anything in Tag mode.";
   }
   persist();
   if(currentPage === pageNum) renderMarkerOverlay();
