@@ -107,6 +107,37 @@ export default async function handler(req, res) {
       return;
     }
 
+    // Never overwrite a newer backup by accident. A client says which version
+    // it last saw (baseSavedAt: that version's savedAt, or null for "there
+    // should be nothing here yet"); if the stored backup has moved on since —
+    // another device, or someone else holding the code — the save is refused
+    // and the client decides what to do (take the newer copy, or keep its own
+    // under a new code). A request without baseSavedAt is let through as
+    // before: older open pages, and each device's first save after this
+    // shipped, before it has seen a version to quote.
+    const hasBase = Object.prototype.hasOwnProperty.call(body, 'baseSavedAt');
+    const base = body.baseSavedAt;
+    delete body.baseSavedAt;
+    if (hasBase) {
+      let existing;
+      try {
+        existing = await kv.get(keyFor(id));
+      } catch (err) {
+        console.error('KV get failed:', err);
+        res.status(500).json({ error: 'Could not reach cloud storage. Please try again.' });
+        return;
+      }
+      const current = existing ? (existing.savedAt || 0) : null;
+      const stale = base === null ? existing != null : (existing != null && current !== base);
+      if (stale) {
+        res.status(409).json({
+          error: 'This backup was changed somewhere else since this device last saved it.',
+          savedAt: current
+        });
+        return;
+      }
+    }
+
     const record = { ...body, savedAt: Date.now() };
     try {
       await kv.set(keyFor(id), record);

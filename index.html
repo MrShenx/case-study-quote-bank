@@ -205,6 +205,12 @@
   #backupStatus:empty{display:none;}
   #backupStatus{display:inline-flex;align-items:center;gap:5px;}
   #backupStatus.backup-error{color:var(--bad);font-weight:600;}
+  #backupStatus.backup-paused{cursor:pointer;text-decoration:underline;text-underline-offset:2px;}
+  #cloudLoadModal .modal-box,#cloudConflictModal .modal-box{width:440px;}
+  .cloud-load-actions{display:flex;flex-direction:column;gap:8px;margin-bottom:12px;}
+  .cloud-load-actions .btn{display:block;width:100%;justify-content:flex-start;text-align:left;padding:10px 12px;white-space:normal;line-height:1.35;}
+  .cloud-load-actions .btn small{display:block;font-weight:400;color:var(--ink-soft);font-size:0.75rem;margin-top:2px;}
+  .cloud-load-actions .btn.primary small{color:rgba(255,255,255,0.85);}
   .dropdown-wrap{position:relative;}
   .dropdown-menu{
     display:none;position:absolute;top:calc(100% + 6px);left:0;z-index:50;
@@ -972,11 +978,36 @@
 <div id="cloudLoadModal" class="modal-overlay" style="display:none;">
   <div class="modal-box">
     <h2>Load from cloud</h2>
-    <p style="font-size:0.85rem;color:var(--ink-soft);margin-top:-8px;">This replaces this project's bar tags, notes, and headings with whatever was saved under this code. The score PDF and video link aren't affected.</p>
-    <input type="text" id="cloudLoadCodeInput" placeholder="Paste your cloud code">
+    <p style="font-size:0.85rem;color:var(--ink-soft);margin-top:-8px;">This replaces this project's bar tags, notes, and headings with whatever was saved under this code. The score PDF isn't affected.</p>
+    <input type="text" id="cloudLoadCodeInput" placeholder="Paste the cloud code">
+    <p style="font-size:0.85rem;font-weight:600;margin:0 0 8px;">Whose backup is it?</p>
+    <div class="cloud-load-actions">
+      <button class="btn primary" id="cloudLoadConfirmBtn">It's mine, from another device
+        <small>Keeps backing up to this code, so your devices stay in step.</small></button>
+      <button class="btn" id="cloudLoadCopyBtn">Someone else's — just copy their notes
+        <small>Their backup is never changed. (Next time, ask them for a share link instead.)</small></button>
+    </div>
     <div class="modal-actions">
       <button class="btn ghost" id="cloudLoadCancelBtn">Cancel</button>
-      <button class="btn primary" id="cloudLoadConfirmBtn">Load</button>
+    </div>
+  </div>
+</div>
+
+<!-- A save was refused because the cloud backup had moved on since this
+     device last saw it (see the version check in api/project/[id].js). -->
+<div id="cloudConflictModal" class="modal-overlay" style="display:none;">
+  <div class="modal-box">
+    <h2>Your cloud backup changed somewhere else</h2>
+    <p class="share-desc">Since this device last saved, this project's backup was changed — on another device, or by someone who has its code. So nothing gets lost, it <b>wasn't overwritten</b> and backing up is paused.</p>
+    <div class="cloud-load-actions">
+      <button class="btn primary" id="cloudConflictKeepBtn">Keep mine, under a new code
+        <small>This device's notes get their own backup. The old code keeps the other version.</small></button>
+      <button class="btn" id="cloudConflictTakeBtn">Replace mine with the cloud version
+        <small>This device's notes are swapped for the newer backup.</small></button>
+    </div>
+    <div class="share-error" id="cloudConflictError" style="display:none;"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="cloudConflictLaterBtn">Decide later</button>
     </div>
   </div>
 </div>
@@ -1643,6 +1674,11 @@ let notes = [];           // {id, groupId|null, startBarId|null, startPage, star
 let groups = [];          // {id, name, collapsed} — student-created sub-headings notes can be dragged into
 let ungroupedCollapsed = false;
 let cloudId = null; // this project's cloud-backup code, once one exists (see saveToCloud())
+// The version of that backup this device last saw (its server savedAt), so a
+// save can say "I'm replacing version X" and be refused if it has moved on.
+// null = not known yet (a backup made before this check existed).
+let cloudSavedAt = null;
+let cloudConflict = false; // backing up paused until the student chooses (see cloudConflictModal)
 // This project's share link, once it has one (see "share links" below):
 // the code, the edit key that alone can update or remove it, and when the
 // shared copy was last sent.
@@ -1852,6 +1888,7 @@ function normalizeProjectRecord(rec){
   rec.audioName = rec.audioName || null;
   rec.ungroupedCollapsed = rec.ungroupedCollapsed || false;
   rec.cloudId = rec.cloudId || null;
+  rec.cloudSavedAt = rec.cloudSavedAt || null;
   rec.share = (rec.share && rec.share.code && rec.share.editKey) ? rec.share : null;
   rec.taskId = rec.taskId || null;
   rec.classId = rec.classId || null;
@@ -1878,7 +1915,7 @@ function persist(){
     createdAt: currentProjectMeta.createdAt,
     updatedAt: Date.now(),
     pdfName: currentProjectPdfName,
-    markersByPage, pageSystems, notes, groups, barCounter, videoId, audioName, ungroupedCollapsed, cloudId,
+    markersByPage, pageSystems, notes, groups, barCounter, videoId, audioName, ungroupedCollapsed, cloudId, cloudSavedAt,
     share: shareInfo,
     taskId: currentTaskId, classId: currentClassId, taskRole: currentTaskRole,
     taskQuestionText: currentTaskQuestionText
@@ -2317,6 +2354,9 @@ async function openProject(id){
   audioName = rec.audioName;
   ungroupedCollapsed = rec.ungroupedCollapsed;
   cloudId = rec.cloudId;
+  cloudSavedAt = rec.cloudSavedAt;
+  cloudConflict = false;
+  document.getElementById("backupStatus").classList.remove("backup-paused");
   shareInfo = rec.share;
   shareProjectEditedAt = rec.updatedAt || 0;
   currentTaskId = rec.taskId;
@@ -4931,12 +4971,41 @@ function flushAutoBackup(){
   if(autoBackupDirty) runAutoBackup();
 }
 
+// The body of a backup PUT: the project, plus which version of the backup
+// it replaces (see api/project/[id].js). `base` undefined = not known (a
+// backup from before the check existed) — sent without one, as before.
+function cloudPutBody(payload, base){
+  return JSON.stringify(base === undefined ? payload : { ...payload, baseSavedAt: base });
+}
+// Records the version a save produced, for the project that was saved —
+// which may no longer be the open one (flushAutoBackup sends the old
+// project's backup as you switch). Written straight to that record so it
+// doesn't count as an edit and trigger another backup.
+async function rememberCloudVersion(projectId, code, savedAt){
+  if(!savedAt) return;
+  if(currentProjectId === projectId && cloudId === code) cloudSavedAt = savedAt;
+  try{
+    const rec = await dbGet(META_STORE, projectId);
+    if(rec && rec.cloudId === code){ rec.cloudSavedAt = savedAt; await dbPut(META_STORE, rec); }
+  }catch(e){ /* the next save will try again */ }
+}
+function pauseBackupForConflict(projectId){
+  if(currentProjectId !== projectId) return; // shown when that project is next open and saves again
+  cloudConflict = true;
+  clearTimeout(autoBackupTimer);
+  setBackupStatus("Backup paused — choose what to keep", true);
+  document.getElementById("backupStatus").classList.add("backup-paused");
+  openCloudConflictModal();
+}
+
 async function runAutoBackup(){
-  if(!cloudId || !currentProjectId || !autoBackupDirty) return;
+  if(!cloudId || !currentProjectId || !autoBackupDirty || cloudConflict) return;
   // One request at a time — an edit landing mid-flight just re-arms the timer
   // rather than racing a second PUT to the same key.
   if(autoBackupInFlight){ scheduleAutoBackup(); return; }
   const id = cloudId;
+  const projectId = currentProjectId;
+  const base = cloudSavedAt == null ? undefined : cloudSavedAt;
   const payload = cloudProjectPayload();
   if(new Blob([JSON.stringify(payload)]).size > CLOUD_PAYLOAD_LIMIT){
     setBackupStatus("Too big to back up automatically", true);
@@ -4948,9 +5017,12 @@ async function runAutoBackup(){
     const resp = await fetch("/api/project/" + id, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
+      body: cloudPutBody(payload, base)
     });
+    if(resp.status === 409){ pauseBackupForConflict(projectId); return; }
     if(!resp.ok) throw new Error("Server responded with " + resp.status);
+    const d = await resp.json().catch(()=>({}));
+    await rememberCloudVersion(projectId, id, d.savedAt);
     // Only clear the dirty flag if nothing changed while this was in flight —
     // otherwise those edits would be silently dropped from the next backup.
     if(cloudId === id) autoBackupDirty = false;
@@ -4975,8 +5047,16 @@ function updateBackupLabel(){
 }
 setInterval(updateBackupLabel, 30000);
 
+function showCloudCodeModal(id, title, desc){
+  document.getElementById("cloudSaveTitle").textContent = title;
+  document.getElementById("cloudSaveDesc").textContent = desc;
+  document.getElementById("cloudCodeDisplay").value = id;
+  document.getElementById("cloudSaveModal").style.display = "flex";
+}
+
 async function saveToCloud(){
   if(!currentProjectId) return;
+  if(cloudConflict){ openCloudConflictModal(); return; }
   const btn = document.getElementById("cloudSaveBtn");
   const originalText = btn.innerHTML;
   const payload = cloudProjectPayload();
@@ -4985,20 +5065,27 @@ async function saveToCloud(){
     alert("This project has too much analysis text to back up to the cloud right now (limit ~900KB, the score PDF itself is never included). Consider splitting it into two projects.");
     return;
   }
+  const isNew = !cloudId;
   const id = cloudId || uid() + uid(); // long enough to not be guessable
+  const projectId = currentProjectId;
+  // a brand-new code must find nothing there; an existing one names the version it replaces
+  const base = isNew ? null : (cloudSavedAt == null ? undefined : cloudSavedAt);
   btn.disabled = true;
   btn.textContent = "Saving…";
   try{
     const resp = await fetch("/api/project/" + id, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
+      body: cloudPutBody(payload, base)
     });
+    if(resp.status === 409){ pauseBackupForConflict(projectId); return; }
     if(!resp.ok){
       const err = await resp.json().catch(()=>({}));
       throw new Error(err.error || ("Server responded with " + resp.status));
     }
+    const d = await resp.json().catch(()=>({}));
     cloudId = id;
+    cloudSavedAt = d.savedAt || null;
     persist();
     // persist() just re-armed the debounce; this save IS the backup, so drop
     // the pending one rather than re-uploading identical data four seconds later.
@@ -5006,10 +5093,7 @@ async function saveToCloud(){
     autoBackupDirty = false;
     lastBackupAt = Date.now();
     updateBackupLabel();
-    document.getElementById("cloudSaveTitle").textContent = "Saved to cloud";
-    document.getElementById("cloudSaveDesc").textContent = "Write this code down — it's the only way to get this project back on another device or after clearing browser data.";
-    document.getElementById("cloudCodeDisplay").value = id;
-    document.getElementById("cloudSaveModal").style.display = "flex";
+    showCloudCodeModal(id, "Saved to cloud", "Write this code down — it's the only way to get this project back on another device or after clearing browser data. It's for your own devices: to give your notes to someone else, use Project data ▸ Share notes instead.");
   }catch(err){
     console.error("Cloud save failed:", err);
     alert("Couldn't save to the cloud: " + err.message + "\n\nThis feature only works when this page is hosted on your Vercel deployment with a database connected — it won't work from a local file or from GitHub Pages.");
@@ -5042,23 +5126,37 @@ document.getElementById("cloudLoadCancelBtn").addEventListener("click", ()=>{
 document.getElementById("cloudLoadModal").addEventListener("click", (e)=>{
   if(e.target.id === "cloudLoadModal") document.getElementById("cloudLoadModal").style.display = "none";
 });
-async function loadFromCloud(){
+async function fetchCloudBackup(code){
+  const resp = await fetch("/api/project/" + encodeURIComponent(code));
+  if(!resp.ok){
+    const err = await resp.json().catch(()=>({}));
+    throw new Error(err.error || ("Server responded with " + resp.status));
+  }
+  return resp.json();
+}
+// mode "mine": the student's own backup from another device — this project
+//   follows that code from now on, so their devices stay in step.
+// mode "copy": someone else's — their notes come in, but this project never
+//   writes to their code (it keeps its own backup code, if it has one).
+async function loadFromCloud(mode){
   const code = document.getElementById("cloudLoadCodeInput").value.trim();
   if(!code) return;
-  const btn = document.getElementById("cloudLoadConfirmBtn");
+  const btn = document.getElementById(mode === "copy" ? "cloudLoadCopyBtn" : "cloudLoadConfirmBtn");
   const originalText = btn.innerHTML;
   btn.disabled = true;
   btn.textContent = "Loading…";
   try{
-    const resp = await fetch("/api/project/" + encodeURIComponent(code));
-    if(!resp.ok){
-      const err = await resp.json().catch(()=>({}));
-      throw new Error(err.error || ("Server responded with " + resp.status));
-    }
-    const d = await resp.json();
+    const d = await fetchCloudBackup(code);
     applyImportedProjectData(d);
-    cloudId = code;
-    persist();
+    if(mode === "copy"){
+      document.getElementById("topStatus").textContent = "Copied — their backup won't be changed by anything you do here.";
+    }else{
+      cloudId = code;
+      cloudSavedAt = d.savedAt || null;
+      cloudConflict = false;
+      document.getElementById("backupStatus").classList.remove("backup-paused");
+      persist();
+    }
     document.getElementById("cloudLoadModal").style.display = "none";
   }catch(err){
     console.error("Cloud load failed:", err);
@@ -5068,11 +5166,78 @@ async function loadFromCloud(){
     btn.innerHTML = originalText;
   }
 }
-document.getElementById("cloudLoadConfirmBtn").addEventListener("click", loadFromCloud);
+document.getElementById("cloudLoadConfirmBtn").addEventListener("click", ()=> loadFromCloud("mine"));
+document.getElementById("cloudLoadCopyBtn").addEventListener("click", ()=> loadFromCloud("copy"));
 document.getElementById("cloudLoadCodeInput").addEventListener("keydown", (e)=>{
-  if(e.key==="Enter") loadFromCloud();
+  // Enter deliberately doesn't load: "mine" and "someone else's" do
+  // different things, so the student has to pick one.
   if(e.key==="Escape") document.getElementById("cloudLoadModal").style.display = "none";
 });
+
+// ---------- when a backup changed somewhere else ----------
+function openCloudConflictModal(){
+  const err = document.getElementById("cloudConflictError");
+  err.style.display = "none"; err.textContent = "";
+  document.getElementById("cloudConflictModal").style.display = "flex";
+}
+function closeCloudConflictModal(){ document.getElementById("cloudConflictModal").style.display = "none"; }
+function cloudConflictFailed(msg){
+  const err = document.getElementById("cloudConflictError");
+  err.textContent = msg; err.style.display = "";
+}
+function resumeBackup(){
+  cloudConflict = false;
+  document.getElementById("backupStatus").classList.remove("backup-paused");
+  setBackupStatus("");
+}
+// Keep this device's notes: they get a fresh code of their own, and the old
+// code is left holding the other version, untouched.
+async function keepMineUnderNewCode(){
+  if(!currentProjectId) return;
+  const projectId = currentProjectId;
+  const id = uid() + uid();
+  await withBusy(document.getElementById("cloudConflictKeepBtn"), "Saving…", async ()=>{
+    try{
+      const resp = await fetch("/api/project/" + id, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: cloudPutBody(cloudProjectPayload(), null)
+      });
+      if(!resp.ok){
+        const e = await resp.json().catch(()=>({}));
+        throw new Error(e.error || ("Server responded with " + resp.status));
+      }
+      const d = await resp.json().catch(()=>({}));
+      if(currentProjectId !== projectId) return;
+      cloudId = id;
+      cloudSavedAt = d.savedAt || null;
+      resumeBackup();
+      persist();
+      clearTimeout(autoBackupTimer); autoBackupDirty = false;
+      lastBackupAt = Date.now(); updateBackupLabel();
+      closeCloudConflictModal();
+      showCloudCodeModal(id, "Saved under a new code", "This project now backs up under this new code — write it down. The old code still holds the other version, unchanged.");
+    }catch(err){ cloudConflictFailed("Couldn't save: " + err.message); }
+  });
+}
+// Take the newer backup: this device's notes are replaced by it.
+async function takeCloudVersion(){
+  if(!currentProjectId || !cloudId) return;
+  const code = cloudId;
+  await withBusy(document.getElementById("cloudConflictTakeBtn"), "Loading…", async ()=>{
+    try{
+      const d = await fetchCloudBackup(code);
+      cloudSavedAt = d.savedAt || null;
+      resumeBackup();
+      applyImportedProjectData(d); // persists, with the new version recorded
+      closeCloudConflictModal();
+      lastBackupAt = Date.now(); updateBackupLabel();
+    }catch(err){ cloudConflictFailed("Couldn't load the cloud version: " + err.message); }
+  });
+}
+document.getElementById("cloudConflictKeepBtn").addEventListener("click", keepMineUnderNewCode);
+document.getElementById("cloudConflictTakeBtn").addEventListener("click", takeCloudVersion);
+document.getElementById("cloudConflictLaterBtn").addEventListener("click", closeCloudConflictModal);
+document.getElementById("backupStatus").addEventListener("click", ()=>{ if(cloudConflict) openCloudConflictModal(); });
 
 // =====================================================================
 // share links — hand someone a link (or a short code) and they get their
