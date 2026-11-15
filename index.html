@@ -224,7 +224,7 @@
   .dropdown-section-label:first-child{padding-top:4px;}
 
   /* ---------- main split ---------- */
-  #main{flex:1;display:flex;min-height:0;}
+  #main{flex:1;display:flex;min-height:0;position:relative;}
   /* The score takes --split of the width (set from script, remembered per
      browser) and the notes take the rest; the handle between them drags it. */
   #scorePanel{flex:0 0 var(--split,50%);display:flex;flex-direction:column;min-width:0;}
@@ -239,6 +239,13 @@
     background:var(--accent);width:3px;left:3px;}
   #splitHandle:hover::after{opacity:1;}
   body.split-dragging #splitHandle::after{opacity:0;}
+  /* While dragging, a faint line marks the exact middle; the handle snaps to
+     it when it comes close, and the line firms up to say it has. */
+  #splitGuide{position:absolute;top:0;bottom:0;left:50%;width:1px;margin-left:0;z-index:5;pointer-events:none;
+    background:repeating-linear-gradient(to bottom,var(--ink-soft) 0 6px,transparent 6px 12px);
+    opacity:0;transition:opacity .15s ease;}
+  body.split-dragging #splitGuide{opacity:0.35;}
+  body.split-dragging #splitGuide.snapped{opacity:1;background:var(--accent);}
   /* While dragging, nothing else reacts: no text selection, the resize cursor
      everywhere, and the YouTube frame can't swallow the pointer. */
   body.split-dragging{cursor:col-resize;user-select:none;-webkit-user-select:none;}
@@ -525,7 +532,7 @@
   @media(max-width:860px){
     #main{flex-direction:column;overflow:auto;}
     #scorePanel,#notesPanel{flex:none;width:100%;border-bottom:1px solid var(--line);}
-    #splitHandle{display:none;}
+    #splitHandle,#splitGuide{display:none;}
     #scoreScroll{max-height:60vh;}
     /* Stacked, the page itself scrolls rather than the notes list, so pin
        the player to the bottom of the viewport instead of the end of a long
@@ -1195,6 +1202,7 @@
       </div>
     </div>
 
+    <div id="splitGuide" aria-hidden="true"></div>
     <div id="splitHandle" role="separator" aria-orientation="vertical" aria-controls="scorePanel notesPanel"
       aria-label="Resize the score and notes" tabindex="0" title="Drag to resize · double-click to split evenly"></div>
 
@@ -2781,13 +2789,20 @@ splitHandleEl.addEventListener("pointerdown", (e)=>{
   document.body.classList.add("split-dragging");
   e.preventDefault();
 });
+const SPLIT_SNAP_PX = 14; // how close to the middle counts as "meant to be the middle"
+const splitGuideEl = document.getElementById("splitGuide");
 splitHandleEl.addEventListener("pointermove", (e)=>{
   if(!splitDrag || e.pointerId !== splitDrag.id) return;
-  applySplit((e.clientX - splitDrag.grab - splitDrag.left) / splitDrag.width, false);
+  let frac = (e.clientX - splitDrag.grab - splitDrag.left) / splitDrag.width;
+  const snapped = Math.abs(frac - 0.5) * splitDrag.width <= SPLIT_SNAP_PX;
+  if(snapped) frac = 0.5;
+  splitGuideEl.classList.toggle("snapped", snapped);
+  applySplit(frac, false);
 });
 function endSplitDrag(e){
   if(!splitDrag || e.pointerId !== splitDrag.id) return;
   splitDrag = null;
+  splitGuideEl.classList.remove("snapped");
   try{ splitHandleEl.releasePointerCapture(e.pointerId); }catch(err){ /* already released */ }
   document.body.classList.remove("split-dragging");
   applySplit(splitFrac, true);
