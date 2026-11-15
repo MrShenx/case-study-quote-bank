@@ -225,8 +225,32 @@
 
   /* ---------- main split ---------- */
   #main{flex:1;display:flex;min-height:0;}
-  #scorePanel{width:50%;display:flex;flex-direction:column;border-right:1px solid var(--line);min-width:0;}
-  #notesPanel{width:50%;display:flex;flex-direction:column;min-width:0;}
+  /* The score takes --split of the width (set from script, remembered per
+     browser) and the notes take the rest; the handle between them drags it. */
+  #scorePanel{flex:0 0 var(--split,50%);display:flex;flex-direction:column;min-width:0;}
+  #notesPanel{flex:1 1 0;display:flex;flex-direction:column;min-width:0;container-type:inline-size;}
+  /* A 9px grab zone that draws as the 1px rule the panels used to share. */
+  #splitHandle{flex:0 0 9px;margin:0 -4px;position:relative;z-index:6;cursor:col-resize;touch-action:none;outline:none;}
+  #splitHandle::before{content:"";position:absolute;top:0;bottom:0;left:4px;width:1px;background:var(--line);
+    transition:background .12s ease,width .12s ease,left .12s ease;}
+  #splitHandle::after{content:"";position:absolute;top:50%;left:2px;width:5px;height:34px;margin-top:-17px;
+    border-radius:3px;background:var(--line);opacity:0;transition:opacity .12s ease;}
+  #splitHandle:hover::before,#splitHandle:focus-visible::before,body.split-dragging #splitHandle::before{
+    background:var(--accent);width:3px;left:3px;}
+  #splitHandle:hover::after{opacity:1;}
+  body.split-dragging #splitHandle::after{opacity:0;}
+  /* While dragging, nothing else reacts: no text selection, the resize cursor
+     everywhere, and the YouTube frame can't swallow the pointer. */
+  body.split-dragging{cursor:col-resize;user-select:none;-webkit-user-select:none;}
+  body.split-dragging iframe{pointer-events:none;}
+  /* A narrow notes column: tighter gutters so the writing keeps its width. */
+  @container (max-width: 400px){
+    #notesToolbar{padding:8px 10px;}
+    #notesScroll{padding:10px;}
+    .note-body{padding:12px 10px 14px;}
+    .note-foot{padding:10px 10px 12px;}
+    .vw-bar{gap:6px;padding:5px 8px;}
+  }
 
   #scoreToolbar{padding:8px 14px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:var(--panel);}
   #scoreToolbar .pagenav{display:flex;align-items:center;gap:6px;font-size:0.82rem;}
@@ -238,14 +262,22 @@
   #pageInput:hover:not(:disabled){border-color:var(--ink-soft);}
   #pageInput:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);}
   #pageInput:disabled{background:transparent;border-color:transparent;color:var(--ink-soft);}
-  #scoreScroll{flex:1;overflow:auto;padding:20px;display:flex;justify-content:center;align-items:flex-start;background:repeating-linear-gradient(45deg, transparent, transparent 12px, rgba(128,128,128,0.03) 12px, rgba(128,128,128,0.03) 24px);}
+  /* No justify-content:center here: a centred flex item that's wider than
+     its box spills out on BOTH sides, and the left-hand spill can't be
+     scrolled to — zoomed in, the score stopped at the window's edge instead
+     of its own. margin:auto on the page centres it while it fits and lets it
+     overflow only rightwards (scrollably) once it doesn't. */
+  #scoreScroll{flex:1;overflow:auto;padding:20px;display:flex;align-items:flex-start;background:repeating-linear-gradient(45deg, transparent, transparent 12px, rgba(128,128,128,0.03) 12px, rgba(128,128,128,0.03) 24px);}
   #uploadPrompt{margin:auto;text-align:center;color:var(--ink-soft);padding:40px;border:2px dashed var(--line);border-radius:var(--radius);cursor:pointer;max-width:360px;transition:border-color 0.15s,background 0.15s;}
   #uploadPrompt strong{color:var(--ink);}
   #scoreScroll.drag-over{background-color:var(--accent-soft);}
   #scoreScroll.drag-over #uploadPrompt{border-color:var(--accent);color:var(--accent);}
   #scoreScroll.drag-over #uploadPrompt strong{color:var(--accent);}
   #scoreScroll.drag-over #canvasWrap{outline:3px dashed var(--accent);outline-offset:6px;}
-  #canvasWrap{position:relative;background:#fff;box-shadow:0 2px 14px rgba(0,0,0,0.18);}
+  #canvasWrap{position:relative;flex-shrink:0;margin:0 auto;background:#fff;box-shadow:0 2px 14px rgba(0,0,0,0.18);}
+  /* the far edges get the same 20px breathing room as the near ones when
+     zoomed (scroll overflow doesn't always include the container's padding) */
+  #canvasWrap::after{content:"";position:absolute;right:-20px;bottom:-20px;width:1px;height:1px;}
   #pdfCanvas{display:block;}
   body.tag-mode #canvasWrap{cursor:crosshair;}
   body.system-mode #canvasWrap{cursor:row-resize;}
@@ -456,6 +488,8 @@
     display:inline-flex;align-items:center;justify-content:center;padding:3px;border-radius:6px;}
   #videoWidget .vw-toggle:hover{background:var(--panel-2);color:var(--ink);}
   #vwPlayPauseBtn{color:var(--accent);}
+  /* the button, never its icon, is what a click lands on */
+  #vwPlayPauseBtn *{pointer-events:none;}
   #videoWidget .vw-urlrow{display:flex;gap:4px;}
   #videoWidget .vw-urlrow input{flex:1;min-width:0;padding:5px 8px;border-radius:6px;border:1px solid var(--line);font-size:0.72rem;}
   #videoWidget .vw-urlrow button{padding:5px 8px;border-radius:6px;border:1px solid var(--line);background:var(--panel);font-size:0.72rem;cursor:pointer;}
@@ -490,7 +524,8 @@
 
   @media(max-width:860px){
     #main{flex-direction:column;overflow:auto;}
-    #scorePanel,#notesPanel{width:100%;border-right:none;border-bottom:1px solid var(--line);}
+    #scorePanel,#notesPanel{flex:none;width:100%;border-bottom:1px solid var(--line);}
+    #splitHandle{display:none;}
     #scoreScroll{max-height:60vh;}
     /* Stacked, the page itself scrolls rather than the notes list, so pin
        the player to the bottom of the viewport instead of the end of a long
@@ -1160,6 +1195,9 @@
       </div>
     </div>
 
+    <div id="splitHandle" role="separator" aria-orientation="vertical" aria-controls="scorePanel notesPanel"
+      aria-label="Resize the score and notes" tabindex="0" title="Drag to resize · double-click to split evenly"></div>
+
     <div id="notesPanel">
       <div id="notesToolbar">
         <input type="text" id="noteSearch" placeholder="Search Where / What / Why…">
@@ -1666,6 +1704,7 @@ function renderThemePicker(){
 // state
 // =====================================================================
 let pdfDoc = null, numPages = 0, currentPage = 1;
+let currentPageBase = null; // the current page's size at scale 1, so a resize can re-fit it before the redraw
 let zoomLevel = 1.0; // multiplier on top of the normal fit-to-panel width — 1.0 = 100% = fit width
 const ZOOM_MIN = 0.5, ZOOM_MAX = 2.5, ZOOM_STEP = 0.15;
 let markersByPage = {};   // pageNum -> [{id, xFrac, yTopFrac, yBotFrac, number}]
@@ -2575,6 +2614,8 @@ function renderPage(pageNum){
     const scroll = document.getElementById("scoreScroll");
     const targetWidth = Math.min(scroll.clientWidth - 40, 900) * zoomLevel;
     const baseViewport = page.getViewport({ scale: 1 });
+    currentPageBase = { w: baseViewport.width, h: baseViewport.height };
+    lastFitWidth = scroll.clientWidth;
     const cssScale = targetWidth / baseViewport.width;
     const dpr = window.devicePixelRatio || 1;
     // cap the actual bitmap size regardless of zoom×dpr — beyond this, more
@@ -2673,7 +2714,97 @@ document.getElementById("zoomResetBtn").addEventListener("click", ()=>{
   if(pdfDoc) renderPage(currentPage);
 });
 
-window.addEventListener("resize", ()=>{ if(pdfDoc) renderPage(currentPage); });
+// ---------- keeping the page fitted as the score panel changes width ----------
+// Window resizes and the split handle both land here. The page is resized
+// straight away by stretching the bitmap it already has (cheap, so it follows
+// the handle smoothly) with the bar markers moved to match; the sharp redraw
+// waits until the width has settled.
+let lastFitWidth = 0, refitTimer = null;
+function fitScoreToPanel(){
+  if(!pdfDoc || !currentPageBase) return;
+  const scroll = document.getElementById("scoreScroll");
+  const w = scroll.clientWidth;
+  if(!w || w === lastFitWidth) return; // hidden, or only the height changed
+  lastFitWidth = w;
+  const cssW = Math.min(w - 40, 900) * zoomLevel;
+  const cssH = cssW * currentPageBase.h / currentPageBase.w;
+  const canvas = document.getElementById("pdfCanvas"), wrap = document.getElementById("canvasWrap");
+  if(Math.abs(parseFloat(canvas.style.width) - cssW) < 0.5) return;
+  // keep the same part of the page in view when zoomed in
+  const fx = scroll.scrollWidth > scroll.clientWidth ? (scroll.scrollLeft + scroll.clientWidth/2) / scroll.scrollWidth : null;
+  const fy = scroll.scrollHeight > scroll.clientHeight ? scroll.scrollTop / scroll.scrollHeight : null;
+  canvas.style.width = wrap.style.width = cssW + "px";
+  canvas.style.height = wrap.style.height = cssH + "px";
+  renderMarkerOverlay();
+  if(fx != null) scroll.scrollLeft = fx * scroll.scrollWidth - scroll.clientWidth/2;
+  if(fy != null) scroll.scrollTop = fy * scroll.scrollHeight;
+  clearTimeout(refitTimer);
+  refitTimer = setTimeout(()=>{ if(pdfDoc) renderPage(currentPage); }, 160);
+}
+if(window.ResizeObserver) new ResizeObserver(fitScoreToPanel).observe(document.getElementById("scoreScroll"));
+else window.addEventListener("resize", ()=>{ if(pdfDoc) renderPage(currentPage); });
+
+// ---------- the handle between the score and the notes ----------
+// Remembered for this browser rather than per project: it's how this student
+// likes to work, not something about one score.
+const SPLIT_KEY = "scoreStudioSplit";
+const SPLIT_MIN_SCORE = 260, SPLIT_MIN_NOTES = 320; // px — below these a panel stops being usable
+const mainEl = document.getElementById("main"), splitHandleEl = document.getElementById("splitHandle");
+let splitFrac = 0.5;
+try{ const v = parseFloat(localStorage.getItem(SPLIT_KEY)); if(v > 0 && v < 1) splitFrac = v; }catch(e){ /* storage blocked */ }
+function clampSplit(frac){
+  const total = mainEl.clientWidth;
+  if(!total) return Math.min(0.8, Math.max(0.2, frac));
+  const lo = SPLIT_MIN_SCORE / total, hi = 1 - SPLIT_MIN_NOTES / total;
+  if(lo >= hi) return 0.5; // too narrow to honour both minimums — split evenly
+  return Math.min(hi, Math.max(lo, frac));
+}
+function applySplit(frac, remember){
+  splitFrac = clampSplit(frac);
+  mainEl.style.setProperty("--split", (splitFrac*100).toFixed(2) + "%");
+  splitHandleEl.setAttribute("aria-valuenow", Math.round(splitFrac*100));
+  if(remember){ try{ localStorage.setItem(SPLIT_KEY, String(splitFrac)); }catch(e){ /* private mode */ } }
+}
+splitHandleEl.setAttribute("aria-valuemin", "0");
+splitHandleEl.setAttribute("aria-valuemax", "100");
+applySplit(splitFrac, false);
+// A window that shrinks under a wide split pulls the handle back in, so the
+// notes never get squeezed below their minimum.
+if(window.ResizeObserver) new ResizeObserver(()=> applySplit(splitFrac, false)).observe(mainEl);
+
+let splitDrag = null;
+splitHandleEl.addEventListener("pointerdown", (e)=>{
+  if(e.button !== 0) return;
+  const r = mainEl.getBoundingClientRect();
+  splitDrag = { left: r.left, width: r.width, grab: e.clientX - (r.left + splitFrac * r.width), id: e.pointerId };
+  try{ splitHandleEl.setPointerCapture(e.pointerId); }catch(err){ /* not captureable */ }
+  document.body.classList.add("split-dragging");
+  e.preventDefault();
+});
+splitHandleEl.addEventListener("pointermove", (e)=>{
+  if(!splitDrag || e.pointerId !== splitDrag.id) return;
+  applySplit((e.clientX - splitDrag.grab - splitDrag.left) / splitDrag.width, false);
+});
+function endSplitDrag(e){
+  if(!splitDrag || e.pointerId !== splitDrag.id) return;
+  splitDrag = null;
+  try{ splitHandleEl.releasePointerCapture(e.pointerId); }catch(err){ /* already released */ }
+  document.body.classList.remove("split-dragging");
+  applySplit(splitFrac, true);
+}
+splitHandleEl.addEventListener("pointerup", endSplitDrag);
+splitHandleEl.addEventListener("pointercancel", endSplitDrag);
+splitHandleEl.addEventListener("dblclick", ()=> applySplit(0.5, true));
+splitHandleEl.addEventListener("keydown", (e)=>{
+  const step = e.shiftKey ? 0.1 : 0.02;
+  if(e.key === "ArrowLeft") applySplit(splitFrac - step, true);
+  else if(e.key === "ArrowRight") applySplit(splitFrac + step, true);
+  else if(e.key === "Home") applySplit(0, true);
+  else if(e.key === "End") applySplit(1, true);
+  else if(e.key === "Enter") applySplit(0.5, true);
+  else return;
+  e.preventDefault();
+});
 
 // ==BAR-DETECTION-BEGIN== (tests/bar-detection/ loads everything between
 // these two markers and runs it against hand-checked scores — keep it free of
@@ -6184,7 +6315,14 @@ const mediaPlayer = {
     else if(this.kind === "audio" && this.el) this.el.pause();
   },
   isPlaying(){
-    if(this.kind === "youtube") return !!(ytPlayer && ytPlayer.getPlayerState && ytPlayer.getPlayerState() === 1);
+    // 3 is "buffering": YouTube's state straight after playVideo() and after
+    // every seek. It counts as playing — otherwise the button flips back to
+    // ▶ while the video is starting, and the next click asks it to play
+    // again instead of pausing, which reads as the button ignoring you.
+    if(this.kind === "youtube"){
+      const st = (ytPlayer && ytPlayer.getPlayerState) ? ytPlayer.getPlayerState() : -1;
+      return st === 1 || st === 3;
+    }
     if(this.kind === "audio") return !!(this.el && !this.el.paused && !this.el.ended);
     return false;
   },
@@ -6547,7 +6685,15 @@ vwTrack.addEventListener("click", (e)=>{
   playVideoAt(frac*durationSec);
 });
 
+// Only rebuilt when the state actually changes. The ticker below calls this
+// four times a second, and it used to replace the button's icon every time:
+// a click whose press landed on the old icon and whose release landed on the
+// new one was dropped by the browser, so the button randomly ignored clicks.
+let playPauseIconState = null;
 function updatePlayPauseIcon(isPlaying){
+  isPlaying = !!isPlaying;
+  if(isPlaying === playPauseIconState) return;
+  playPauseIconState = isPlaying;
   document.getElementById("vwPlayPauseBtn").innerHTML = icon(isPlaying ? "pause" : "play", 15);
 }
 document.getElementById("vwPlayPauseBtn").addEventListener("click", (e)=>{
