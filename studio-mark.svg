@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="Score Analysis Studio">
+  <defs>
+    <clipPath id="c"><rect x="14" y="18" width="92" height="84"/></clipPath>
+    <mask id="m">
+      <rect width="120" height="120" fill="black"/>
+      <g clip-path="url(#c)">
+      <polyline points="17.0,130 60.0,6 103.0,130" fill="none" stroke="white" stroke-width="22" stroke-linejoin="miter" stroke-miterlimit="10"/>
+      <rect x="36" y="66" width="48" height="24" fill="white"/>
+      <rect x="0" y="38" width="120" height="8" fill="black"/>
+      <rect x="0" y="62" width="120" height="8" fill="black"/>
+      <rect x="0" y="86" width="120" height="8" fill="black"/>
+      </g>
+    </mask>
+  </defs>
+  <rect width="120" height="120" fill="#17171A" mask="url(#m)"/>
+</svg>
