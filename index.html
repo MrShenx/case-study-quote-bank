@@ -618,7 +618,13 @@
   }
 
   /* writing page */
-  #practiceWriteView{flex:1;display:none;min-height:0;flex-direction:column;}
+  #practiceWriteView{flex:1;display:none;min-height:0;flex-direction:column;position:relative;}
+  #practiceUndoBar{position:absolute;left:50%;bottom:20px;transform:translateX(-50%);z-index:20;align-items:center;gap:10px;
+    padding:8px 8px 8px 16px;border-radius:12px;background:var(--ink);color:var(--bg);box-shadow:var(--shadow-lg);font-size:0.84rem;white-space:nowrap;}
+  #practiceUndoBar .btn{background:transparent;color:var(--bg);border-color:color-mix(in srgb,var(--bg) 35%,transparent);}
+  #practiceUndoBar .btn.ghost{border-color:transparent;padding:6px 8px;}
+  #practiceUndoBar .btn:hover:not(:disabled){border-color:var(--bg);}
+  .paragraph-box .ptop .btn.del.confirm-armed{opacity:1;color:var(--bad);background:var(--bad-soft);font-size:0.74rem;font-weight:700;}
   #practiceWriteView.active{display:flex;}
   #taskEditBanner{display:none;align-items:flex-start;gap:14px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--accent-soft);}
   .teb-field{display:flex;flex-direction:column;gap:3px;min-width:0;}
@@ -1439,6 +1445,11 @@
   </div>
 
   <div id="practiceWriteView">
+    <div id="practiceUndoBar" style="display:none;">
+      <span id="practiceUndoText"></span>
+      <button class="btn" id="practiceUndoBtn"><span data-icon="undo-2" data-icon-size="14"></span> Undo</button>
+      <button class="btn ghost" id="practiceUndoCloseBtn" title="Dismiss"><span data-icon="x" data-icon-size="14"></span></button>
+    </div>
     <div id="practiceWriteMain">
       <div id="practiceParagraphPanel">
         <div id="practiceParagraphScroll">
@@ -7452,6 +7463,7 @@ function practiceSetSub(sub){
   document.getElementById("practiceTimerBar").style.display = sub === "write" ? "flex" : "none";
   document.getElementById("practiceWriteActions").style.display = sub === "write" ? "flex" : "none";
   if(sub !== "write") clearInterval(practiceTimerInterval);
+  practiceShowUndoBar(); // hides itself unless it belongs to the response now open
   updateBackButtons();
 }
 async function practiceShowList(){
@@ -7773,11 +7785,20 @@ function practiceBuildParagraphBox(p){
     del.className = "btn del";
     del.innerHTML = icon("x",14);
     del.style.padding = "3px 8px";
-    del.title = "Remove this paragraph box";
+    del.title = "Delete this paragraph";
+    // Two clicks for a paragraph with writing in it, and Undo afterwards
+    // either way: a stray click on the cross used to lose the whole thing.
+    let armTimer = null;
     del.addEventListener("click", ()=>{
-      practiceCurrentResponse.paragraphs = practiceCurrentResponse.paragraphs.filter(x=>x.id!==p.id);
-      practiceScheduleSave();
-      practiceRenderParagraphs();
+      const hasText = (p.text || "").trim().length > 0;
+      if(hasText && !del.classList.contains("confirm-armed")){
+        del.classList.add("confirm-armed");
+        del.textContent = "Delete?";
+        armTimer = setTimeout(()=>{ del.classList.remove("confirm-armed"); del.innerHTML = icon("x",14); }, 3000);
+        return;
+      }
+      clearTimeout(armTimer);
+      practiceDeleteParagraph(p.id);
     });
     top.appendChild(del);
   }
@@ -7849,6 +7870,44 @@ function practiceAutoGrow(el){
   el.style.height = "auto";
   el.style.height = Math.max(el.scrollHeight + 2, 132) + "px";
 }
+// ---------- deleting a paragraph, and getting it back ----------
+let practiceUndoDelete = null; // { responseId, paragraph, index }
+function practiceDeleteParagraph(id){
+  const paras = practiceCurrentResponse.paragraphs;
+  const index = paras.findIndex(x=> x.id === id);
+  if(index < 0) return;
+  const [paragraph] = paras.splice(index, 1);
+  practiceUndoDelete = { responseId: practiceCurrentResponse.id, paragraph, index };
+  practiceScheduleSave();
+  practiceRenderParagraphs();
+  if(practiceCurrentResponse.mode !== "memory") practiceRenderEvidencePanel(); // its notes are no longer in use
+  practiceShowUndoBar();
+}
+function practiceShowUndoBar(){
+  const bar = document.getElementById("practiceUndoBar");
+  const u = practiceUndoDelete;
+  if(!u || !practiceCurrentResponse || u.responseId !== practiceCurrentResponse.id){ bar.style.display = "none"; return; }
+  document.getElementById("practiceUndoText").textContent = (u.paragraph.title || "Paragraph") + " deleted";
+  bar.style.display = "flex";
+}
+function practiceHideUndoBar(){
+  practiceUndoDelete = null;
+  document.getElementById("practiceUndoBar").style.display = "none";
+}
+document.getElementById("practiceUndoBtn").addEventListener("click", ()=>{
+  const u = practiceUndoDelete;
+  if(!u || !practiceCurrentResponse || u.responseId !== practiceCurrentResponse.id) return practiceHideUndoBar();
+  const paras = practiceCurrentResponse.paragraphs;
+  paras.splice(Math.min(u.index, paras.length), 0, u.paragraph);
+  practiceHideUndoBar();
+  practiceScheduleSave();
+  practiceRenderParagraphs();
+  if(practiceCurrentResponse.mode !== "memory") practiceRenderEvidencePanel();
+  const box = document.querySelector(`.paragraph-box[data-id="${u.paragraph.id}"]`);
+  if(box) box.scrollIntoView({ block:"center", behavior:"smooth" });
+});
+document.getElementById("practiceUndoCloseBtn").addEventListener("click", practiceHideUndoBar);
+
 function practiceBuildAddParagraphBtn(){
   const btn = document.createElement("button");
   btn.className = "pw-add";
