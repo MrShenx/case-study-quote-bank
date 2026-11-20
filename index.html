@@ -1691,8 +1691,8 @@
   <div class="modal-box" id="newTaskBox">
     <h2 id="newTaskHeading">New task</h2>
     <div class="pp-seg nt-kind" id="newTaskKindSeg">
-      <button class="btn active" data-kind="writing"><span data-icon="pen-line" data-icon-size="15"></span> Writing</button>
-      <button class="btn" data-kind="annotation"><span data-icon="music" data-icon-size="15"></span> Annotation</button>
+      <button class="btn" data-kind="writing"><span data-icon="pen-line" data-icon-size="15"></span> Writing</button>
+      <button class="btn active" data-kind="annotation"><span data-icon="music" data-icon-size="15"></span> Annotation</button>
     </div>
     <label class="nt-label">Title</label>
     <input type="text" id="newTaskTitleInput" placeholder="e.g. Epic Diva — tone colour">
@@ -10376,7 +10376,7 @@ document.getElementById("newClassNameInput").addEventListener("keydown", (e)=>{
 // ---------- new task (score PDF + video + question) ----------
 // One dialog makes a task and edits a writing task. Annotation tasks are
 // edited on their score page instead (see teacherOpenTaskScore).
-let newTaskKind = "writing";
+let newTaskKind = "annotation";
 let newTaskEditing = null; // the writing task being edited, or null when making one
 function setNewTaskKind(kind){
   newTaskKind = kind;
@@ -10413,7 +10413,7 @@ function openTaskDialog(task){
   // A task's kind is set when it's made: a writing task has no score to
   // switch to, and an annotation task's students may already be tagging.
   document.getElementById("newTaskKindSeg").style.display = task ? "none" : "";
-  setNewTaskKind(task ? (task.kind || "writing") : newTaskKind);
+  setNewTaskKind(task ? (task.kind || "writing") : "annotation"); // a new task starts as annotation
   fillQuestionBankSelect();
   document.getElementById("newTaskTitleInput").value = task ? task.title || "" : "";
   document.getElementById("newTaskQuestionInput").value = task ? task.questionText || "" : "";
