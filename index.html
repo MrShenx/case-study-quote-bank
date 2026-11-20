@@ -119,8 +119,12 @@
   #serverStorageBody strong{color:var(--ink);}
   #serverStorageBody .ss-row{display:flex;justify-content:space-between;gap:12px;padding:3px 0;}
   #teacherUnlockInput{width:100%;box-sizing:border-box;}
-  #teacherUnlockSwitch{margin:-4px 0 14px;font-size:0.8rem;}
-  #teacherUnlockModeBtn{background:none;border:none;padding:0;font:inherit;color:var(--accent);cursor:pointer;text-decoration:underline;text-underline-offset:2px;}
+  /* Same quiet pill as the "Teacher sign-in" door on the Class work page:
+     there for the one person who needs it, not competing with Sign in. */
+  #teacherUnlockModeBtn{margin:0 auto 0 -10px;background:none;border:none;cursor:pointer;font:inherit;
+    font-size:0.78rem;color:var(--ink-soft);display:inline-flex;align-items:center;gap:6px;
+    padding:6px 10px;border-radius:999px;}
+  #teacherUnlockModeBtn:hover{color:var(--ink);background:var(--panel-2);}
   .field-hint{font-size:0.76rem;color:var(--ink-soft);margin:-6px 0 12px;line-height:1.45;}
   #teachersModal .modal-box{width:480px;}
   #teachersList{margin:0 0 14px;max-height:50vh;overflow:auto;}
@@ -1130,8 +1134,8 @@
     <p id="teacherUnlockBody">Sign in to manage your classes, tasks and submissions.</p>
     <input type="text" id="teacherUnlockName" placeholder="Your name" autocomplete="username" maxlength="40">
     <input type="password" id="teacherUnlockInput" placeholder="Password" autocomplete="current-password">
-    <p id="teacherUnlockSwitch"><button type="button" id="teacherUnlockModeBtn"></button></p>
     <div class="modal-actions">
+      <button type="button" id="teacherUnlockModeBtn"></button>
       <button class="btn ghost" id="teacherUnlockCancelBtn">Cancel</button>
       <button class="btn primary" id="teacherUnlockGoBtn">Sign in</button>
     </div>
@@ -10083,9 +10087,9 @@ function setUnlockMode(owner, message){
   const name = document.getElementById("teacherUnlockName");
   name.style.display = owner ? "none" : "";
   document.getElementById("teacherUnlockInput").placeholder = owner ? "Passphrase" : "Password";
-  document.getElementById("teacherUnlockModeBtn").textContent = owner
-    ? "Invited teacher? Sign in with your name and password"
-    : "Site owner? Sign in with the passphrase";
+  document.getElementById("teacherUnlockModeBtn").innerHTML = owner
+    ? icon("user", 14) + " Teacher sign-in"
+    : icon("lock", 14) + " Site owner sign-in";
   document.getElementById("teacherUnlockBody").textContent = message || (owner
     ? "Site owner: enter the teacher passphrase."
     : "Sign in with the name and password you chose when you set up your account.");
