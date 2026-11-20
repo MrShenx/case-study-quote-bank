@@ -1883,7 +1883,10 @@ const THEMES = {
   crimson: { swatch:"#dc2626", light:{accent:"#dc2626",accentSoft:"#fde8e8"}, dark:{accent:"#f87171",accentSoft:"#3a1717"} }
 };
 const THEME_KEY = "scoreStudioTheme";
-let currentTheme = localStorage.getItem(THEME_KEY);
+// Storage can be blocked (private modes, school-managed devices); then the
+// saved choices just don't exist and the defaults apply.
+function readPref(key){ try{ return localStorage.getItem(key); }catch(e){ return null; } }
+let currentTheme = readPref(THEME_KEY);
 if(!THEMES[currentTheme]) currentTheme = "purple";
 
 // light/dark mode — "system" follows the OS/browser setting (the old behaviour);
@@ -1893,7 +1896,9 @@ const MODES = ["system","light","dark"];
 const MODE_LABELS = { system:"System", light:"Light", dark:"Dark" };
 const MODE_ICONS = { system:"monitor", light:"sun", dark:"moon" };
 const MODE_KEY = "scoreStudioMode";
-let currentMode = localStorage.getItem(MODE_KEY);
+// Nothing saved — a first visit — means "system": the site follows the
+// device's own light/dark setting until the person picks one here.
+let currentMode = readPref(MODE_KEY);
 if(!MODES.includes(currentMode)) currentMode = "system";
 
 function isDarkMode(){
@@ -1927,7 +1932,15 @@ function setMode(key){
   try{ localStorage.setItem(MODE_KEY, key); }catch(e){ /* storage blocked */ }
   applyTheme();
 }
-window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
+// Follow the device switching light/dark while the page is open. Older
+// Safari (iPadOS 13 and before) only has addListener. Coming back to the tab
+// re-checks too, in case the device changed while the page was asleep.
+(function(){
+  const mq = window.matchMedia("(prefers-color-scheme: dark)");
+  if(mq.addEventListener) mq.addEventListener("change", applyTheme);
+  else if(mq.addListener) mq.addListener(applyTheme);
+  document.addEventListener("visibilitychange", ()=>{ if(!document.hidden && currentMode === "system") applyTheme(); });
+})();
 
 function renderModePicker(){
   // One per top bar now (start screen, quotation studies, class work), so
