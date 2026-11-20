@@ -898,15 +898,51 @@
   .task-card-status.start{background:var(--accent-soft);color:var(--accent);}
   .modal-box textarea{width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);margin-bottom:14px;box-sizing:border-box;resize:vertical;}
   .modal-box input[type=file]{width:100%;margin-bottom:14px;font-size:0.8rem;}
-  #newTaskBox,#submissionsBox{width:480px;}
-  #newTaskBox{max-height:90vh;overflow:auto;}
-  .nt-kind{margin:0 0 14px;}
-  .nt-label{display:block;font-size:0.8rem;color:var(--ink-soft);margin-bottom:4px;}
-  #newTaskBox textarea,#newTaskBox select{width:100%;padding:8px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit;font-size:0.85rem;margin-bottom:10px;box-sizing:border-box;}
-  #newTaskBox textarea{resize:vertical;line-height:1.5;margin-bottom:14px;}
-  #newTaskVideoInput{margin-bottom:8px !important;}
+  #submissionsBox{width:480px;}
+  /* labels across the task dialogs: solid ink, so each thing to fill in reads at a glance */
+  .nt-label{display:block;font-size:0.84rem;font-weight:650;color:var(--ink);margin-bottom:6px;}
+  .nt-opt{font-weight:400;color:var(--ink-soft);}
+  /* New / Edit task: a fixed header and footer around a scrolling body */
+  #newTaskBox{width:560px;max-height:min(92vh,860px);display:flex;flex-direction:column;padding:0;overflow:hidden;}
+  .nt-head{display:flex;align-items:center;gap:8px;padding:18px 22px 6px;}
+  .nt-head h2{margin:0;flex:1;}
+  .nt-body{flex:1;overflow:auto;padding:10px 22px 6px;}
+  .nt-foot{display:flex;align-items:center;gap:8px;padding:14px 22px;border-top:1px solid var(--line);background:var(--panel-2);}
+  #newTaskStatus{flex:1;font-size:0.8rem;color:var(--ink-soft);}
+  .nt-field{margin-bottom:18px;}
+  #newTaskBox input[type=text],#newTaskBox textarea,#newTaskBox select{width:100%;padding:9px 12px;border-radius:10px;
+    border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit;font-size:0.88rem;margin:0;box-sizing:border-box;}
+  #newTaskBox select{margin-bottom:8px;cursor:pointer;}
+  #newTaskBox textarea{resize:vertical;line-height:1.5;min-height:96px;}
+  /* type: two cards, the chosen one outlined */
+  .nt-kinds{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px;}
+  .nt-kind-card{display:grid;grid-template-columns:auto 1fr;grid-template-rows:auto auto;column-gap:10px;row-gap:2px;align-items:center;
+    text-align:left;padding:12px 14px;border-radius:12px;border:2px solid var(--line);background:var(--bg);color:var(--ink);
+    font:inherit;cursor:pointer;transition:border-color .12s,background .12s;}
+  .nt-kind-card:hover{border-color:color-mix(in srgb,var(--accent) 45%,var(--line));}
+  .nt-kind-card.active{border-color:var(--accent);background:var(--accent-soft);}
+  .nt-kind-icon{grid-row:1;display:inline-flex;color:var(--ink-soft);}
+  .nt-kind-card.active .nt-kind-icon{color:var(--accent);}
+  .nt-kind-title{grid-row:1;font-weight:700;font-size:0.92rem;}
+  .nt-kind-desc{grid-column:1 / -1;font-size:0.76rem;line-height:1.4;color:var(--ink-soft);}
+  /* file pickers: a whole-row button that shows the chosen file */
+  .nt-file{position:relative;display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:12px;
+    border:1.5px dashed var(--line);background:var(--bg);cursor:pointer;transition:border-color .12s,background .12s;}
+  .nt-file:hover{border-color:var(--accent);}
+  .nt-file input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;}
+  .nt-file-icon{display:inline-flex;color:var(--accent);flex-shrink:0;}
+  .nt-file-text{display:flex;flex-direction:column;min-width:0;flex:1;}
+  .nt-file-main{font-size:0.86rem;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .nt-file-sub{font-size:0.74rem;color:var(--ink-soft);}
+  .nt-file.has-file{border-style:solid;border-color:var(--accent);background:var(--accent-soft);}
+  .nt-file-clear{display:none;position:relative;z-index:1;background:none;border:none;color:var(--ink-soft);cursor:pointer;padding:4px;border-radius:6px;}
+  .nt-file-clear:hover{color:var(--bad);background:var(--bad-soft);}
+  .nt-file.has-file .nt-file-clear{display:inline-flex;}
+  .nt-or{display:flex;align-items:center;gap:10px;margin:8px 0;font-size:0.74rem;color:var(--ink-soft);}
+  .nt-or::before,.nt-or::after{content:"";flex:1;height:1px;background:var(--line);}
+  .nt-disabled{opacity:0.45;pointer-events:none;}
+  @media(max-width:560px){ .nt-kinds{grid-template-columns:1fr;} }
   .task-kind-tag{display:inline-block;padding:1px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-weight:600;font-size:0.7rem;margin-right:6px;}
-  #newTaskStatus{margin-top:-8px;margin-bottom:8px;}
   #practiceSubmitBox input[type=text]{margin-bottom:8px;}
   .submission-card{background:var(--bg);border-radius:10px;padding:10px 12px;margin-bottom:10px;box-shadow:var(--shadow-sm);}
   .submission-card .sc-top{display:flex;align-items:center;gap:8px;font-weight:700;font-size:0.88rem;}
@@ -1717,28 +1753,62 @@
 
 <div id="newTaskModal" class="modal-overlay" style="display:none;">
   <div class="modal-box" id="newTaskBox">
-    <h2 id="newTaskHeading">New task</h2>
-    <div class="pp-seg nt-kind" id="newTaskKindSeg">
-      <button class="btn active" data-kind="annotation"><span data-icon="music" data-icon-size="15"></span> Annotation</button>
-      <button class="btn" data-kind="writing"><span data-icon="pen-line" data-icon-size="15"></span> Writing</button>
+    <div class="nt-head">
+      <h2 id="newTaskHeading">New task</h2>
+      <button class="btn ghost icon-only" id="newTaskCloseBtn" title="Close"><span data-icon="x" data-icon-size="16"></span></button>
     </div>
-    <label class="nt-label">Title</label>
-    <input type="text" id="newTaskTitleInput" placeholder="e.g. Epic Diva — tone colour">
-    <label class="nt-label">Question</label>
-    <select id="newTaskBankSelect"></select>
-    <textarea id="newTaskQuestionInput" rows="4" placeholder="Write a question, or pick one from the question bank above"></textarea>
-    <div id="newTaskScoreFields">
-      <label class="nt-label">Score PDF</label>
-      <input type="file" id="newTaskPdfInput" accept="application/pdf">
-      <label class="nt-label">Recording (optional): a YouTube link or an audio file</label>
-      <input type="text" id="newTaskVideoInput" placeholder="Paste a YouTube link…">
-      <input type="file" id="newTaskAudioInput" accept="audio/*">
+    <div class="nt-body">
+      <div class="nt-kinds" id="newTaskKindSeg" role="radiogroup" aria-label="Task type">
+        <button class="nt-kind-card active" data-kind="annotation" role="radio">
+          <span class="nt-kind-icon" data-icon="music" data-icon-size="18"></span>
+          <span class="nt-kind-title">Annotation</span>
+          <span class="nt-kind-desc">Students annotate a score and hand in their notes</span>
+        </button>
+        <button class="nt-kind-card" data-kind="writing" role="radio">
+          <span class="nt-kind-icon" data-icon="pen-line" data-icon-size="18"></span>
+          <span class="nt-kind-title">Writing</span>
+          <span class="nt-kind-desc">Students write a response to a question</span>
+        </button>
+      </div>
+
+      <div class="nt-field">
+        <label class="nt-label" for="newTaskTitleInput">Title</label>
+        <input type="text" id="newTaskTitleInput" placeholder="e.g. Epic Diva — tone colour">
+      </div>
+
+      <div class="nt-field">
+        <label class="nt-label" for="newTaskQuestionInput">Question <span class="nt-opt" id="newTaskQuestionOpt">(optional)</span></label>
+        <select id="newTaskBankSelect" aria-label="Pick from the question bank"></select>
+        <textarea id="newTaskQuestionInput" rows="4" placeholder="…or write your own question"></textarea>
+      </div>
+
+      <div id="newTaskScoreFields">
+        <div class="nt-field">
+          <span class="nt-label">Score PDF</span>
+          <label class="nt-file" id="newTaskPdfPick">
+            <input type="file" id="newTaskPdfInput" accept="application/pdf">
+            <span class="nt-file-icon" data-icon="file-text" data-icon-size="18"></span>
+            <span class="nt-file-text"><span class="nt-file-main">Choose the score PDF</span><span class="nt-file-sub">Chord chart, lead sheet or full score</span></span>
+          </label>
+        </div>
+        <div class="nt-field">
+          <span class="nt-label">Recording <span class="nt-opt">(optional)</span></span>
+          <input type="text" id="newTaskVideoInput" placeholder="Paste a YouTube link…">
+          <div class="nt-or"><span>or</span></div>
+          <label class="nt-file" id="newTaskAudioPick">
+            <input type="file" id="newTaskAudioInput" accept="audio/*">
+            <span class="nt-file-icon" data-icon="audio-lines" data-icon-size="18"></span>
+            <span class="nt-file-text"><span class="nt-file-main">Upload an audio file</span><span class="nt-file-sub">mp3, m4a or wav, up to 50 MB</span></span>
+            <button class="nt-file-clear" type="button" title="Remove this file"><span data-icon="x" data-icon-size="14"></span></button>
+          </label>
+        </div>
+      </div>
     </div>
-    <div class="modal-actions">
+    <div class="nt-foot">
+      <div id="newTaskStatus"></div>
       <button class="btn ghost" id="newTaskCancelBtn">Cancel</button>
       <button class="btn primary" id="newTaskCreateBtn">Create task</button>
     </div>
-    <div id="newTaskStatus" style="font-size:0.78rem;color:var(--ink-soft);"></div>
   </div>
 </div>
 
@@ -10593,10 +10663,45 @@ let newTaskKind = "annotation";
 let newTaskEditing = null; // the writing task being edited, or null when making one
 function setNewTaskKind(kind){
   newTaskKind = kind;
-  document.querySelectorAll("#newTaskKindSeg .btn").forEach(b=> b.classList.toggle("active", b.dataset.kind === kind));
+  document.querySelectorAll("#newTaskKindSeg .nt-kind-card").forEach(b=>{
+    b.classList.toggle("active", b.dataset.kind === kind);
+    b.setAttribute("aria-checked", b.dataset.kind === kind ? "true" : "false");
+  });
   document.getElementById("newTaskScoreFields").style.display = kind === "annotation" ? "" : "none";
+  // a writing task is nothing but its question
+  document.getElementById("newTaskQuestionOpt").style.display = kind === "writing" ? "none" : "";
 }
-document.querySelectorAll("#newTaskKindSeg .btn").forEach(b=> b.addEventListener("click", ()=> setNewTaskKind(b.dataset.kind)));
+document.querySelectorAll("#newTaskKindSeg .nt-kind-card").forEach(b=> b.addEventListener("click", ()=> setNewTaskKind(b.dataset.kind)));
+// The file rows show what was picked, and the recording is a YouTube link OR
+// an audio file: choosing one greys out the other.
+function refreshTaskFilePick(pickId){
+  const pick = document.getElementById(pickId);
+  const input = pick.querySelector("input[type=file]");
+  const file = input.files && input.files[0];
+  if(!pick.dataset.main) pick.dataset.main = pick.querySelector(".nt-file-main").textContent;
+  if(!pick.dataset.sub) pick.dataset.sub = pick.querySelector(".nt-file-sub").textContent;
+  pick.classList.toggle("has-file", !!file);
+  pick.querySelector(".nt-file-main").textContent = file ? file.name : pick.dataset.main;
+  pick.querySelector(".nt-file-sub").textContent = file ? (file.size/1024/1024).toFixed(1) + " MB" : pick.dataset.sub;
+  refreshTaskRecordingChoice();
+}
+function refreshTaskRecordingChoice(){
+  const hasAudio = !!document.getElementById("newTaskAudioInput").files[0];
+  const hasLink = !!document.getElementById("newTaskVideoInput").value.trim();
+  document.getElementById("newTaskVideoInput").classList.toggle("nt-disabled", hasAudio);
+  document.getElementById("newTaskAudioPick").classList.toggle("nt-disabled", hasLink && !hasAudio);
+}
+document.getElementById("newTaskPdfInput").addEventListener("change", ()=> refreshTaskFilePick("newTaskPdfPick"));
+document.getElementById("newTaskAudioInput").addEventListener("change", ()=> refreshTaskFilePick("newTaskAudioPick"));
+document.getElementById("newTaskVideoInput").addEventListener("input", refreshTaskRecordingChoice);
+document.querySelector("#newTaskAudioPick .nt-file-clear").addEventListener("click", (e)=>{
+  e.preventDefault(); e.stopPropagation();
+  document.getElementById("newTaskAudioInput").value = "";
+  refreshTaskFilePick("newTaskAudioPick");
+});
+document.getElementById("newTaskCloseBtn").addEventListener("click", ()=>{
+  document.getElementById("newTaskModal").style.display = "none";
+});
 function fillQuestionBankSelect(){
   const sel = document.getElementById("newTaskBankSelect");
   if(sel.options.length) { sel.value = ""; return; }
@@ -10633,6 +10738,8 @@ function openTaskDialog(task){
   document.getElementById("newTaskVideoInput").value = "";
   document.getElementById("newTaskPdfInput").value = "";
   document.getElementById("newTaskAudioInput").value = "";
+  refreshTaskFilePick("newTaskPdfPick");
+  refreshTaskFilePick("newTaskAudioPick");
   document.getElementById("newTaskStatus").textContent = "";
   document.getElementById("newTaskModal").style.display = "flex";
   document.getElementById("newTaskTitleInput").focus();
