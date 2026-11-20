@@ -674,7 +674,20 @@
   .evidence-chip{display:flex;align-items:center;gap:6px;background:var(--accent-soft);color:var(--accent);border-radius:999px;padding:4px 10px 4px 12px;font-size:0.72rem;font-weight:600;}
   .evidence-chip button{background:none;border:none;color:inherit;cursor:pointer;font-size:0.8rem;padding:0;line-height:1;}
 
-  #practiceEvidencePanel{width:min(380px,36%);flex-shrink:0;display:flex;flex-direction:column;min-width:0;border-left:1px solid var(--line);background:var(--panel-2);}
+  #practiceEvidencePanel{width:var(--pw-notes,min(380px,36%));flex-shrink:0;display:flex;flex-direction:column;min-width:0;background:var(--panel-2);}
+  /* Same look as the score page's split handle: a 9px grab zone drawn as the
+     1px rule between the two panels. */
+  #practiceSplitHandle{flex:0 0 9px;margin:0 -4px;position:relative;z-index:6;cursor:col-resize;touch-action:none;outline:none;}
+  #practiceSplitHandle::before{content:"";position:absolute;top:0;bottom:0;left:4px;width:1px;background:var(--line);
+    transition:background .12s ease,width .12s ease,left .12s ease;}
+  #practiceSplitHandle::after{content:"";position:absolute;top:50%;left:2px;width:5px;height:34px;margin-top:-17px;
+    border-radius:3px;background:var(--line);opacity:0;transition:opacity .12s ease;}
+  #practiceSplitHandle:hover::before,#practiceSplitHandle:focus-visible::before,body.pw-split-dragging #practiceSplitHandle::before{
+    background:var(--accent);width:3px;left:3px;}
+  #practiceSplitHandle:hover::after{opacity:1;}
+  body.pw-split-dragging #practiceSplitHandle::after{opacity:0;}
+  body.pw-split-dragging{cursor:col-resize;user-select:none;-webkit-user-select:none;}
+  #practiceView.memory #practiceSplitHandle{display:none;}
   #practiceEvidenceToolbar{padding:14px 16px 6px;font-size:0.72rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-soft);}
   #practiceEvidenceScroll{flex:1;overflow:auto;padding:6px 14px 20px;}
   /* From memory: nothing beside the page but the page. */
@@ -724,6 +737,7 @@
     #practiceParagraphPanel{flex:none;}
     #practiceParagraphScroll{overflow:visible;padding:20px 16px 28px;}
     #practiceEvidencePanel{width:100%;border-left:none;border-top:1px solid var(--line);}
+    #practiceSplitHandle{display:none;}
     #practiceEvidenceScroll{overflow:visible;}
   }
 
@@ -890,6 +904,7 @@
   .nt-label{display:block;font-size:0.8rem;color:var(--ink-soft);margin-bottom:4px;}
   #newTaskBox textarea,#newTaskBox select{width:100%;padding:8px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit;font-size:0.85rem;margin-bottom:10px;box-sizing:border-box;}
   #newTaskBox textarea{resize:vertical;line-height:1.5;margin-bottom:14px;}
+  #newTaskVideoInput{margin-bottom:8px !important;}
   .task-kind-tag{display:inline-block;padding:1px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-weight:600;font-size:0.7rem;margin-right:6px;}
   #newTaskStatus{margin-top:-8px;margin-bottom:8px;}
   #practiceSubmitBox input[type=text]{margin-bottom:8px;}
@@ -1462,6 +1477,8 @@
           </div>
         </div>
       </div>
+      <div id="practiceSplitHandle" role="separator" aria-orientation="vertical" tabindex="0"
+        aria-label="Resize the writing and study notes" title="Drag to resize · double-click to reset"></div>
       <div id="practiceEvidencePanel">
         <div id="practiceEvidenceToolbar">Study notes</div>
         <div id="practiceEvidenceScroll"></div>
@@ -1713,8 +1730,9 @@
     <div id="newTaskScoreFields">
       <label class="nt-label">Score PDF</label>
       <input type="file" id="newTaskPdfInput" accept="application/pdf">
-      <label class="nt-label">YouTube video link (optional)</label>
+      <label class="nt-label">Recording (optional): a YouTube link or an audio file</label>
       <input type="text" id="newTaskVideoInput" placeholder="Paste a YouTube link…">
+      <input type="file" id="newTaskAudioInput" accept="audio/*">
     </div>
     <div class="modal-actions">
       <button class="btn ghost" id="newTaskCancelBtn">Cancel</button>
@@ -1908,6 +1926,7 @@ let currentClassId = null;
 let currentTaskRole = null;
 let taskSyncTimer = null;    // a teacher's task score saving to the server — see scheduleTaskSync()
 let taskSyncPending = false;
+let currentTaskAudioUrl = null; // the task recording this copy of the score holds, if any
 let currentTaskKind = null;   // "writing" | "annotation" | null (a task from before kinds)
 let currentTaskQuestionText = null; // shown read-only in Studio for taskRole "student"
 let barCounter = 0;
@@ -2110,6 +2129,7 @@ function normalizeProjectRecord(rec){
   rec.taskRole = rec.taskRole || null;
   rec.taskQuestionText = rec.taskQuestionText || null;
   rec.taskKind = rec.taskKind || null;
+  rec.taskAudioUrl = rec.taskAudioUrl || null;
   Object.values(rec.markersByPage).forEach(list=>{
     (list||[]).forEach(m=>{
       if(m.manual===undefined) m.manual = false;
@@ -2135,7 +2155,8 @@ function persist(){
     share: shareInfo,
     taskId: currentTaskId, classId: currentClassId, taskRole: currentTaskRole,
     taskQuestionText: currentTaskQuestionText,
-    taskKind: currentTaskKind
+    taskKind: currentTaskKind,
+    taskAudioUrl: currentTaskAudioUrl
   });
   scheduleAutoBackup(); // no-op until this project has a cloud code
   scheduleTaskSync();   // no-op unless this is a teacher's task score
@@ -2640,6 +2661,7 @@ async function openProject(id){
   currentTaskRole = rec.taskRole;
   currentTaskQuestionText = rec.taskQuestionText;
   currentTaskKind = rec.taskKind;
+  currentTaskAudioUrl = rec.taskAudioUrl;
   const isTeacherTask = currentTaskRole === "teacher";
   document.getElementById("taskEditBanner").style.display = isTeacherTask ? "flex" : "none";
   if(isTeacherTask){
@@ -6690,7 +6712,9 @@ function parseYouTubeId(input){
 document.getElementById("vwLoadBtn").addEventListener("click", ()=>{
   const id = parseYouTubeId(document.getElementById("vwUrlInput").value);
   if(!id){ alert("Couldn't parse a YouTube video ID from that link."); return; }
+  const hadTaskAudio = currentTaskRole === "teacher" && !!currentTaskAudioUrl;
   loadVideo(id);
+  if(hadTaskAudio){ dbDelete(AUDIO_STORE, currentProjectId); setTaskAudio(null); }
 });
 
 function loadVideo(id, silent){
@@ -6881,8 +6905,38 @@ document.getElementById("vwAudioFile").addEventListener("change", async (e)=>{
   e.target.value = ""; // so picking the same file twice still fires
   if(!file) return;
   if(!currentProjectId){ alert("Open a project first."); return; }
+  if(currentTaskRole === "teacher" && file.size > TASK_AUDIO_MAX_MB * 1024 * 1024){
+    alert("That audio file is over " + TASK_AUDIO_MAX_MB + " MB, too big for a class task. An .mp3 or .m4a of the piece will be much smaller.");
+    return;
+  }
   await loadAudioBlob(file, file.name, false);
+  if(currentTaskRole === "teacher") setTaskAudio(file);
 });
+// On a teacher's task score the recording is the task's: upload it and point
+// the task at it. (The YouTube link going to null rides along in the normal
+// save, since loadAudioBlob clears it.)
+async function setTaskAudio(file){
+  const taskId = currentTaskId;
+  if(!taskId) return;
+  setTaskSyncStatus("Uploading recording…");
+  try{
+    const audioBlobUrl = file ? await uploadTaskFile(file, getTeacherCode()) : null;
+    const resp = await fetch("/api/task/" + encodeURIComponent(taskId), {
+      method: "PUT",
+      headers: teacherHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ teacherCode: getTeacherCode(), audioBlobUrl, audioName: file ? file.name : null })
+    });
+    if(resp.status === 401) throw new Error("sign in again");
+    if(!resp.ok) throw new Error((await resp.json().catch(()=>({}))).error || "Server error");
+    if(currentTaskId === taskId){
+      currentTaskAudioUrl = audioBlobUrl;
+      persist();
+      setTaskSyncStatus("Saved to task");
+    }
+  }catch(err){
+    if(currentTaskId === taskId) setTaskSyncStatus("Recording not saved to the task — " + err.message, true);
+  }
+}
 
 // Which of the two sources the widget should present.
 function updateSourceUi(){
@@ -7870,6 +7924,69 @@ function practiceAutoGrow(el){
   el.style.height = "auto";
   el.style.height = Math.max(el.scrollHeight + 2, 132) + "px";
 }
+// ---------- resizing the writing / study notes split ----------
+// The handle sets the notes column's width as a fraction of the page,
+// remembered per browser. Either side keeps a usable minimum.
+const PW_SPLIT_KEY = "scoreStudioPracticeSplit";
+const PW_MIN_WRITING = 380, PW_MIN_NOTES = 220; // px
+const pwMainEl = document.getElementById("practiceWriteMain");
+const pwHandleEl = document.getElementById("practiceSplitHandle");
+let pwNotesFrac = null; // null = the default width
+try{ const v = parseFloat(localStorage.getItem(PW_SPLIT_KEY)); if(v > 0 && v < 1) pwNotesFrac = v; }catch(e){ /* storage blocked */ }
+function applyPracticeSplit(frac, remember){
+  if(frac == null){
+    pwNotesFrac = null;
+    pwMainEl.style.removeProperty("--pw-notes");
+    if(remember){ try{ localStorage.removeItem(PW_SPLIT_KEY); }catch(e){} }
+    return;
+  }
+  const total = pwMainEl.clientWidth;
+  if(total){
+    const lo = PW_MIN_NOTES / total, hi = 1 - PW_MIN_WRITING / total;
+    frac = lo < hi ? Math.min(hi, Math.max(lo, frac)) : 0.36;
+  }
+  pwNotesFrac = frac;
+  pwMainEl.style.setProperty("--pw-notes", (frac*100).toFixed(2) + "%");
+  if(remember){ try{ localStorage.setItem(PW_SPLIT_KEY, String(frac)); }catch(e){} }
+}
+applyPracticeSplit(pwNotesFrac, false);
+if(window.ResizeObserver) new ResizeObserver(()=>{ if(pwNotesFrac != null) applyPracticeSplit(pwNotesFrac, false); }).observe(pwMainEl);
+let pwDrag = null;
+pwHandleEl.addEventListener("pointerdown", (e)=>{
+  if(e.button !== 0) return;
+  const r = pwMainEl.getBoundingClientRect();
+  const notesW = document.getElementById("practiceEvidencePanel").getBoundingClientRect().width;
+  // where on the handle it was grabbed, so the line doesn't jump to the pointer
+  pwDrag = { right: r.right, width: r.width, grab: (r.right - notesW) - e.clientX, id: e.pointerId };
+  try{ pwHandleEl.setPointerCapture(e.pointerId); }catch(err){}
+  document.body.classList.add("pw-split-dragging");
+  e.preventDefault();
+});
+pwHandleEl.addEventListener("pointermove", (e)=>{
+  if(!pwDrag || e.pointerId !== pwDrag.id) return;
+  applyPracticeSplit((pwDrag.right - (e.clientX + pwDrag.grab)) / pwDrag.width, false);
+});
+function endPracticeSplitDrag(e){
+  if(!pwDrag || e.pointerId !== pwDrag.id) return;
+  pwDrag = null;
+  try{ pwHandleEl.releasePointerCapture(e.pointerId); }catch(err){}
+  document.body.classList.remove("pw-split-dragging");
+  applyPracticeSplit(pwNotesFrac, true);
+}
+pwHandleEl.addEventListener("pointerup", endPracticeSplitDrag);
+pwHandleEl.addEventListener("pointercancel", endPracticeSplitDrag);
+pwHandleEl.addEventListener("dblclick", ()=> applyPracticeSplit(null, true));
+pwHandleEl.addEventListener("keydown", (e)=>{
+  const now = pwNotesFrac != null ? pwNotesFrac
+    : document.getElementById("practiceEvidencePanel").getBoundingClientRect().width / (pwMainEl.clientWidth || 1);
+  const step = e.shiftKey ? 0.1 : 0.02;
+  if(e.key === "ArrowLeft") applyPracticeSplit(now + step, true);       // handle moves left: notes widen
+  else if(e.key === "ArrowRight") applyPracticeSplit(now - step, true);
+  else if(e.key === "Enter") applyPracticeSplit(null, true);
+  else return;
+  e.preventDefault();
+});
+
 // ---------- deleting a paragraph, and getting it back ----------
 let practiceUndoDelete = null; // { responseId, paragraph, index }
 function practiceDeleteParagraph(id){
@@ -10346,17 +10463,54 @@ async function teacherOpenTaskScore(t){
   const local = (await listProjects()).find(p=> p.taskId === task.id && p.taskRole === "teacher");
   if(local){
     // Copies made before the question was kept locally pick it up here.
-    if(local.taskQuestionText == null){ local.taskQuestionText = task.questionText || ""; await dbPut(META_STORE, local); }
+    if(local.taskQuestionText == null) local.taskQuestionText = task.questionText || "";
+    await syncTaskAudio(local, task); // a recording uploaded from another computer
+    await dbPut(META_STORE, local);
     await showStudio(local.id);
     return;
   }
   const localId = await createProject(task.title, {
     taskId: task.id, classId: task.classId, taskRole: "teacher", taskQuestionText: task.questionText, taskKind: task.kind || null
   });
+  await fillNewTaskCopy(localId, task);
+}
+
+// Makes a local copy of a task's score hold the task's current recording:
+// downloads it into the copy's audio store when the teacher has uploaded a
+// new one, or drops it when they've gone back to YouTube. Changes `rec` in
+// place; the caller saves it. Done before the score opens, so it plays like
+// any other audio file.
+async function syncTaskAudio(rec, task){
+  const url = task.audioBlobUrl || null;
+  if(url === (rec.taskAudioUrl || null)) return;
+  if(!url){
+    await dbDelete(AUDIO_STORE, rec.id);
+    rec.audioName = null;
+    rec.taskAudioUrl = null;
+    return;
+  }
+  try{
+    const blob = await (await fetch(url)).blob();
+    await dbPut(AUDIO_STORE, { id: rec.id, blob, name: task.audioName || "recording" });
+    rec.audioName = task.audioName || "recording";
+    rec.videoId = null;
+    rec.taskAudioUrl = url;
+  }catch(err){
+    console.error("Couldn't download the task's recording:", err);
+    alert("The score opened, but its recording couldn't be downloaded. Check your connection and open the task again.");
+  }
+}
+// Opens a freshly made copy of a task's score with everything the task has.
+async function fillNewTaskCopy(localId, task){
+  if(task.audioBlobUrl){
+    const rec = await dbGet(META_STORE, localId);
+    await syncTaskAudio(rec, task);
+    await dbPut(META_STORE, rec);
+  }
   await showStudio(localId);
   applyImportedProjectData({
     markersByPage: task.markersByPage, pageSystems: task.pageSystems, notes: [],
-    groups: task.groups, barCounter: task.barCounter, videoId: task.videoId,
+    groups: task.groups, barCounter: task.barCounter, videoId: task.audioBlobUrl ? null : task.videoId,
     pdfDataUrl: task.pdfBlobUrl, pdfName: task.pdfName
   });
 }
@@ -10478,6 +10632,7 @@ function openTaskDialog(task){
   document.getElementById("newTaskQuestionInput").value = task ? task.questionText || "" : "";
   document.getElementById("newTaskVideoInput").value = "";
   document.getElementById("newTaskPdfInput").value = "";
+  document.getElementById("newTaskAudioInput").value = "";
   document.getElementById("newTaskStatus").textContent = "";
   document.getElementById("newTaskModal").style.display = "flex";
   document.getElementById("newTaskTitleInput").focus();
@@ -10524,7 +10679,10 @@ document.getElementById("newTaskModal").addEventListener("click", (e)=>{
 // uploadPresigned (not upload) — matches api/task/upload.js's use of
 // handleUploadPresigned, needed because this project's Blob store is
 // OIDC-connected rather than issued a static BLOB_READ_WRITE_TOKEN.
-async function uploadTaskPdf(file, teacherCode){
+// The score PDF and an uploaded recording go up the same way.
+const TASK_AUDIO_MAX_MB = 50;
+async function uploadTaskPdf(file, teacherCode){ return uploadTaskFile(file, teacherCode); }
+async function uploadTaskFile(file, teacherCode){
   const { uploadPresigned } = await import("https://cdn.jsdelivr.net/npm/@vercel/blob@2.8.0/client/+esm");
   const blob = await uploadPresigned(file.name, file, {
     access: "public",
@@ -10546,6 +10704,9 @@ document.getElementById("newTaskCreateBtn").addEventListener("click", async ()=>
   if(kind === "annotation" && !pdfFile){ alert("Choose a score PDF for this task."); return; }
   const videoIdParsed = kind === "annotation" && videoRaw ? parseYouTubeId(videoRaw) : null;
   if(kind === "annotation" && videoRaw && !videoIdParsed){ alert("Couldn't parse a YouTube video ID from that link."); return; }
+  const audioFile = kind === "annotation" ? document.getElementById("newTaskAudioInput").files[0] : null;
+  if(audioFile && videoRaw){ alert("Use either a YouTube link or an audio file, not both."); return; }
+  if(audioFile && audioFile.size > TASK_AUDIO_MAX_MB * 1024 * 1024){ alert("That audio file is over " + TASK_AUDIO_MAX_MB + " MB. An .mp3 or .m4a of the piece will be much smaller."); return; }
 
   const btn = document.getElementById("newTaskCreateBtn");
   const status = document.getElementById("newTaskStatus");
@@ -10567,6 +10728,11 @@ document.getElementById("newTaskCreateBtn").addEventListener("click", async ()=>
     }
     status.textContent = "Uploading score PDF…";
     const pdfBlobUrl = await uploadTaskPdf(pdfFile, teacherCode);
+    let audioBlobUrl = null;
+    if(audioFile){
+      status.textContent = "Uploading recording…";
+      audioBlobUrl = await uploadTaskFile(audioFile, teacherCode);
+    }
 
     status.textContent = "Saving task…";
     const resp = await teacherFetch("/api/task", {
@@ -10575,6 +10741,7 @@ document.getElementById("newTaskCreateBtn").addEventListener("click", async ()=>
       body: JSON.stringify({
         teacherCode, classId: teacherSelectedClass.id, title, questionText, kind,
         videoId: videoIdParsed, pdfBlobUrl, pdfName: pdfFile.name,
+        audioBlobUrl, audioName: audioFile ? audioFile.name : null,
         markersByPage: {}, pageSystems: {}, groups: [], barCounter: 0
       })
     });
@@ -10592,6 +10759,7 @@ document.getElementById("newTaskCreateBtn").addEventListener("click", async ()=>
     await showStudio(localId);
     loadPdfBlob(pdfFile, pdfFile.name, false, false);
     if(videoIdParsed){ videoId = videoIdParsed; loadVideo(videoIdParsed, true); persist(); }
+    if(audioFile){ currentTaskAudioUrl = audioBlobUrl; await loadAudioBlob(audioFile, audioFile.name, false); }
   }catch(err){
     console.error("Task creation failed:", err);
     status.textContent = "Couldn't create task: " + err.message;
@@ -11013,6 +11181,7 @@ async function openOrCreateTaskProject(taskId){
     existing.taskQuestionText = task.questionText;
     existing.taskKind = task.kind || null;
     existing.videoId = task.videoId;
+    await syncTaskAudio(existing, task);
     await dbPut(META_STORE, existing);
     await showStudio(existing.id);
     return;
@@ -11020,15 +11189,9 @@ async function openOrCreateTaskProject(taskId){
   const localId = await createProject(task.title, {
     taskId: task.id, classId: task.classId, taskRole: "student", taskQuestionText: task.questionText, taskKind: task.kind || null
   });
-  await showStudio(localId);
-  // Reuses the exact same import path a JSON project file takes — the
-  // score PDF just happens to come from a Blob URL instead of an
-  // embedded data: URL. See applyImportedProjectData() above.
-  applyImportedProjectData({
-    markersByPage: task.markersByPage, pageSystems: task.pageSystems, notes: [],
-    groups: task.groups, barCounter: task.barCounter, videoId: task.videoId,
-    pdfDataUrl: task.pdfBlobUrl, pdfName: task.pdfName
-  });
+  // Same import path a JSON project file takes — the score PDF just comes
+  // from a Blob URL instead of an embedded data: URL.
+  await fillNewTaskCopy(localId, task);
 }
 
 document.getElementById("myClassesJoinBtn").addEventListener("click", ()=>{

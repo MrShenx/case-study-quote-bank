@@ -97,6 +97,10 @@ export async function purgeTask(taskId, blobDeleter) {
     try { await blobDeleter(task.pdfBlobUrl); result.blobDeleted = true; }
     catch (err) { result.blobError = String(err && err.message || err); }
   }
+  if (task && task.audioBlobUrl && blobDeleter) {
+    try { await blobDeleter(task.audioBlobUrl); }
+    catch (err) { result.blobError = (result.blobError ? result.blobError + '; ' : '') + String(err && err.message || err); }
+  }
   return result;
 }
 

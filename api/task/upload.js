@@ -22,6 +22,14 @@ import { handleUploadPresigned } from '@vercel/blob/client';
 import { ID_RE } from '../_lib/kv.js';
 import { passphraseConfigured, resolveSession } from '../_lib/auth.js';
 
+// A task's files: its score PDF, and optionally a recording the teacher
+// uploads instead of a YouTube link. Which is which goes by the file name the
+// browser sends; the content type is then checked against that kind.
+const PDF_TYPES = ['application/pdf'];
+const AUDIO_TYPES = ['audio/mpeg', 'audio/mp3', 'audio/mp4', 'audio/x-m4a', 'audio/aac', 'audio/wav',
+  'audio/x-wav', 'audio/wave', 'audio/vnd.wave', 'audio/ogg', 'audio/webm', 'audio/flac', 'audio/x-flac'];
+const AUDIO_NAME_RE = /\.(mp3|m4a|mp4|aac|wav|ogg|oga|opus|webm|flac)$/i;
+
 export default async function handler(request, response) {
   const body = request.body;
   try {
@@ -43,15 +51,17 @@ export default async function handler(request, response) {
         } else if (typeof payload.teacherCode !== 'string' || !ID_RE.test(payload.teacherCode)) {
           throw new Error('Missing or invalid teacherCode.');
         }
+        const isAudio = AUDIO_NAME_RE.test(pathname || '');
+        const types = isAudio ? AUDIO_TYPES : PDF_TYPES;
         return {
           token: await issueSignedToken({
             pathname,
             operations: ['put'],
-            allowedContentTypes: ['application/pdf'],
-            maximumSizeInBytes: 25 * 1024 * 1024
+            allowedContentTypes: types,
+            maximumSizeInBytes: (isAudio ? 50 : 25) * 1024 * 1024
           }),
           urlOptions: {
-            allowedContentTypes: ['application/pdf'],
+            allowedContentTypes: types,
             addRandomSuffix: true
           }
         };

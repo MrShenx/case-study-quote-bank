@@ -23,7 +23,7 @@ export default async function handler(req, res) {
 
   const teacherCode = await requireTeacher(req, res, body);
   if (!teacherCode) return;
-  const { classId, title, questionText, videoId, pdfBlobUrl, pdfName, kind,
+  const { classId, title, questionText, videoId, pdfBlobUrl, pdfName, kind, audioBlobUrl, audioName,
           markersByPage, pageSystems, groups, barCounter } = body;
 
   if (typeof classId !== 'string' || !ID_RE.test(classId)) {
@@ -63,6 +63,9 @@ export default async function handler(req, res) {
     videoId: typeof videoId === 'string' ? videoId.slice(0, 64) : null,
     pdfBlobUrl: typeof pdfBlobUrl === 'string' ? pdfBlobUrl : null,
     pdfName: typeof pdfName === 'string' ? pdfName.slice(0, 200) : null,
+    // A recording the teacher uploaded, used instead of the YouTube video.
+    audioBlobUrl: typeof audioBlobUrl === 'string' ? audioBlobUrl : null,
+    audioName: typeof audioName === 'string' ? audioName.slice(0, 200) : null,
     // Same shape as a normal project's tagging data (see
     // normalizeProjectRecord in index.html) so a teacher can pre-tag bars
     // with the existing Studio UI and every student opens an already-tagged

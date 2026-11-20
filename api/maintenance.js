@@ -66,13 +66,16 @@ async function survey(ownerCode) {
 
   const orphanTasks = [];
   const liveBlobUrls = new Set();
+  let livePdfCount = 0;
   let liveSubmissionCount = 0;
   for (const k of taskKeys) {
     const id = k.slice('task:'.length);
     const rec = await kv.get(k);
     if (!rec) continue;
     if (liveTaskIds.has(id)) {
-      if (rec.pdfBlobUrl) liveBlobUrls.add(rec.pdfBlobUrl);
+      if (rec.pdfBlobUrl) { liveBlobUrls.add(rec.pdfBlobUrl); livePdfCount += 1; }
+      // A task's uploaded recording is as live as its score.
+      if (rec.audioBlobUrl) liveBlobUrls.add(rec.audioBlobUrl);
     } else {
       orphanTasks.push({ id, title: rec.title || null, pdfBlobUrl: rec.pdfBlobUrl || null });
     }
@@ -114,7 +117,7 @@ async function survey(ownerCode) {
       classes: classes.length,
       tasks: liveTaskIds.size,
       submissions: liveSubmissionCount,
-      scorePdfs: liveBlobUrls.size,
+      scorePdfs: livePdfCount,
       classList: classes.filter((c) => c.mine).map(({ mine, ...c }) => c)
     },
     // Counted, never touched — see the note at the top of this file.

@@ -49,7 +49,7 @@ export default async function handler(req, res) {
 
     const teacherCode = await requireTeacher(req, res, body);
     if (!teacherCode) return;
-    const { title, questionText, videoId, pdfBlobUrl, pdfName, kind,
+    const { title, questionText, videoId, pdfBlobUrl, pdfName, kind, audioBlobUrl, audioName,
             markersByPage, pageSystems, groups, barCounter } = body;
 
     let task, classRec;
@@ -75,6 +75,9 @@ export default async function handler(req, res) {
       videoId: typeof videoId === 'string' ? videoId.slice(0, 64) : (videoId === null ? null : task.videoId),
       pdfBlobUrl: typeof pdfBlobUrl === 'string' ? pdfBlobUrl : task.pdfBlobUrl,
       pdfName: typeof pdfName === 'string' ? pdfName.slice(0, 200) : task.pdfName,
+      // null removes the recording (the teacher went back to a YouTube link).
+      audioBlobUrl: typeof audioBlobUrl === 'string' ? audioBlobUrl : (audioBlobUrl === null ? null : (task.audioBlobUrl || null)),
+      audioName: typeof audioName === 'string' ? audioName.slice(0, 200) : (audioName === null ? null : (task.audioName || null)),
       markersByPage: markersByPage && typeof markersByPage === 'object' ? markersByPage : task.markersByPage,
       pageSystems: pageSystems && typeof pageSystems === 'object' ? pageSystems : task.pageSystems,
       groups: Array.isArray(groups) ? groups : task.groups,
