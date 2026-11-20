@@ -620,6 +620,17 @@
   /* writing page */
   #practiceWriteView{flex:1;display:none;min-height:0;flex-direction:column;}
   #practiceWriteView.active{display:flex;}
+  #taskEditBanner{display:none;align-items:flex-start;gap:14px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--accent-soft);}
+  .teb-field{display:flex;flex-direction:column;gap:3px;min-width:0;}
+  .teb-field > span{font-size:0.68rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--accent);}
+  .teb-title{flex:0 1 260px;}
+  .teb-q{flex:1 1 auto;}
+  #taskEditBanner input,#taskEditBanner textarea{width:100%;font:inherit;font-size:0.86rem;color:var(--ink);background:var(--panel);
+    border:1px solid transparent;border-radius:8px;padding:6px 9px;line-height:1.4;resize:none;}
+  #taskEditBanner input:focus,#taskEditBanner textarea:focus{outline:none;border-color:var(--accent);}
+  #taskSyncStatus{flex-shrink:0;align-self:center;font-size:0.76rem;color:var(--ink-soft);white-space:nowrap;min-width:92px;text-align:right;}
+  #taskSyncStatus.error{color:var(--bad);font-weight:600;cursor:pointer;white-space:normal;max-width:220px;}
+  @media(max-width:700px){ #taskEditBanner{flex-wrap:wrap;} .teb-title,.teb-q{flex:1 1 100%;} #taskSyncStatus{text-align:left;} }
   #taskQuestionBanner{padding:10px 16px;border-bottom:1px solid var(--line);background:var(--accent-soft);color:var(--accent);font-size:0.85rem;font-weight:600;}
   #practiceTimerBar{align-items:center;gap:6px;padding:3px 4px 3px 6px;border-radius:12px;background:color-mix(in srgb,var(--ink) 5%,var(--bg));}
   #practiceTimerBar .btn{padding:6px 9px;}
@@ -1225,6 +1236,11 @@
 <div id="studioView">
 
   <div id="taskQuestionBanner" style="display:none;"></div>
+  <div id="taskEditBanner" style="display:none;">
+    <label class="teb-field teb-title"><span>Task</span><input type="text" id="taskEditTitle" maxlength="200"></label>
+    <label class="teb-field teb-q"><span>Question</span><textarea id="taskEditQuestion" rows="1" maxlength="4000" placeholder="The question students answer"></textarea></label>
+    <span id="taskSyncStatus"></span>
+  </div>
   <div id="topbar">
     <button class="btn" id="homeBtn"><span data-icon="arrow-left"></span> Back</button>
     <span class="project-name-label" id="projectNameLabel"></span>
@@ -1251,8 +1267,6 @@
         <div class="dropdown-section-label">Cloud backup</div>
         <button class="btn" id="cloudSaveBtn"><span data-icon="cloud-upload"></span> Save to Cloud</button>
         <button class="btn" id="cloudLoadBtn"><span data-icon="cloud-download"></span> Load from Cloud</button>
-        <div class="dropdown-section-label" id="publishTaskSection" style="display:none;">Class task</div>
-        <button class="btn" id="publishTaskBtn" style="display:none;"><span data-icon="send"></span> Publish tags to class</button>
         <div class="dropdown-section-label">Study notes (.docx)</div>
         <button class="btn" id="exportDocxBtn"><span data-icon="file-text"></span> Export Study Notes</button>
         <button class="btn" id="importDocxBtn"><span data-icon="file-down"></span> Import Study Notes</button>
@@ -1668,7 +1682,7 @@
 
 <div id="newTaskModal" class="modal-overlay" style="display:none;">
   <div class="modal-box" id="newTaskBox">
-    <h2 id="newTaskHeading">New task</h2>
+    <h2>New task</h2>
     <label style="font-size:0.8rem;color:var(--ink-soft);">Title</label>
     <input type="text" id="newTaskTitleInput" placeholder="e.g. Epic Diva — tone colour">
     <label style="font-size:0.8rem;color:var(--ink-soft);">Question</label>
@@ -1680,7 +1694,6 @@
       <input type="file" id="newTaskPdfInput" accept="application/pdf">
     </div>
     <div class="modal-actions">
-      <button class="btn" id="newTaskOpenScoreBtn" style="display:none;margin-right:auto;"><span data-icon="music" data-icon-size="14"></span> Open score</button>
       <button class="btn ghost" id="newTaskCancelBtn">Cancel</button>
       <button class="btn primary" id="newTaskCreateBtn">Create task</button>
     </div>
@@ -1856,6 +1869,8 @@ let shareProjectEditedAt = 0;
 let currentTaskId = null;
 let currentClassId = null;
 let currentTaskRole = null;
+let taskSyncTimer = null;    // a teacher's task score saving to the server — see scheduleTaskSync()
+let taskSyncPending = false;
 let currentTaskQuestionText = null; // shown read-only in Studio for taskRole "student"
 let barCounter = 0;
 let dragNoteId = null;    // note.id currently being dragged, or null
@@ -2083,6 +2098,7 @@ function persist(){
     taskQuestionText: currentTaskQuestionText
   });
   scheduleAutoBackup(); // no-op until this project has a cloud code
+  scheduleTaskSync();   // no-op unless this is a teacher's task score
   shareProjectEditedAt = Date.now(); // so the Share dialog can say "changed since the link was updated"
 }
 function persistPdfBlob(blob){
@@ -2093,6 +2109,11 @@ function persistPdfBlob(blob){
 // =====================================================================
 // project management (Home view)
 // =====================================================================
+// Everything a student studies from: their own scores and class tasks they
+// joined, but not a teacher's task scores, which are the task itself.
+async function listStudyProjects(){
+  return (await listProjects()).filter(p => p.taskRole !== "teacher");
+}
 async function listProjects(){
   const all = await dbGetAll(META_STORE);
   return all.map(normalizeProjectRecord).sort((a,b)=> (b.updatedAt||0) - (a.updatedAt||0));
@@ -2324,7 +2345,7 @@ async function goBack(){
       const resp = target.sub && target.sub.responseId ? await getResponse(target.sub.responseId) : null;
       if(resp){
         showView("practiceView");
-        practicePieces = await listProjects();
+        practicePieces = await listStudyProjects();
         practiceCurrentResponse = resp;
         practiceWriteFromList = !!target.sub.fromList;
         practiceShowWrite();
@@ -2365,11 +2386,9 @@ function showHome(){
 
 async function renderHomeGrid(){
   const grid = document.getElementById("homeGrid");
-  // Class-task projects a student joined live on the My Classes page only
-  // (see myClassesRenderTaskGrid) — keeps class work visibly separate from
-  // personal study notes. A teacher's own task-drafting copy still shows
-  // here as before; they rely on it to resume tagging.
-  const projects = (await listProjects()).filter(p => p.taskRole !== "student");
+  // Class-task scores live with their class: a student's on My Classes, a
+  // teacher's behind the task's own tile. The quote bank is personal notes.
+  const projects = (await listProjects()).filter(p => !p.taskId);
   grid.innerHTML = "";
   if(projects.length===0){
     grid.innerHTML = '<div id="homeEmpty">No projects yet — click "+ New project" to start one.</div>';
@@ -2440,6 +2459,7 @@ function projectHasContentWorthSaving(){
 // which is the screen that opened this score.
 function leaveStudio(){ goBack(); }
 document.getElementById("homeBtn").addEventListener("click", ()=>{
+  if(currentTaskRole === "teacher"){ flushTaskSync(); leaveStudio(); return; }
   if(projectHasContentWorthSaving()){
     document.getElementById("leaveReminderModal").style.display = "flex";
   } else {
@@ -2510,7 +2530,7 @@ async function showPractice(){
   // Refreshed every time Practice Mode is entered (rather than once at page
   // load) so a note added in Studio moments ago shows up immediately here —
   // no stale cache, no page reload needed.
-  practicePieces = await listProjects();
+  practicePieces = await listStudyProjects();
   practiceShowList();
 }
 document.getElementById("practiceNavBtn").addEventListener("click", showPractice);
@@ -2552,6 +2572,7 @@ async function openProject(id){
   // Any backup still sitting on the debounce belongs to the project we're
   // leaving — send it now, while its data is still the data in the globals.
   flushAutoBackup();
+  flushTaskSync();
   let rec = await dbGet(META_STORE, id);
   if(!rec){ showHome(); return; }
   rec = normalizeProjectRecord(rec);
@@ -2577,8 +2598,14 @@ async function openProject(id){
   currentClassId = rec.classId;
   currentTaskRole = rec.taskRole;
   currentTaskQuestionText = rec.taskQuestionText;
-  document.getElementById("publishTaskBtn").style.display = currentTaskRole === "teacher" ? "" : "none";
-  document.getElementById("publishTaskSection").style.display = currentTaskRole === "teacher" ? "" : "none";
+  const isTeacherTask = currentTaskRole === "teacher";
+  document.getElementById("taskEditBanner").style.display = isTeacherTask ? "flex" : "none";
+  if(isTeacherTask){
+    document.getElementById("taskEditTitle").value = rec.name || "";
+    document.getElementById("taskEditQuestion").value = currentTaskQuestionText || "";
+    setTaskSyncStatus("");
+    requestAnimationFrame(()=> autoGrowTaskQuestion());
+  }
   document.getElementById("taskWriteBtn").style.display = currentTaskRole === "student" ? "" : "none";
   // A student can tag/annotate a class task freely, but the score PDF and
   // video link are the teacher's to set — only those two are locked, and
@@ -2718,6 +2745,26 @@ function loadPdfFile(file){
   document.getElementById("topStatus").textContent = "Loading " + file.name + "…";
   const isReplacing = !!pdfDoc;
   loadPdfBlob(file, file.name, false, isReplacing);
+  if(currentTaskRole === "teacher") replaceTaskPdf(file);
+}
+// A new score on a teacher's task page becomes the task's score.
+async function replaceTaskPdf(file){
+  const taskId = currentTaskId;
+  if(!taskId) return;
+  setTaskSyncStatus("Uploading score…");
+  try{
+    const pdfBlobUrl = await uploadTaskPdf(file, getTeacherCode());
+    const resp = await fetch("/api/task/" + encodeURIComponent(taskId), {
+      method: "PUT",
+      headers: teacherHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ teacherCode: getTeacherCode(), pdfBlobUrl, pdfName: file.name })
+    });
+    if(resp.status === 401) throw new Error("sign in again");
+    if(!resp.ok) throw new Error((await resp.json().catch(()=>({}))).error || "Server error");
+    if(currentTaskId === taskId) setTaskSyncStatus("Saved to task");
+  }catch(err){
+    if(currentTaskId === taskId) setTaskSyncStatus("Score not saved to the task — " + err.message, true);
+  }
 }
 
 // blobOrFile: a File (fresh upload/drop) or a Blob (restored from IndexedDB).
@@ -9202,7 +9249,7 @@ async function showRevise(){
   showView("reviseView");
   // Same reasoning as showPractice(): reload every time so a note written
   // moments ago in Studio is drillable straight away.
-  revisePieces = await listProjects();
+  revisePieces = await listStudyProjects();
   reviseShowSetup();
 }
 
@@ -10176,74 +10223,34 @@ async function teacherRenderTaskGrid(){
     card.appendChild(viewBtn);
     const delBtn = card.querySelector('[data-action="delete-task"]');
     delBtn.addEventListener("click", (e)=>{ e.stopPropagation(); teacherDeleteTask(t); });
-    card.title = "Edit this task";
-    card.addEventListener("click", ()=> teacherEditTask(t));
+    card.title = "Open this task's score";
+    card.addEventListener("click", ()=> teacherOpenTaskScore(t));
     grid.appendChild(card);
   });
 }
 
-// ---------- edit an existing task ----------
-async function teacherEditTask(t){
+// A task IS its score: the tile opens the teacher's copy of it, where every
+// change saves straight back to the task (see scheduleTaskSync). Made from
+// the server copy if this browser doesn't have one (a task created on
+// another computer).
+async function teacherOpenTaskScore(t){
   let task;
   try{
     const resp = await fetch("/api/task/" + encodeURIComponent(t.id));
     if(!resp.ok) throw new Error((await resp.json().catch(()=>({}))).error || "Server error");
     task = await resp.json();
+    task.id = task.id || t.id;
   }catch(err){
     alert("Couldn't open that task: " + err.message);
     return;
   }
-  task.id = task.id || t.id;
-  setTaskModalMode(task);
-  document.getElementById("newTaskTitleInput").value = task.title || "";
-  document.getElementById("newTaskQuestionInput").value = task.questionText || "";
-  document.getElementById("newTaskVideoInput").value = task.videoId ? "https://youtu.be/" + task.videoId : "";
-  document.getElementById("newTaskStatus").textContent = "";
-  document.getElementById("newTaskModal").style.display = "flex";
-  document.getElementById("newTaskTitleInput").focus();
-}
-async function saveTaskEdits(){
-  const task = newTaskEditing;
-  const title = document.getElementById("newTaskTitleInput").value.trim();
-  const questionText = document.getElementById("newTaskQuestionInput").value.trim();
-  const videoRaw = document.getElementById("newTaskVideoInput").value.trim();
-  if(!title){ alert("A task title is required."); return; }
-  const newVideoId = videoRaw ? parseYouTubeId(videoRaw) : null;
-  if(videoRaw && !newVideoId){ alert("Couldn't parse a YouTube video ID from that link."); return; }
-  const btn = document.getElementById("newTaskCreateBtn");
-  const status = document.getElementById("newTaskStatus");
-  btn.disabled = true;
-  status.textContent = "Saving…";
-  try{
-    const resp = await teacherFetch("/api/task/" + encodeURIComponent(task.id), {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ teacherCode: getTeacherCode(), title, questionText, videoId: newVideoId })
-    });
-    if(!resp.ok) throw new Error((await resp.json().catch(()=>({}))).error || "Server error");
-    // Keep the teacher's own copy of the score in step, so opening it shows
-    // the same title, question and video.
-    const local = (await listProjects()).find(p=> p.taskId === task.id && p.taskRole === "teacher");
-    if(local){
-      local.name = title; local.taskQuestionText = questionText; local.videoId = newVideoId;
-      await dbPut(META_STORE, local);
-    }
-    document.getElementById("newTaskModal").style.display = "none";
-    status.textContent = "";
-    await teacherRenderTaskGrid();
-  }catch(err){
-    status.textContent = "Couldn't save: " + err.message;
-  }finally{
-    btn.disabled = false;
-  }
-}
-// The teacher's own copy of a task's score, for tagging bars and publishing
-// them. Made from the server copy if this browser doesn't have one (a task
-// created on another computer).
-async function teacherOpenTaskScore(task){
   const local = (await listProjects()).find(p=> p.taskId === task.id && p.taskRole === "teacher");
-  document.getElementById("newTaskModal").style.display = "none";
-  if(local){ await showStudio(local.id); return; }
+  if(local){
+    // Copies made before the question was kept locally pick it up here.
+    if(local.taskQuestionText == null){ local.taskQuestionText = task.questionText || ""; await dbPut(META_STORE, local); }
+    await showStudio(local.id);
+    return;
+  }
   const localId = await createProject(task.title, {
     taskId: task.id, classId: task.classId, taskRole: "teacher", taskQuestionText: task.questionText
   });
@@ -10254,9 +10261,6 @@ async function teacherOpenTaskScore(task){
     pdfDataUrl: task.pdfBlobUrl, pdfName: task.pdfName
   });
 }
-document.getElementById("newTaskOpenScoreBtn").addEventListener("click", ()=>{
-  if(newTaskEditing) teacherOpenTaskScore(newTaskEditing);
-});
 
 // Same contract as deleting a class, one level down: the task, its question,
 // its score PDF and the submissions made on it.
@@ -10284,6 +10288,9 @@ async function teacherDeleteTask(t){
     const data = await resp.json();
     if(!resp.ok) throw new Error(data.error || ("Server responded with " + resp.status));
     if(data.blobError) console.warn("Score PDF could not be deleted:", data.blobError);
+    for(const p of (await listProjects()).filter(p=> p.taskId === t.id && p.taskRole === "teacher")){
+      await deleteProjectCompletely(p.id);
+    }
   }catch(err){
     alert("Couldn't delete the task: " + err.message);
   }
@@ -10327,17 +10334,7 @@ document.getElementById("newClassNameInput").addEventListener("keydown", (e)=>{
 });
 
 // ---------- new task (score PDF + video + question) ----------
-// The same dialog edits an existing task: newTaskEditing holds that task.
-let newTaskEditing = null;
-function setTaskModalMode(task){
-  newTaskEditing = task;
-  document.getElementById("newTaskHeading").textContent = task ? "Edit task" : "New task";
-  document.getElementById("newTaskCreateBtn").textContent = task ? "Save changes" : "Create task";
-  document.getElementById("newTaskPdfField").style.display = task ? "none" : "";
-  document.getElementById("newTaskOpenScoreBtn").style.display = task ? "" : "none";
-}
 document.getElementById("newTaskBtn").addEventListener("click", ()=>{
-  setTaskModalMode(null);
   document.getElementById("newTaskTitleInput").value = "";
   document.getElementById("newTaskQuestionInput").value = "";
   document.getElementById("newTaskVideoInput").value = "";
@@ -10373,7 +10370,6 @@ async function uploadTaskPdf(file, teacherCode){
 }
 
 document.getElementById("newTaskCreateBtn").addEventListener("click", async ()=>{
-  if(newTaskEditing){ await saveTaskEdits(); return; }
   const title = document.getElementById("newTaskTitleInput").value.trim();
   const questionText = document.getElementById("newTaskQuestionInput").value.trim();
   const videoRaw = document.getElementById("newTaskVideoInput").value.trim();
@@ -10410,7 +10406,7 @@ document.getElementById("newTaskCreateBtn").addEventListener("click", async ()=>
     // matters here: showStudio()/openProject() must run first so
     // currentProjectId actually points at this new project before
     // loadPdfBlob() persists the PDF blob under it.
-    const localId = await createProject(title, { taskId, classId: teacherSelectedClass.id, taskRole: "teacher" });
+    const localId = await createProject(title, { taskId, classId: teacherSelectedClass.id, taskRole: "teacher", taskQuestionText: questionText });
     document.getElementById("newTaskModal").style.display = "none";
     await showStudio(localId);
     loadPdfBlob(pdfFile, pdfFile.name, false, false);
@@ -10423,28 +10419,79 @@ document.getElementById("newTaskCreateBtn").addEventListener("click", async ()=>
   }
 });
 
-document.getElementById("publishTaskBtn").addEventListener("click", async ()=>{
-  if(!currentTaskId || currentTaskRole !== "teacher") return;
-  const btn = document.getElementById("publishTaskBtn");
-  const originalText = btn.innerHTML;
-  btn.disabled = true;
-  btn.textContent = "Publishing…";
+// ---------- a teacher's task score saves to the task ----------
+// Everything students receive — bar tags, systems, headings, the video, the
+// title and question — goes to the server a moment after each change, so
+// the score page is the task. (Notes stay the teacher's own: students start
+// with an empty notes list.)
+function setTaskSyncStatus(text, isError){
+  const el = document.getElementById("taskSyncStatus");
+  el.textContent = text;
+  el.classList.toggle("error", !!isError);
+}
+function scheduleTaskSync(){
+  if(currentTaskRole !== "teacher" || !currentTaskId) return;
+  taskSyncPending = true;
+  setTaskSyncStatus("Saving…");
+  clearTimeout(taskSyncTimer);
+  taskSyncTimer = setTimeout(flushTaskSync, 1200);
+}
+async function flushTaskSync(){
+  if(!taskSyncPending || currentTaskRole !== "teacher" || !currentTaskId) return;
+  clearTimeout(taskSyncTimer);
+  taskSyncPending = false;
+  const taskId = currentTaskId;
+  const body = {
+    teacherCode: getTeacherCode(),
+    title: (currentProjectMeta && currentProjectMeta.name) || undefined,
+    questionText: currentTaskQuestionText || "",
+    videoId: videoId || null,
+    markersByPage, pageSystems, groups, barCounter
+  };
   try{
-    const putResp = await teacherFetch("/api/task/" + encodeURIComponent(currentTaskId), {
+    // Plain fetch, not teacherFetch: an expired sign-in shouldn't throw the
+    // teacher out of the score they're working on.
+    const resp = await fetch("/api/task/" + encodeURIComponent(taskId), {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        teacherCode: getTeacherCode(), videoId, markersByPage, pageSystems, groups, barCounter
-      })
+      headers: teacherHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(body)
     });
-    if(!putResp.ok) throw new Error((await putResp.json().catch(()=>({}))).error || "Server error");
-    alert("Tags published to the class task. Students who already joined will see the update next time they open this piece.");
+    if(resp.status === 401){
+      taskSyncPending = true;
+      if(currentTaskId === taskId) setTaskSyncStatus("Not saved to the task — sign in again", true);
+      return;
+    }
+    if(!resp.ok) throw new Error((await resp.json().catch(()=>({}))).error || "Server error");
+    if(currentTaskId === taskId && !taskSyncPending) setTaskSyncStatus("Saved to task");
   }catch(err){
-    alert("Couldn't publish: " + err.message);
-  }finally{
-    btn.disabled = false;
-    btn.innerHTML = originalText;
+    taskSyncPending = true;
+    if(currentTaskId === taskId) setTaskSyncStatus("Not saved to the task — " + err.message, true);
   }
+}
+window.addEventListener("pagehide", ()=>{ if(taskSyncPending) flushTaskSync(); });
+document.getElementById("taskSyncStatus").addEventListener("click", ()=>{
+  if(!document.getElementById("taskSyncStatus").classList.contains("error")) return;
+  if(!isSignedIn()) openTeacherUnlock("Sign in again to save this task.");
+  else flushTaskSync();
+});
+function autoGrowTaskQuestion(){
+  const el = document.getElementById("taskEditQuestion");
+  el.style.height = "auto";
+  el.style.height = Math.min(el.scrollHeight + 2, 140) + "px";
+}
+document.getElementById("taskEditTitle").addEventListener("input", (e)=>{
+  if(currentTaskRole !== "teacher" || !currentProjectMeta) return;
+  const name = e.target.value.trim();
+  if(!name) return; // a task needs a title; keep the last one until there's text
+  currentProjectMeta.name = name;
+  document.getElementById("projectNameLabel").textContent = name;
+  persist();
+});
+document.getElementById("taskEditQuestion").addEventListener("input", (e)=>{
+  if(currentTaskRole !== "teacher") return;
+  currentTaskQuestionText = e.target.value;
+  autoGrowTaskQuestion();
+  persist();
 });
 
 document.getElementById("taskWriteBtn").addEventListener("click", async ()=>{
@@ -10479,7 +10526,7 @@ document.getElementById("taskWriteBtn").addEventListener("click", async ()=>{
   // was the only place that populated it, so skipping it entirely left the
   // evidence panel permanently empty ("No pieces found yet") even when
   // this exact piece has real notes on it.
-  practicePieces = await listProjects();
+  practicePieces = await listStudyProjects();
   showView("practiceView");
   practiceWriteFromList = false; // Back returns to the score this was opened from
   practiceShowWrite();
