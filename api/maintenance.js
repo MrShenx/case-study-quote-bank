@@ -19,15 +19,14 @@
 // question this endpoint can answer about them, and guessing would destroy a
 // student's only remaining copy of their work.
 //
-// Admin only: it surveys the whole store, not one teacher's corner of it, so
-// it sits behind the same signed token as the rest of the teacher interface
-// (and, until the passphrase is set, behind the teacher code that owns at
-// least one class, which is what shipped before). The report deliberately
-// returns no backup codes or student names — counts only.
+// Owner only: it surveys the whole store, not one teacher's corner of it, so
+// invited teachers can't run it, and nobody can before the passphrase is set.
+// The report returns counts only — no backup codes, no student names, and
+// no names or join codes of other teachers' classes.
 
 import { kv, noKvResponse, ID_RE, readJsonBody, classKey, taskKey,
          submissionsKey, joinCodeKey, teacherClassesKey, deleteBlob } from './_lib/kv.js';
-import { requireAdmin } from './_lib/auth.js';
+import { requireOwner } from './_lib/auth.js';
 
 async function allKeys(pattern) {
   const out = [];
@@ -46,7 +45,7 @@ async function knownTeacher(teacherCode) {
 }
 
 // Walks the whole store and works out what is still reachable from a class.
-async function survey() {
+async function survey(ownerCode) {
   const classKeys = await allKeys('class:*');
   const taskKeys = await allKeys('task:*');
   const subKeys = await allKeys('submissions:*');
@@ -60,7 +59,7 @@ async function survey() {
     const id = k.slice('class:'.length);
     const rec = await kv.get(k);
     if (!rec) continue;
-    classes.push({ id, name: rec.name, joinCode: rec.joinCode, tasks: (rec.taskIds || []).length });
+    classes.push({ id, mine: rec.teacherCode === ownerCode, name: rec.name, joinCode: rec.joinCode, tasks: (rec.taskIds || []).length });
     (rec.taskIds || []).forEach((t) => liveTaskIds.add(t));
     if (rec.joinCode) liveJoinCodes.add(rec.joinCode.toUpperCase());
   }
@@ -116,7 +115,7 @@ async function survey() {
       tasks: liveTaskIds.size,
       submissions: liveSubmissionCount,
       scorePdfs: liveBlobUrls.size,
-      classList: classes
+      classList: classes.filter((c) => c.mine).map(({ mine, ...c }) => c)
     },
     // Counted, never touched — see the note at the top of this file.
     studentCloudBackups: projectKeys.length,
@@ -130,7 +129,8 @@ export default async function handler(req, res) {
 
   const src = req.method === 'GET' ? (req.query || {}) : ((await readJsonBody(req, res)) || {});
   if (req.method !== 'GET' && src === undefined) return;
-  const teacherCode = await requireAdmin(req, res, src);
+  // Owner only: this reads every teacher's corner of the store.
+  const teacherCode = await requireOwner(req, res);
   if (!teacherCode) return;
   try {
     if (!(await knownTeacher(teacherCode))) {
@@ -145,7 +145,7 @@ export default async function handler(req, res) {
 
   let report;
   try {
-    report = await survey();
+    report = await survey(teacherCode);
   } catch (err) {
     console.error('Survey failed:', err);
     res.status(500).json({ error: 'Could not survey stored data: ' + ((err && err.message) || err) });

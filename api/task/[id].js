@@ -15,7 +15,7 @@
 
 import { kv, noKvResponse, ID_RE, MAX_BYTES, byteSize, readJsonBody,
          classKey, taskKey, submissionsKey, purgeTask, deleteBlob } from '../_lib/kv.js';
-import { requireAdmin } from '../_lib/auth.js';
+import { requireTeacher } from '../_lib/auth.js';
 
 export default async function handler(req, res) {
   if (!kv) { noKvResponse(res); return; }
@@ -47,7 +47,7 @@ export default async function handler(req, res) {
     const body = await readJsonBody(req, res);
     if (body === undefined) return;
 
-    const teacherCode = await requireAdmin(req, res, body);
+    const teacherCode = await requireTeacher(req, res, body);
     if (!teacherCode) return;
     const { title, questionText, videoId, pdfBlobUrl, pdfName,
             markersByPage, pageSystems, groups, barCounter } = body;
@@ -98,7 +98,7 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'DELETE') {
-    const teacherCode = await requireAdmin(req, res);
+    const teacherCode = await requireTeacher(req, res);
     if (!teacherCode) return;
     const dryRun = !!(req.query && (req.query.dryRun === '1' || req.query.dryRun === 'true'));
 

@@ -119,6 +119,22 @@
   #serverStorageBody strong{color:var(--ink);}
   #serverStorageBody .ss-row{display:flex;justify-content:space-between;gap:12px;padding:3px 0;}
   #teacherUnlockInput{width:100%;box-sizing:border-box;}
+  #teacherUnlockName{margin-bottom:8px !important;}
+  .field-hint{font-size:0.76rem;color:var(--ink-soft);margin:-6px 0 12px;line-height:1.45;}
+  #teachersModal .modal-box{width:480px;}
+  #teachersList{margin:0 0 14px;max-height:50vh;overflow:auto;}
+  .teacher-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);font-size:0.86rem;}
+  .teacher-row:last-child{border-bottom:none;}
+  .teacher-row .who{flex:1;min-width:0;}
+  .teacher-row .who strong{display:block;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .teacher-row .who span{font-size:0.76rem;color:var(--ink-soft);}
+  #teachersEmpty,#teachersNote{font-size:0.82rem;color:var(--ink-soft);line-height:1.5;}
+  #teachersLinkBox{display:none;margin:0 0 14px;padding:10px 12px;border-radius:10px;background:var(--panel-2);font-size:0.82rem;line-height:1.5;}
+  #teachersLinkBox .link-row{display:flex;gap:8px;margin-top:6px;}
+  #teachersLinkBox input{flex:1;min-width:0;margin:0 !important;font-size:0.78rem;}
+  #inviteModal .modal-box{width:400px;}
+  #inviteBody{font-size:0.86rem;color:var(--ink-soft);line-height:1.5;margin:-4px 0 14px;}
+  #inviteError{display:none;font-size:0.82rem;color:var(--bad);margin:-6px 0 12px;line-height:1.45;}
   /* The way in for the one person who needs it: present, but not an invitation
      to the thirty students looking at the same screen. */
   .teacher-door{margin-top:26px;background:none;border:none;cursor:pointer;font:inherit;
@@ -1011,11 +1027,47 @@
 <div id="teacherUnlockModal" class="modal-overlay" style="display:none;">
   <div class="modal-box">
     <h2>Teacher sign-in</h2>
-    <p id="teacherUnlockBody">Enter the teacher passphrase to manage classes, tasks and submissions.</p>
-    <input type="password" id="teacherUnlockInput" placeholder="Passphrase" autocomplete="current-password">
+    <p id="teacherUnlockBody">Sign in to manage your classes, tasks and submissions.</p>
+    <input type="text" id="teacherUnlockName" placeholder="Your name" autocomplete="username" maxlength="40">
+    <p class="field-hint">Leave the name blank if you're the site owner.</p>
+    <input type="password" id="teacherUnlockInput" placeholder="Password" autocomplete="current-password">
     <div class="modal-actions">
       <button class="btn ghost" id="teacherUnlockCancelBtn">Cancel</button>
       <button class="btn primary" id="teacherUnlockGoBtn">Sign in</button>
+    </div>
+  </div>
+</div>
+
+<!-- Owner only: the other teachers who have accounts on this site. -->
+<div id="teachersModal" class="modal-overlay" style="display:none;">
+  <div class="modal-box">
+    <h2>Teachers</h2>
+    <p id="teachersNote">Each teacher signs in with their own name and password and sees only their own
+      classes. You can't see theirs, and they can't see yours.</p>
+    <div id="teachersLinkBox"></div>
+    <div id="teachersList"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="teachersCloseBtn">Close</button>
+      <button class="btn primary" id="teachersInviteBtn">+ Invite a teacher</button>
+    </div>
+  </div>
+</div>
+
+<!-- Opened from an invite or password-reset link (…/?invite=…). -->
+<div id="inviteModal" class="modal-overlay" style="display:none;">
+  <div class="modal-box">
+    <h2 id="inviteTitle">Set up your teacher account</h2>
+    <p id="inviteBody">Checking your link…</p>
+    <div id="inviteForm" style="display:none;">
+      <input type="text" id="inviteName" placeholder="Your name, e.g. Ms Lee" autocomplete="username" maxlength="40">
+      <p class="field-hint" id="inviteNameHint">This is what you'll type to sign in.</p>
+      <input type="password" id="invitePassword" placeholder="Choose a password (8+ characters)" autocomplete="new-password">
+      <input type="password" id="invitePassword2" placeholder="Type it again" autocomplete="new-password">
+    </div>
+    <p id="inviteError"></p>
+    <div class="modal-actions">
+      <button class="btn ghost" id="inviteCancelBtn">Cancel</button>
+      <button class="btn primary" id="inviteGoBtn" style="display:none;">Create account</button>
     </div>
   </div>
 </div>
@@ -1440,8 +1492,9 @@
     <button class="btn" id="teacherHomeBtn"><span data-icon="arrow-left"></span> Back</button>
     <h1><span data-icon="graduation-cap"></span> Teacher — Classes</h1>
     <div class="spacer"></div>
-    <span class="lock-pill" id="teacherSignedInPill" style="display:none;"><span data-icon="shield-check" data-icon-size="13"></span> Signed in</span>
-    <button class="btn" id="teacherStorageBtn" title="What this app is storing on the server"><span data-icon="database"></span> Server storage</button>
+    <span class="lock-pill" id="teacherSignedInPill" style="display:none;"><span data-icon="shield-check" data-icon-size="13"></span> <span id="teacherSignedInText">Signed in</span></span>
+    <button class="btn" id="teacherAccountsBtn" title="Invite or remove other teachers" style="display:none;"><span data-icon="users"></span> Teachers</button>
+    <button class="btn" id="teacherStorageBtn" title="What this app is storing on the server" style="display:none;"><span data-icon="database"></span> Server storage</button>
     <button class="btn" id="teacherLockBtn" title="Sign out of teacher mode"><span data-icon="lock"></span> Lock</button>
     <button class="btn primary" id="newClassBtn">+ New class</button>
   </div>
@@ -9536,8 +9589,9 @@ document.querySelectorAll(".revise-mode").forEach(btn=>{
 // question) once, students join with a short code and get it hydrated into
 // a normal local project (same Studio/Practice Mode/self-check as every
 // other project — see openProject()/applyImportedProjectData() reuse
-// below). Auth is code-based throughout, matching the rest of this app: no
-// accounts, no passwords — see api/_lib/kv.js for the server-side rationale.
+// below). Teachers sign in (the site owner with the passphrase, invited
+// teachers with their own name and password) and each sees only their own
+// classes — see api/_lib/auth.js.
 // =====================================================================
 function getTeacherCode(){
   let code = localStorage.getItem("score_studio_teacher_code");
@@ -9555,7 +9609,7 @@ function getTeacherCode(){
 // carries a token the server itself signed, issued only in exchange for a
 // passphrase that lives in the deployment's environment variables.
 const ADMIN_TOKEN_KEY = "score_studio_admin_token";
-let adminAuth = null;          // { token, expiresAt }
+let adminAuth = null;          // { token, expiresAt, role: 'owner'|'teacher', name }
 let unlockConfigured = null;   // null until the server has been asked
 
 function loadAdminAuth(){
@@ -9575,6 +9629,11 @@ function saveAdminAuth(a){
 }
 function isSignedIn(){
   return !!(adminAuth && adminAuth.expiresAt > Date.now());
+}
+// Sessions saved before teacher accounts existed carry no role; only the
+// owner could sign in then, so that is what they are.
+function isOwner(){
+  return isSignedIn() && (adminAuth.role || "owner") === "owner";
 }
 function teacherHeaders(extra){
   const h = Object.assign({}, extra || {});
@@ -9619,6 +9678,14 @@ function renderTeacherAccessUi(){
   if(card) card.style.display = open ? "" : "none";
   if(door) door.style.display = open ? "none" : "";
   if(pill) pill.style.display = signedIn ? "" : "none";
+  const pillText = document.getElementById("teacherSignedInText");
+  if(pillText) pillText.textContent = (signedIn && adminAuth.name) ? ("Signed in as " + adminAuth.name) : "Signed in";
+  // Managing other teachers and the store-wide survey are the owner's alone;
+  // the server refuses them to anyone else too.
+  ["teacherAccountsBtn","teacherStorageBtn"].forEach(id=>{
+    const b = document.getElementById(id);
+    if(b) b.style.display = isOwner() ? "" : "none";
+  });
   if(warn){
     // "block", not "": the rule that hides this banner lives in the
     // stylesheet, so clearing the inline style would re-hide it.
@@ -9630,12 +9697,17 @@ function renderTeacherAccessUi(){
   }
 }
 
+const LAST_TEACHER_NAME_KEY = "score_studio_last_teacher_name";
 function openTeacherUnlock(message){
   document.getElementById("teacherUnlockBody").textContent = message ||
-    "Enter the teacher passphrase to manage classes, tasks and submissions.";
+    "Sign in to manage your classes, tasks and submissions.";
   document.getElementById("teacherUnlockInput").value = "";
+  // The name isn't secret, so this browser remembers the last one used.
+  let last = "";
+  try{ last = localStorage.getItem(LAST_TEACHER_NAME_KEY) || ""; }catch(e){}
+  document.getElementById("teacherUnlockName").value = last;
   document.getElementById("teacherUnlockModal").style.display = "flex";
-  setTimeout(()=> document.getElementById("teacherUnlockInput").focus(), 30);
+  setTimeout(()=> document.getElementById(last ? "teacherUnlockInput" : "teacherUnlockName").focus(), 30);
 }
 function closeTeacherUnlock(){
   document.getElementById("teacherUnlockModal").style.display = "none";
@@ -9645,21 +9717,26 @@ async function submitTeacherUnlock(){
   const input = document.getElementById("teacherUnlockInput");
   const btn = document.getElementById("teacherUnlockGoBtn");
   const pass = input.value;
+  const name = document.getElementById("teacherUnlockName").value.trim();
   if(!pass) return;
   btn.disabled = true; btn.textContent = "Checking…";
   try{
     const resp = await fetch("/api/teacher/unlock", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      // The code this browser already uses, so the first sign-in adopts the
-      // classes that exist today instead of starting a second, empty identity.
-      body: JSON.stringify({ passphrase: pass, adoptTeacherCode: getTeacherCode() })
+      // No name: the site owner. adoptTeacherCode is the code this browser
+      // already uses, so the owner's very first sign-in adopted the classes
+      // that existed then; the server ignores it from then on.
+      body: JSON.stringify(name ? { name, passphrase: pass }
+                                : { passphrase: pass, adoptTeacherCode: getTeacherCode() })
     });
     const data = await resp.json().catch(()=>({}));
     if(!resp.ok) throw new Error(data.error || ("Server responded with " + resp.status));
-    saveAdminAuth({ token: data.token, expiresAt: data.expiresAt });
-    if(data.teacherCode) localStorage.setItem("score_studio_teacher_code", data.teacherCode);
-    unlockConfigured = true;
+    signInWith(data);
+    try{
+      if(name) localStorage.setItem(LAST_TEACHER_NAME_KEY, data.name || name);
+      else localStorage.removeItem(LAST_TEACHER_NAME_KEY);
+    }catch(e){}
     closeTeacherUnlock();
     showTeacher();
   }catch(err){
@@ -9670,6 +9747,20 @@ async function submitTeacherUnlock(){
     btn.disabled = false; btn.textContent = "Sign in";
   }
 }
+// One place that turns a sign-in reply into a session, for the sign-in box
+// and for a teacher who has just set up their account from an invite link.
+function signInWith(data){
+  saveAdminAuth({ token: data.token, expiresAt: data.expiresAt,
+                  role: data.role || "owner", name: data.name || null });
+  // Whose classes this browser now asks for. The server decides it from the
+  // token anyway; this just keeps the page's copy in step.
+  if(data.teacherCode) localStorage.setItem("score_studio_teacher_code", data.teacherCode);
+  unlockConfigured = true;
+}
+document.getElementById("teacherUnlockName").addEventListener("keydown", (e)=>{
+  if(e.key === "Enter") document.getElementById("teacherUnlockInput").focus();
+  if(e.key === "Escape") closeTeacherUnlock();
+});
 document.getElementById("teacherUnlockGoBtn").addEventListener("click", submitTeacherUnlock);
 document.getElementById("teacherUnlockCancelBtn").addEventListener("click", closeTeacherUnlock);
 document.getElementById("teacherUnlockInput").addEventListener("keydown", (e)=>{
@@ -9742,6 +9833,214 @@ document.getElementById("serverStorageCloseBtn").addEventListener("click", ()=>{
 });
 document.getElementById("serverStorageModal").addEventListener("click", (e)=>{
   if(e.target.id === "serverStorageModal") document.getElementById("serverStorageModal").style.display = "none";
+});
+
+// ---------- other teachers (owner only) ----------
+function inviteUrl(token){
+  return location.origin + location.pathname + "?invite=" + encodeURIComponent(token);
+}
+async function accountsApi(body){
+  const resp = await teacherFetch("/api/teacher/accounts", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
+  });
+  const data = await resp.json().catch(()=>({}));
+  if(!resp.ok) throw new Error(data.error || ("Server responded with " + resp.status));
+  return data;
+}
+function showTeachersLink(heading, url, expiresAt){
+  const box = document.getElementById("teachersLinkBox");
+  const days = Math.max(1, Math.round((expiresAt - Date.now()) / 86400000));
+  box.innerHTML = '<strong>' + escapeHtml(heading) + '</strong><br>' +
+    'Send this link to them. It works once and expires in ' + days + ' days.' +
+    '<div class="link-row"><input type="text" readonly id="teachersLinkInput">' +
+    '<button class="btn" id="teachersLinkCopyBtn">' + icon("copy",16) + ' Copy</button></div>';
+  const input = document.getElementById("teachersLinkInput");
+  input.value = url;
+  box.style.display = "block";
+  document.getElementById("teachersLinkCopyBtn").addEventListener("click", ()=>{
+    const btn = document.getElementById("teachersLinkCopyBtn");
+    const done = ()=>{ btn.innerHTML = icon("check",16) + " Copied"; setTimeout(()=>{ btn.innerHTML = icon("copy",16) + " Copy"; }, 1600); };
+    input.select();
+    if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, ()=>{ document.execCommand("copy"); done(); });
+    else { document.execCommand("copy"); done(); }
+  });
+  input.addEventListener("focus", ()=> input.select());
+}
+async function loadTeachersList(){
+  const list = document.getElementById("teachersList");
+  list.innerHTML = '<div id="teachersEmpty">Loading…</div>';
+  let teachers;
+  try{
+    const resp = await teacherFetch("/api/teacher/accounts");
+    const data = await resp.json().catch(()=>({}));
+    if(!resp.ok) throw new Error(data.error || ("Server responded with " + resp.status));
+    teachers = data.teachers || [];
+  }catch(err){
+    list.innerHTML = '<div style="color:var(--bad);font-size:0.84rem;">' + escapeHtml(err.message) + '</div>';
+    return;
+  }
+  if(teachers.length === 0){
+    list.innerHTML = '<div id="teachersEmpty">No other teachers yet. Invite one and send them the link.</div>';
+    return;
+  }
+  list.innerHTML = "";
+  teachers.forEach(t=>{
+    const row = document.createElement("div");
+    row.className = "teacher-row";
+    row.innerHTML = '<div class="who"><strong></strong><span>' + t.classes + ' class' + (t.classes===1?"":"es") +
+      ' · joined ' + new Date(t.createdAt).toLocaleDateString() + '</span></div>' +
+      '<button class="btn" data-act="reset" title="Make a link they can use to choose a new password">Reset password</button>' +
+      '<button class="btn danger" data-act="remove">Remove</button>';
+    row.querySelector("strong").textContent = t.name;
+    row.querySelector('[data-act="reset"]').addEventListener("click", async ()=>{
+      try{
+        const d = await accountsApi({ action: "reset", name: t.name });
+        showTeachersLink("Password reset link for " + d.name, inviteUrl(d.invite), d.expiresAt);
+      }catch(err){ alert(err.message); }
+    });
+    row.querySelector('[data-act="remove"]').addEventListener("click", ()=> removeTeacher(t.name));
+    list.appendChild(row);
+  });
+}
+// Removing a teacher takes their classes and their students' work with it,
+// so the server's own count goes in front of the owner first.
+async function removeTeacher(name){
+  let plan;
+  try{ plan = await accountsApi({ action: "remove", name, dryRun: true }); }
+  catch(err){ alert(err.message); return; }
+  const n = (k, one, many)=> plan[k] + " " + (plan[k] === 1 ? one : many);
+  const ok = await askConfirm("Remove " + plan.name + "?",
+    "This deletes their account and everything they set up: <strong>" + n("classes","class","classes") +
+    "</strong>, <strong>" + n("tasks","task","tasks") + "</strong> and <strong>" +
+    n("submissions","student submission","student submissions") + "</strong>. It can't be undone.",
+    "Remove");
+  if(!ok) return;
+  try{ await accountsApi({ action: "remove", name }); }
+  catch(err){ alert("Removal failed: " + err.message); }
+  loadTeachersList();
+}
+function openTeachers(){
+  const box = document.getElementById("teachersLinkBox");
+  box.style.display = "none"; box.innerHTML = "";
+  document.getElementById("teachersModal").style.display = "flex";
+  loadTeachersList();
+}
+document.getElementById("teacherAccountsBtn").addEventListener("click", openTeachers);
+document.getElementById("teachersInviteBtn").addEventListener("click", async ()=>{
+  const btn = document.getElementById("teachersInviteBtn");
+  btn.disabled = true;
+  try{
+    const d = await accountsApi({ action: "invite" });
+    showTeachersLink("Invite link for a new teacher", inviteUrl(d.invite), d.expiresAt);
+  }catch(err){ alert(err.message); }
+  finally{ btn.disabled = false; }
+});
+document.getElementById("teachersCloseBtn").addEventListener("click", ()=>{
+  document.getElementById("teachersModal").style.display = "none";
+});
+document.getElementById("teachersModal").addEventListener("click", (e)=>{
+  if(e.target.id === "teachersModal") document.getElementById("teachersModal").style.display = "none";
+});
+
+// ---------- accepting an invite or reset link ----------
+const INVITE_PARAM = "invite";
+let pendingInvite = null;   // { token, kind, name }
+function inviteError(msg){
+  const el = document.getElementById("inviteError");
+  el.textContent = msg || "";
+  el.style.display = msg ? "block" : "none";
+}
+function closeInvite(){
+  document.getElementById("inviteModal").style.display = "none";
+  ["inviteName","invitePassword","invitePassword2"].forEach(id=> document.getElementById(id).value = "");
+  pendingInvite = null;
+}
+async function openInviteFromUrl(){
+  const params = new URLSearchParams(location.search);
+  if(!params.has(INVITE_PARAM)) return;
+  const token = (params.get(INVITE_PARAM) || "").trim();
+  // Out of the address bar at once, so a refresh, a bookmark or the browser
+  // history doesn't keep the link.
+  try{
+    const u = new URL(location.href);
+    u.searchParams.delete(INVITE_PARAM);
+    history.replaceState(null, "", u.pathname + u.search + u.hash);
+  }catch(e){}
+  const title = document.getElementById("inviteTitle");
+  const body = document.getElementById("inviteBody");
+  const form = document.getElementById("inviteForm");
+  const go = document.getElementById("inviteGoBtn");
+  title.textContent = "Teacher account";
+  body.textContent = "Checking your link…";
+  form.style.display = "none"; go.style.display = "none"; inviteError("");
+  document.getElementById("inviteModal").style.display = "flex";
+  let info;
+  try{
+    const resp = await fetch("/api/teacher/accounts", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "check-invite", invite: token })
+    });
+    info = await resp.json().catch(()=>({}));
+    if(!resp.ok) throw new Error(info.error || ("Server responded with " + resp.status));
+  }catch(err){
+    body.textContent = err.message;
+    return;
+  }
+  pendingInvite = { token, kind: info.kind, name: info.name };
+  const nameInput = document.getElementById("inviteName");
+  if(info.kind === "reset"){
+    title.textContent = "Choose a new password";
+    body.textContent = "For " + info.name + ". Your classes and students' work stay exactly as they are.";
+    nameInput.value = info.name; nameInput.readOnly = true;
+    document.getElementById("inviteNameHint").textContent = "Your sign-in name stays the same.";
+    go.textContent = "Save password";
+  }else{
+    title.textContent = "Set up your teacher account";
+    body.textContent = "You've been invited to teach on this site. You'll start with your own empty " +
+      "class list — nobody else's classes or student work are visible to you, and yours aren't visible to them.";
+    nameInput.value = ""; nameInput.readOnly = false;
+    document.getElementById("inviteNameHint").textContent = "This is what you'll type to sign in.";
+    go.textContent = "Create account";
+  }
+  form.style.display = ""; go.style.display = "";
+  setTimeout(()=> document.getElementById(info.kind === "reset" ? "invitePassword" : "inviteName").focus(), 30);
+}
+async function submitInvite(){
+  if(!pendingInvite) return;
+  const name = document.getElementById("inviteName").value.trim();
+  const p1 = document.getElementById("invitePassword").value;
+  const p2 = document.getElementById("invitePassword2").value;
+  if(pendingInvite.kind === "new" && name.length < 2) return inviteError("Type your name.");
+  if(p1.length < 8) return inviteError("Choose a password of at least 8 characters.");
+  if(p1 !== p2) return inviteError("The two passwords don't match.");
+  inviteError("");
+  const go = document.getElementById("inviteGoBtn");
+  const label = go.textContent;
+  go.disabled = true; go.textContent = "Saving…";
+  try{
+    const resp = await fetch("/api/teacher/accounts", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "accept-invite", invite: pendingInvite.token, name, password: p1 })
+    });
+    const data = await resp.json().catch(()=>({}));
+    if(!resp.ok) throw new Error(data.error || ("Server responded with " + resp.status));
+    signInWith(data);
+    try{ localStorage.setItem(LAST_TEACHER_NAME_KEY, data.name); }catch(e){}
+    closeInvite();
+    showTeacher();
+  }catch(err){
+    inviteError(err.message);
+  }finally{
+    go.disabled = false; go.textContent = label;
+  }
+}
+document.getElementById("inviteGoBtn").addEventListener("click", submitInvite);
+document.getElementById("inviteCancelBtn").addEventListener("click", closeInvite);
+["inviteName","invitePassword","invitePassword2"].forEach(id=>{
+  document.getElementById(id).addEventListener("keydown", (e)=>{
+    if(e.key === "Enter") submitInvite();
+    if(e.key === "Escape") closeInvite();
+  });
 });
 
 document.getElementById("teacherLockBtn").addEventListener("click", ()=>{
@@ -10443,6 +10742,8 @@ document.getElementById("joinClassCodeInput").addEventListener("keydown", (e)=>{
   retryPendingShareStops();
   // Opened from a shared link (…/?share=K7M4QX9P): offer the copy straight away.
   openShareFromUrl();
+  // Opened from a teacher invite or password-reset link (…/?invite=…).
+  openInviteFromUrl();
 })();
 </script>
 </body>

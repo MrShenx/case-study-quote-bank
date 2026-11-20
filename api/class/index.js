@@ -8,17 +8,15 @@
 // GET  /api/class?teacherCode=... — lists the classes owned by that teacher
 //   code, for the Teacher mode "My classes" list.
 //
-// Auth model matches the rest of this app: no accounts, no passwords — a
-// "teacher code" is just a crypto.randomUUID() generated client-side and
-// kept in localStorage, exactly like the existing student cloud-code. Anyone
-// holding that code can manage the classes it created; there is nothing more
-// secret than that anywhere else in this app either (see api/project/[id].js).
+// Every route acts as the teacher code in the caller's signed token (see
+// api/_lib/auth.js): the owner's, or an invited teacher's own. A class belongs
+// to exactly one teacher code, so each teacher sees only their own classes.
 
 import { randomUUID } from 'node:crypto';
 import { kv, noKvResponse, ID_RE, MAX_BYTES, byteSize, readJsonBody,
          generateJoinCode, classKey, joinCodeKey, teacherClassesKey,
-         purgeTask, deleteBlob } from '../_lib/kv.js';
-import { requireAdmin } from '../_lib/auth.js';
+         purgeClass, deleteBlob } from '../_lib/kv.js';
+import { requireTeacher } from '../_lib/auth.js';
 
 export default async function handler(req, res) {
   if (!kv) { noKvResponse(res); return; }
@@ -26,7 +24,7 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     // The identity comes from the signed token, never from what the client
     // claims to be — that is the whole point of the change.
-    const teacherCode = await requireAdmin(req, res);
+    const teacherCode = await requireTeacher(req, res);
     if (!teacherCode) return;
     let classIds;
     try {
@@ -59,7 +57,7 @@ export default async function handler(req, res) {
     const body = await readJsonBody(req, res);
     if (body === undefined) return;
 
-    const teacherCode = await requireAdmin(req, res, body);
+    const teacherCode = await requireTeacher(req, res, body);
     if (!teacherCode) return;
     const { name } = body;
     const cleanName = (typeof name === 'string' ? name : '').trim().slice(0, 200);
@@ -106,7 +104,7 @@ export default async function handler(req, res) {
   // to the teacher, so it reports precisely what it removed — and, with
   // dryRun, what it would remove — instead of a bare ok:true.
   if (req.method === 'DELETE') {
-    const teacherCode = await requireAdmin(req, res);
+    const teacherCode = await requireTeacher(req, res);
     if (!teacherCode) return;
     const classId = req.query && req.query.classId;
     const dryRun = !!(req.query && (req.query.dryRun === '1' || req.query.dryRun === 'true'));
@@ -147,19 +145,9 @@ export default async function handler(req, res) {
       return;
     }
 
-    const removed = { tasks: 0, submissions: 0, blobs: 0, blobErrors: [] };
+    let removed;
     try {
-      for (const taskId of taskIds) {
-        const r = await purgeTask(taskId, deleteBlob);
-        removed.tasks += 1;
-        removed.submissions += r.submissions;
-        if (r.blobDeleted) removed.blobs += 1;
-        if (r.blobError) removed.blobErrors.push(r.blobError);
-      }
-      if (classRec.joinCode) await kv.del(joinCodeKey(classRec.joinCode));
-      await kv.del(classKey(classId));
-      const ids = (await kv.get(teacherClassesKey(teacherCode))) || [];
-      await kv.set(teacherClassesKey(teacherCode), ids.filter((x) => x !== classId));
+      removed = await purgeClass(classId, classRec, deleteBlob);
     } catch (err) {
       console.error('KV delete failed:', err);
       res.status(500).json({ error: 'Could not finish deleting the class. Please try again.' });

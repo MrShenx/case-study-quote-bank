@@ -9,7 +9,7 @@
 import { randomUUID } from 'node:crypto';
 import { kv, noKvResponse, ID_RE, MAX_BYTES, byteSize, readJsonBody,
          classKey, taskKey, submissionsKey } from '../../_lib/kv.js';
-import { requireAdmin, isClassMember, clientIp, rateLimit } from '../../_lib/auth.js';
+import { requireTeacher, isClassMember, clientIp, rateLimit } from '../../_lib/auth.js';
 
 export default async function handler(req, res) {
   if (!kv) { noKvResponse(res); return; }
@@ -21,7 +21,7 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'GET') {
-    const teacherCode = await requireAdmin(req, res);
+    const teacherCode = await requireTeacher(req, res);
     if (!teacherCode) return;
     let task, classRec;
     try {

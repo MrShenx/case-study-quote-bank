@@ -100,6 +100,27 @@ export async function purgeTask(taskId, blobDeleter) {
   return result;
 }
 
+// Deleting a class: every task on it (see purgeTask), its join code, the class
+// record, and its entry in the owning teacher's list. Shared by the class
+// DELETE route and by the owner removing a teacher's account.
+export async function purgeClass(classId, classRec, blobDeleter) {
+  const removed = { tasks: 0, submissions: 0, blobs: 0, blobErrors: [] };
+  for (const taskId of classRec.taskIds || []) {
+    const r = await purgeTask(taskId, blobDeleter);
+    removed.tasks += 1;
+    removed.submissions += r.submissions;
+    if (r.blobDeleted) removed.blobs += 1;
+    if (r.blobError) removed.blobErrors.push(r.blobError);
+  }
+  if (classRec.joinCode) await kv.del(joinCodeKey(classRec.joinCode));
+  await kv.del(classKey(classId));
+  if (classRec.teacherCode) {
+    const ids = (await kv.get(teacherClassesKey(classRec.teacherCode))) || [];
+    await kv.set(teacherClassesKey(classRec.teacherCode), ids.filter((x) => x !== classId));
+  }
+  return removed;
+}
+
 // The one place that knows how this project authenticates to Blob storage:
 // OIDC, not a static BLOB_READ_WRITE_TOKEN (see api/task/upload.js for why).
 // The SDK picks the OIDC credential up from the function's environment, so

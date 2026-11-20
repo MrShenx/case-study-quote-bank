@@ -20,7 +20,7 @@
 import { issueSignedToken } from '@vercel/blob';
 import { handleUploadPresigned } from '@vercel/blob/client';
 import { ID_RE } from '../_lib/kv.js';
-import { passphraseConfigured, verifyToken } from '../_lib/auth.js';
+import { passphraseConfigured, resolveSession } from '../_lib/auth.js';
 
 export default async function handler(request, response) {
   const body = request.body;
@@ -38,8 +38,8 @@ export default async function handler(request, response) {
         let payload = {};
         try { payload = JSON.parse(clientPayload || '{}'); } catch { /* ignore */ }
         if (passphraseConfigured()) {
-          const claims = await verifyToken(payload.token);
-          if (!claims || claims.role !== 'admin') throw new Error('Teacher sign-in required.');
+          // The owner or an invited teacher whose account is still current.
+          if (!(await resolveSession(payload.token))) throw new Error('Teacher sign-in required.');
         } else if (typeof payload.teacherCode !== 'string' || !ID_RE.test(payload.teacherCode)) {
           throw new Error('Missing or invalid teacherCode.');
         }

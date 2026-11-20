@@ -2,9 +2,16 @@
 //
 // Three tiers, and only the server decides which one a request is in:
 //
-//   admin    — Mr Shen. Proves it once with a passphrase that lives only in a
-//              Vercel environment variable (never in this repo, never in the
-//              page), and gets back a short-lived signed token.
+//   owner    — Mr Shen (role 'admin' in tokens, for continuity). Proves it
+//              with a passphrase that lives only in a Vercel environment
+//              variable (never in this repo, never in the page), and gets back
+//              a short-lived signed token. Only the owner can invite, reset or
+//              remove other teachers, and run the store-wide maintenance.
+//   teacher  — another teacher the owner invited. Signs in with their own
+//              name and password (scrypt-hashed in KV) and gets a token for
+//              their OWN teacher code, so they see only their own classes.
+//              The owner cannot see theirs either: every class endpoint
+//              already compares the class's teacherCode with the token's.
 //   student  — proves membership of one class by holding a token issued when
 //              they joined it with the class code.
 //   everyone — can read a task by its unguessable id, as before.
@@ -21,7 +28,8 @@
 // variable is what switches enforcement on, and the teacher page says loudly
 // that it hasn't been set yet.
 
-import { createHmac, randomBytes, timingSafeEqual, createHash } from 'node:crypto';
+import { createHmac, randomBytes, timingSafeEqual, createHash, scrypt as scryptCb } from 'node:crypto';
+import { promisify } from 'node:util';
 import { kv, ID_RE } from './kv.js';
 
 const SECRET_KEY = 'app:secret';
@@ -102,7 +110,7 @@ export async function bindAdminCode(code) {
   return code;
 }
 
-function bearer(req) {
+export function bearer(req) {
   const h = req.headers || {};
   const direct = h['x-admin-token'] || h['X-Admin-Token'];
   if (typeof direct === 'string' && direct) return direct;
@@ -111,17 +119,78 @@ function bearer(req) {
   return null;
 }
 
+// ---------- teacher accounts ----------
+// teacher:<nameKey>  → { name, nameKey, code, salt, hash, pv, createdAt }
+// teachers           → a set of every nameKey, so the owner can list them
+// invite:<token>     → { kind: 'new' } or { kind: 'reset', nameKey }, 7-day TTL
+// `pv` (password version) goes into every token issued; a password reset
+// bumps it and removing the account deletes the record, and either one makes
+// the teacher's open sessions stop working on their next request.
+const scrypt = promisify(scryptCb);
+export const TEACHER_INDEX_KEY = 'teachers';
+export function teacherKey(nameKey) { return `teacher:${nameKey}`; }
+export function inviteKey(token) { return `invite:${token}`; }
+export const INVITE_SECONDS = 7 * 24 * 60 * 60;
+export const SESSION_SECONDS = 12 * 60 * 60;   // a school day; a shared machine shouldn't stay unlocked
+
+const NAME_RE = /^[\p{L}\p{N}][\p{L}\p{N} .'\-]{0,38}[\p{L}\p{N}.]$/u;
+// Display form keeps the teacher's capitals; the key is what makes "Ms Lee"
+// and "ms  lee" the same account.
+export function cleanTeacherName(raw) {
+  if (typeof raw !== 'string') return null;
+  const name = raw.normalize('NFC').trim().replace(/\s+/g, ' ');
+  return NAME_RE.test(name) ? name : null;
+}
+export function nameKeyOf(name) { return name.toLowerCase(); }
+
+export const MIN_PASSWORD = 8;
+export async function hashPassword(password) {
+  const salt = randomBytes(16).toString('hex');
+  const hash = (await scrypt(password, salt, 64)).toString('hex');
+  return { salt, hash };
+}
+export async function checkPassword(password, rec) {
+  // Always do the work, even with no account, so a wrong name and a wrong
+  // password take the same time and the reply can't be used to list names.
+  const salt = rec && rec.salt ? rec.salt : '00000000000000000000000000000000';
+  const got = await scrypt(typeof password === 'string' ? password : '', salt, 64);
+  if (!rec || !rec.hash) return false;
+  const want = Buffer.from(rec.hash, 'hex');
+  return want.length === got.length && timingSafeEqual(got, want);
+}
+
+export async function teacherSessionToken(rec) {
+  return signToken({ role: 'teacher', code: rec.code, name: rec.name, nk: rec.nameKey, pv: rec.pv }, SESSION_SECONDS);
+}
+
+// Who a token belongs to, re-checked against the store for invited teachers
+// so that removing an account or resetting its password takes effect at once.
+// Returns { role: 'owner'|'teacher', code, name } or null.
+export async function resolveSession(token) {
+  const payload = await verifyToken(token);
+  if (!payload || !payload.code) return null;
+  if (payload.role === 'admin') return { role: 'owner', code: payload.code, name: null };
+  if (payload.role === 'teacher' && typeof payload.nk === 'string') {
+    let rec;
+    try { rec = await kv.get(teacherKey(payload.nk)); } catch { return null; }
+    if (!rec || rec.code !== payload.code || rec.pv !== payload.pv) return null;
+    return { role: 'teacher', code: rec.code, name: rec.name };
+  }
+  return null;
+}
+
 // Resolves a request to the teacher code it is allowed to act as, or null.
-// In enforced mode that means a valid admin token; in bootstrap mode it falls
-// back to the teacherCode the client sends, which is what shipped before.
-export async function requireAdmin(req, res, parsedBody) {
+// Any signed-in teacher — the owner or an invited one — acts only as their
+// own code. In bootstrap mode (no passphrase set yet) it falls back to the
+// teacherCode the client sends, which is what shipped before.
+export async function requireTeacher(req, res, parsedBody) {
   if (passphraseConfigured()) {
-    const payload = await verifyToken(bearer(req));
-    if (!payload || payload.role !== 'admin' || !payload.code) {
+    const session = await resolveSession(bearer(req));
+    if (!session) {
       res.status(401).json({ error: 'Teacher sign-in required.', needsUnlock: true });
       return null;
     }
-    return payload.code;
+    return session.code;
   }
   // Bootstrap only. parsedBody matters because readJsonBody() hands back a
   // parsed copy without writing it onto req.
@@ -132,6 +201,26 @@ export async function requireAdmin(req, res, parsedBody) {
     return null;
   }
   return legacy;
+}
+
+// The owner only: managing other teachers' accounts, and the maintenance
+// survey that reads the whole store. Never available in bootstrap mode —
+// without a passphrase there is no way to tell the owner apart.
+export async function requireOwner(req, res) {
+  if (!passphraseConfigured()) {
+    res.status(503).json({ error: 'Set TEACHER_PASSPHRASE in the Vercel dashboard first.' });
+    return null;
+  }
+  const session = await resolveSession(bearer(req));
+  if (!session) {
+    res.status(401).json({ error: 'Teacher sign-in required.', needsUnlock: true });
+    return null;
+  }
+  if (session.role !== 'owner') {
+    res.status(403).json({ error: 'Only the site owner can do that.' });
+    return null;
+  }
+  return session.code;
 }
 
 // Membership of one class: either a token issued at join time, or — for a
