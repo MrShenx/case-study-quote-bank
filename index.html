@@ -939,7 +939,6 @@
   <div class="chooser-body">
     <div class="chooser-hero">
       <h1 class="chooser-wordmark">Analysis Studio</h1>
-      <p class="chooser-heading">What are you working on?</p>
     </div>
     <div class="chooser-cards">
       <button class="chooser-card" id="chooseQuotesBtn">
@@ -1616,16 +1615,19 @@
 
 <div id="newTaskModal" class="modal-overlay" style="display:none;">
   <div class="modal-box" id="newTaskBox">
-    <h2>New task</h2>
+    <h2 id="newTaskHeading">New task</h2>
     <label style="font-size:0.8rem;color:var(--ink-soft);">Title</label>
     <input type="text" id="newTaskTitleInput" placeholder="e.g. Epic Diva — tone colour">
     <label style="font-size:0.8rem;color:var(--ink-soft);">Question</label>
     <textarea id="newTaskQuestionInput" rows="3" placeholder="Paste or write the essay question students will answer…"></textarea>
     <label style="font-size:0.8rem;color:var(--ink-soft);">YouTube video link (optional)</label>
     <input type="text" id="newTaskVideoInput" placeholder="Paste a YouTube link…">
-    <label style="font-size:0.8rem;color:var(--ink-soft);">Score PDF (chord chart, lead sheet, full score — any type)</label>
-    <input type="file" id="newTaskPdfInput" accept="application/pdf">
+    <div id="newTaskPdfField">
+      <label style="font-size:0.8rem;color:var(--ink-soft);">Score PDF (chord chart, lead sheet, full score — any type)</label>
+      <input type="file" id="newTaskPdfInput" accept="application/pdf">
+    </div>
     <div class="modal-actions">
+      <button class="btn" id="newTaskOpenScoreBtn" style="display:none;margin-right:auto;"><span data-icon="music" data-icon-size="14"></span> Open score</button>
       <button class="btn ghost" id="newTaskCancelBtn">Cancel</button>
       <button class="btn primary" id="newTaskCreateBtn">Create task</button>
     </div>
@@ -9875,9 +9877,87 @@ async function teacherRenderTaskGrid(){
     card.appendChild(viewBtn);
     const delBtn = card.querySelector('[data-action="delete-task"]');
     delBtn.addEventListener("click", (e)=>{ e.stopPropagation(); teacherDeleteTask(t); });
+    card.title = "Edit this task";
+    card.addEventListener("click", ()=> teacherEditTask(t));
     grid.appendChild(card);
   });
 }
+
+// ---------- edit an existing task ----------
+async function teacherEditTask(t){
+  let task;
+  try{
+    const resp = await fetch("/api/task/" + encodeURIComponent(t.id));
+    if(!resp.ok) throw new Error((await resp.json().catch(()=>({}))).error || "Server error");
+    task = await resp.json();
+  }catch(err){
+    alert("Couldn't open that task: " + err.message);
+    return;
+  }
+  task.id = task.id || t.id;
+  setTaskModalMode(task);
+  document.getElementById("newTaskTitleInput").value = task.title || "";
+  document.getElementById("newTaskQuestionInput").value = task.questionText || "";
+  document.getElementById("newTaskVideoInput").value = task.videoId ? "https://youtu.be/" + task.videoId : "";
+  document.getElementById("newTaskStatus").textContent = "";
+  document.getElementById("newTaskModal").style.display = "flex";
+  document.getElementById("newTaskTitleInput").focus();
+}
+async function saveTaskEdits(){
+  const task = newTaskEditing;
+  const title = document.getElementById("newTaskTitleInput").value.trim();
+  const questionText = document.getElementById("newTaskQuestionInput").value.trim();
+  const videoRaw = document.getElementById("newTaskVideoInput").value.trim();
+  if(!title){ alert("A task title is required."); return; }
+  const newVideoId = videoRaw ? parseYouTubeId(videoRaw) : null;
+  if(videoRaw && !newVideoId){ alert("Couldn't parse a YouTube video ID from that link."); return; }
+  const btn = document.getElementById("newTaskCreateBtn");
+  const status = document.getElementById("newTaskStatus");
+  btn.disabled = true;
+  status.textContent = "Saving…";
+  try{
+    const resp = await teacherFetch("/api/task/" + encodeURIComponent(task.id), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ teacherCode: getTeacherCode(), title, questionText, videoId: newVideoId })
+    });
+    if(!resp.ok) throw new Error((await resp.json().catch(()=>({}))).error || "Server error");
+    // Keep the teacher's own copy of the score in step, so opening it shows
+    // the same title, question and video.
+    const local = (await listProjects()).find(p=> p.taskId === task.id && p.taskRole === "teacher");
+    if(local){
+      local.name = title; local.taskQuestionText = questionText; local.videoId = newVideoId;
+      await dbPut(META_STORE, local);
+    }
+    document.getElementById("newTaskModal").style.display = "none";
+    status.textContent = "";
+    await teacherRenderTaskGrid();
+  }catch(err){
+    status.textContent = "Couldn't save: " + err.message;
+  }finally{
+    btn.disabled = false;
+  }
+}
+// The teacher's own copy of a task's score, for tagging bars and publishing
+// them. Made from the server copy if this browser doesn't have one (a task
+// created on another computer).
+async function teacherOpenTaskScore(task){
+  const local = (await listProjects()).find(p=> p.taskId === task.id && p.taskRole === "teacher");
+  document.getElementById("newTaskModal").style.display = "none";
+  if(local){ await showStudio(local.id); return; }
+  const localId = await createProject(task.title, {
+    taskId: task.id, classId: task.classId, taskRole: "teacher", taskQuestionText: task.questionText
+  });
+  await showStudio(localId);
+  applyImportedProjectData({
+    markersByPage: task.markersByPage, pageSystems: task.pageSystems, notes: [],
+    groups: task.groups, barCounter: task.barCounter, videoId: task.videoId,
+    pdfDataUrl: task.pdfBlobUrl, pdfName: task.pdfName
+  });
+}
+document.getElementById("newTaskOpenScoreBtn").addEventListener("click", ()=>{
+  if(newTaskEditing) teacherOpenTaskScore(newTaskEditing);
+});
 
 // Same contract as deleting a class, one level down: the task, its question,
 // its score PDF and the submissions made on it.
@@ -9948,7 +10028,17 @@ document.getElementById("newClassNameInput").addEventListener("keydown", (e)=>{
 });
 
 // ---------- new task (score PDF + video + question) ----------
+// The same dialog edits an existing task: newTaskEditing holds that task.
+let newTaskEditing = null;
+function setTaskModalMode(task){
+  newTaskEditing = task;
+  document.getElementById("newTaskHeading").textContent = task ? "Edit task" : "New task";
+  document.getElementById("newTaskCreateBtn").textContent = task ? "Save changes" : "Create task";
+  document.getElementById("newTaskPdfField").style.display = task ? "none" : "";
+  document.getElementById("newTaskOpenScoreBtn").style.display = task ? "" : "none";
+}
 document.getElementById("newTaskBtn").addEventListener("click", ()=>{
+  setTaskModalMode(null);
   document.getElementById("newTaskTitleInput").value = "";
   document.getElementById("newTaskQuestionInput").value = "";
   document.getElementById("newTaskVideoInput").value = "";
@@ -9984,6 +10074,7 @@ async function uploadTaskPdf(file, teacherCode){
 }
 
 document.getElementById("newTaskCreateBtn").addEventListener("click", async ()=>{
+  if(newTaskEditing){ await saveTaskEdits(); return; }
   const title = document.getElementById("newTaskTitleInput").value.trim();
   const questionText = document.getElementById("newTaskQuestionInput").value.trim();
   const videoRaw = document.getElementById("newTaskVideoInput").value.trim();
