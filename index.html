@@ -1129,7 +1129,7 @@
     <h2>Teacher sign-in</h2>
     <p id="teacherUnlockBody">Sign in to manage your classes, tasks and submissions.</p>
     <input type="text" id="teacherUnlockName" placeholder="Your name" autocomplete="username" maxlength="40">
-    <input type="password" id="teacherUnlockInput" placeholder="Passphrase" autocomplete="current-password">
+    <input type="password" id="teacherUnlockInput" placeholder="Password" autocomplete="current-password">
     <p id="teacherUnlockSwitch"><button type="button" id="teacherUnlockModeBtn"></button></p>
     <div class="modal-actions">
       <button class="btn ghost" id="teacherUnlockCancelBtn">Cancel</button>
@@ -10074,10 +10074,10 @@ function renderTeacherAccessUi(){
 }
 
 const LAST_TEACHER_NAME_KEY = "score_studio_last_teacher_name";
-// Two ways in, switched with one link: the site owner (passphrase only) and
-// an invited teacher (name + password). It opens on whichever this browser
-// used last, and the link to the other one is always showing.
-let unlockOwnerMode = true;
+// Two ways in, switched with one link: an invited teacher (name + password),
+// which is what the box always opens on, and the site owner (passphrase
+// only) behind the link underneath.
+let unlockOwnerMode = false;
 function setUnlockMode(owner, message){
   unlockOwnerMode = owner;
   const name = document.getElementById("teacherUnlockName");
@@ -10098,7 +10098,7 @@ function openTeacherUnlock(message){
   try{ last = localStorage.getItem(LAST_TEACHER_NAME_KEY) || ""; }catch(e){}
   document.getElementById("teacherUnlockName").value = last;
   document.getElementById("teacherUnlockModal").style.display = "flex";
-  setUnlockMode(!last, message);
+  setUnlockMode(false, message);
 }
 document.getElementById("teacherUnlockModeBtn").addEventListener("click", ()=> setUnlockMode(!unlockOwnerMode));
 function closeTeacherUnlock(){
