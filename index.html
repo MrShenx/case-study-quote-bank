@@ -119,7 +119,8 @@
   #serverStorageBody strong{color:var(--ink);}
   #serverStorageBody .ss-row{display:flex;justify-content:space-between;gap:12px;padding:3px 0;}
   #teacherUnlockInput{width:100%;box-sizing:border-box;}
-  #teacherUnlockName{margin-bottom:8px !important;}
+  #teacherUnlockSwitch{margin:-4px 0 14px;font-size:0.8rem;}
+  #teacherUnlockModeBtn{background:none;border:none;padding:0;font:inherit;color:var(--accent);cursor:pointer;text-decoration:underline;text-underline-offset:2px;}
   .field-hint{font-size:0.76rem;color:var(--ink-soft);margin:-6px 0 12px;line-height:1.45;}
   #teachersModal .modal-box{width:480px;}
   #teachersList{margin:0 0 14px;max-height:50vh;overflow:auto;}
@@ -1128,8 +1129,8 @@
     <h2>Teacher sign-in</h2>
     <p id="teacherUnlockBody">Sign in to manage your classes, tasks and submissions.</p>
     <input type="text" id="teacherUnlockName" placeholder="Your name" autocomplete="username" maxlength="40">
-    <p class="field-hint">Leave the name blank if you're the site owner.</p>
-    <input type="password" id="teacherUnlockInput" placeholder="Password" autocomplete="current-password">
+    <input type="password" id="teacherUnlockInput" placeholder="Passphrase" autocomplete="current-password">
+    <p id="teacherUnlockSwitch"><button type="button" id="teacherUnlockModeBtn"></button></p>
     <div class="modal-actions">
       <button class="btn ghost" id="teacherUnlockCancelBtn">Cancel</button>
       <button class="btn primary" id="teacherUnlockGoBtn">Sign in</button>
@@ -10073,17 +10074,33 @@ function renderTeacherAccessUi(){
 }
 
 const LAST_TEACHER_NAME_KEY = "score_studio_last_teacher_name";
+// Two ways in, switched with one link: the site owner (passphrase only) and
+// an invited teacher (name + password). It opens on whichever this browser
+// used last, and the link to the other one is always showing.
+let unlockOwnerMode = true;
+function setUnlockMode(owner, message){
+  unlockOwnerMode = owner;
+  const name = document.getElementById("teacherUnlockName");
+  name.style.display = owner ? "none" : "";
+  document.getElementById("teacherUnlockInput").placeholder = owner ? "Passphrase" : "Password";
+  document.getElementById("teacherUnlockModeBtn").textContent = owner
+    ? "Invited teacher? Sign in with your name and password"
+    : "Site owner? Sign in with the passphrase";
+  document.getElementById("teacherUnlockBody").textContent = message || (owner
+    ? "Site owner: enter the teacher passphrase."
+    : "Sign in with the name and password you chose when you set up your account.");
+  setTimeout(()=> document.getElementById(owner || name.value ? "teacherUnlockInput" : "teacherUnlockName").focus(), 30);
+}
 function openTeacherUnlock(message){
-  document.getElementById("teacherUnlockBody").textContent = message ||
-    "Sign in to manage your classes, tasks and submissions.";
   document.getElementById("teacherUnlockInput").value = "";
   // The name isn't secret, so this browser remembers the last one used.
   let last = "";
   try{ last = localStorage.getItem(LAST_TEACHER_NAME_KEY) || ""; }catch(e){}
   document.getElementById("teacherUnlockName").value = last;
   document.getElementById("teacherUnlockModal").style.display = "flex";
-  setTimeout(()=> document.getElementById(last ? "teacherUnlockInput" : "teacherUnlockName").focus(), 30);
+  setUnlockMode(!last, message);
 }
+document.getElementById("teacherUnlockModeBtn").addEventListener("click", ()=> setUnlockMode(!unlockOwnerMode));
 function closeTeacherUnlock(){
   document.getElementById("teacherUnlockModal").style.display = "none";
   document.getElementById("teacherUnlockInput").value = "";
@@ -10092,7 +10109,8 @@ async function submitTeacherUnlock(){
   const input = document.getElementById("teacherUnlockInput");
   const btn = document.getElementById("teacherUnlockGoBtn");
   const pass = input.value;
-  const name = document.getElementById("teacherUnlockName").value.trim();
+  const name = unlockOwnerMode ? "" : document.getElementById("teacherUnlockName").value.trim();
+  if(!unlockOwnerMode && !name){ document.getElementById("teacherUnlockName").focus(); return; }
   if(!pass) return;
   btn.disabled = true; btn.textContent = "Checking…";
   try{
