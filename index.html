@@ -146,6 +146,15 @@
   #teacherSetupWarning{display:none;margin:0 0 14px;padding:10px 14px;border-radius:10px;
     background:var(--warn-bg);color:var(--warn);font-size:0.82rem;line-height:1.5;}
   .btn.danger:hover{filter:brightness(1.06);}
+  .btn.danger:disabled{opacity:0.45;cursor:not-allowed;filter:none;}
+  #deleteAccountBox{width:440px;}
+  #deleteAccountBox input{width:100%;padding:9px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit;margin:0 0 14px;box-sizing:border-box;}
+  .da-summary{font-size:0.86rem;line-height:1.55;color:var(--ink);background:var(--bad-soft);border-radius:10px;padding:12px 14px;margin:-2px 0 16px;}
+  .da-summary ul{margin:6px 0 6px 18px;padding:0;}
+  .da-status{font-size:0.8rem;color:var(--bad);min-height:1em;margin:-6px 0 8px;}
+  #teacherAccountMenu{right:0;left:auto;min-width:190px;}
+  #teacherAccountMenu #teacherDeleteAccountBtn{color:var(--bad);}
+  #teacherAccountMenu #teacherDeleteAccountBtn:hover{background:var(--bad-soft);color:var(--bad);}
   #confirmModal .modal-box{width:420px;}
   /* ---------- share links ---------- */
   #shareModal .modal-box,#shareOpenModal .modal-box{width:440px;}
@@ -1098,6 +1107,22 @@
   </div>
 </div>
 
+<div id="deleteAccountModal" class="modal-overlay" style="display:none;">
+  <div class="modal-box" id="deleteAccountBox">
+    <h2>Delete your account?</h2>
+    <div id="deleteAccountSummary" class="da-summary">Checking what's stored with your account…</div>
+    <label class="nt-label" for="deleteAccountPassword">Your password</label>
+    <input type="password" id="deleteAccountPassword" autocomplete="current-password">
+    <label class="nt-label" for="deleteAccountConfirm">Type <strong>DELETE</strong> to confirm</label>
+    <input type="text" id="deleteAccountConfirm" autocomplete="off" spellcheck="false">
+    <div id="deleteAccountStatus" class="da-status"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="deleteAccountCancelBtn">Cancel</button>
+      <button class="btn danger" id="deleteAccountGoBtn" disabled>Delete my account</button>
+    </div>
+  </div>
+</div>
+
 <div id="teacherUnlockModal" class="modal-overlay" style="display:none;">
   <div class="modal-box">
     <h2>Teacher sign-in</h2>
@@ -1577,10 +1602,15 @@
     <button class="btn" id="teacherHomeBtn"><span data-icon="arrow-left"></span> Back</button>
     <h1><span data-icon="graduation-cap"></span> Teacher — Classes</h1>
     <div class="spacer"></div>
-    <span class="lock-pill" id="teacherSignedInPill" style="display:none;"><span data-icon="shield-check" data-icon-size="13"></span> <span id="teacherSignedInText">Signed in</span></span>
+    <div class="dropdown-wrap" id="teacherAccountWrap">
+      <button class="btn" id="teacherAccountBtn" title="Your teacher sign-in"><span data-icon="circle-user" data-icon-size="16"></span> <span id="teacherSignedInText">Signed in</span> <span data-icon="chevron-down" data-icon-size="14"></span></button>
+      <div class="dropdown-menu" id="teacherAccountMenu">
+        <button class="btn" id="teacherLockBtn" title="Sign out of the teacher side on this computer"><span data-icon="log-out"></span> Sign out</button>
+        <button class="btn" id="teacherDeleteAccountBtn" title="Permanently delete your teacher account and everything stored with it" style="display:none;"><span data-icon="user-x"></span> Delete account…</button>
+      </div>
+    </div>
     <button class="btn" id="teacherAccountsBtn" title="Invite or remove other teachers" style="display:none;"><span data-icon="users"></span> Teachers</button>
     <button class="btn" id="teacherStorageBtn" title="What this app is storing on the server" style="display:none;"><span data-icon="database"></span> Server storage</button>
-    <button class="btn" id="teacherLockBtn" title="Sign out of the teacher side on this computer"><span data-icon="log-out"></span> Sign out</button>
     <button class="btn primary" id="newClassBtn">+ New class</button>
   </div>
   <div id="teacherClassListPanel">
@@ -10009,7 +10039,7 @@ async function refreshUnlockConfigured(){
 function renderTeacherAccessUi(){
   const card = document.getElementById("teacherNavBtn");
   const door = document.getElementById("teacherDoorBtn");
-  const pill = document.getElementById("teacherSignedInPill");
+  const pill = document.getElementById("teacherAccountWrap");
   const warn = document.getElementById("teacherSetupWarning");
   const signedIn = isSignedIn();
   // With no passphrase set on the deployment there is nothing to sign in to
@@ -10020,13 +10050,17 @@ function renderTeacherAccessUi(){
   if(door) door.style.display = open ? "none" : "";
   if(pill) pill.style.display = signedIn ? "" : "none";
   const pillText = document.getElementById("teacherSignedInText");
-  if(pillText) pillText.textContent = (signedIn && adminAuth.name) ? ("Signed in as " + adminAuth.name) : "Signed in";
+  if(pillText) pillText.textContent = (signedIn && adminAuth.name) ? adminAuth.name : "Signed in";
   // Managing other teachers and the store-wide survey are the owner's alone;
   // the server refuses them to anyone else too.
   ["teacherAccountsBtn","teacherStorageBtn"].forEach(id=>{
     const b = document.getElementById(id);
     if(b) b.style.display = isOwner() ? "" : "none";
   });
+  // Only an invited teacher has an account to delete; the owner's sign-in
+  // is the site's own passphrase.
+  const delBtn = document.getElementById("teacherDeleteAccountBtn");
+  if(delBtn) delBtn.style.display = signedIn && adminAuth.role === "teacher" ? "" : "none";
   if(warn){
     // "block", not "": the rule that hides this banner lives in the
     // stylesheet, so clearing the inline style would re-hide it.
@@ -10384,9 +10418,98 @@ document.getElementById("inviteCancelBtn").addEventListener("click", closeInvite
   });
 });
 
+// The account menu: who you're signed in as, Sign out, and (for an invited
+// teacher) Delete account.
+document.getElementById("teacherAccountBtn").addEventListener("click", (e)=>{
+  e.stopPropagation();
+  document.getElementById("teacherAccountMenu").classList.toggle("open");
+});
+document.addEventListener("click", (e)=>{
+  if(!e.target.closest("#teacherAccountWrap")) document.getElementById("teacherAccountMenu").classList.remove("open");
+});
+document.getElementById("teacherAccountMenu").addEventListener("click", ()=>{
+  setTimeout(()=> document.getElementById("teacherAccountMenu").classList.remove("open"), 0);
+});
 document.getElementById("teacherLockBtn").addEventListener("click", ()=>{
   saveAdminAuth(null);
   showClassHub();
+});
+
+// ---------- an invited teacher deleting their own account ----------
+// Shows what will go first (a dry run on the server), then needs the
+// password and DELETE typed out before the button works.
+let deleteAccountClassIds = [];
+function deleteAccountReady(){
+  const ok = document.getElementById("deleteAccountConfirm").value.trim() === "DELETE"
+    && document.getElementById("deleteAccountPassword").value.length > 0
+    && deleteAccountClassIds !== null;
+  document.getElementById("deleteAccountGoBtn").disabled = !ok;
+}
+async function openDeleteAccount(){
+  const summary = document.getElementById("deleteAccountSummary");
+  summary.textContent = "Checking what's stored with your account…";
+  document.getElementById("deleteAccountPassword").value = "";
+  document.getElementById("deleteAccountConfirm").value = "";
+  document.getElementById("deleteAccountStatus").textContent = "";
+  deleteAccountClassIds = null;
+  deleteAccountReady();
+  document.getElementById("deleteAccountModal").style.display = "flex";
+  try{
+    const resp = await teacherFetch("/api/teacher/accounts", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "delete-self", dryRun: true })
+    });
+    const d = await resp.json().catch(()=>({}));
+    if(!resp.ok) throw new Error(d.error || "Server error");
+    deleteAccountClassIds = d.classIds || [];
+    const n = (k, one, many)=> k + " " + (k === 1 ? one : many);
+    summary.innerHTML = "This permanently deletes your account <strong>" + escapeHtml(d.name || "") + "</strong> and everything stored with it:" +
+      "<ul><li>" + n(d.classes, "class", "classes") + " and their class codes</li>" +
+      "<li>" + n(d.tasks, "task", "tasks") + ", with their score PDFs and recordings</li>" +
+      "<li>" + n(d.submissions, "student submission", "student submissions") + "</li></ul>" +
+      "Students will no longer be able to open these tasks. <strong>This can't be undone.</strong>";
+  }catch(err){
+    summary.textContent = "Couldn't check your account: " + err.message;
+  }
+  deleteAccountReady();
+  document.getElementById("deleteAccountPassword").focus();
+}
+document.getElementById("teacherDeleteAccountBtn").addEventListener("click", openDeleteAccount);
+document.getElementById("deleteAccountPassword").addEventListener("input", deleteAccountReady);
+document.getElementById("deleteAccountConfirm").addEventListener("input", deleteAccountReady);
+document.getElementById("deleteAccountCancelBtn").addEventListener("click", ()=>{
+  document.getElementById("deleteAccountModal").style.display = "none";
+});
+document.getElementById("deleteAccountGoBtn").addEventListener("click", async ()=>{
+  const btn = document.getElementById("deleteAccountGoBtn");
+  const status = document.getElementById("deleteAccountStatus");
+  btn.disabled = true;
+  status.textContent = "";
+  btn.textContent = "Deleting…";
+  try{
+    const resp = await teacherFetch("/api/teacher/accounts", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "delete-self", password: document.getElementById("deleteAccountPassword").value })
+    });
+    const d = await resp.json().catch(()=>({}));
+    if(!resp.ok) throw new Error(d.error || "Server error");
+    // This browser's own copies of those tasks' scores go too.
+    const gone = new Set(deleteAccountClassIds || []);
+    for(const p of (await listProjects()).filter(p=> p.taskRole === "teacher" && gone.has(p.classId))){
+      await deleteProjectCompletely(p.id);
+    }
+    document.getElementById("deleteAccountModal").style.display = "none";
+    saveAdminAuth(null);
+    showClassHub();
+    renderTeacherAccessUi();
+    alert("Your account and everything stored with it has been deleted.");
+  }catch(err){
+    status.textContent = err.message;
+    btn.disabled = false;
+  }finally{
+    btn.textContent = "Delete my account";
+    deleteAccountReady();
+  }
 });
 
 let teacherClasses = [];

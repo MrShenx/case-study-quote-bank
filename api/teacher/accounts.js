@@ -6,6 +6,10 @@
 //   POST { action: 'reset', name }                  — a one-use link to set a new password
 //   POST { action: 'remove', name, dryRun? }        — delete the account AND every class,
 //                                                     task, score PDF and submission it owns
+// The invited teacher themselves (signed in as that teacher):
+//   POST { action: 'delete-self', dryRun: true }    — what deleting their account would remove
+//   POST { action: 'delete-self', password }        — delete their own account and everything
+//                                                     it owns, the same as 'remove'
 // Anyone holding an invite link:
 //   POST { action: 'check-invite', invite }         — is it still good, and what is it for
 //   POST { action: 'accept-invite', invite, name?, password }
@@ -24,8 +28,8 @@ import { kv, noKvResponse, readJsonBody, classKey, teacherClassesKey,
          submissionsKey, purgeClass, deleteBlob } from '../_lib/kv.js';
 import { requireOwner, passphraseConfigured, clientIp, rateLimit,
          cleanTeacherName, nameKeyOf, teacherKey, inviteKey, TEACHER_INDEX_KEY,
-         INVITE_SECONDS, SESSION_SECONDS, MIN_PASSWORD, hashPassword,
-         teacherSessionToken } from '../_lib/auth.js';
+         INVITE_SECONDS, SESSION_SECONDS, MIN_PASSWORD, hashPassword, checkPassword,
+         teacherSessionToken, resolveSession, bearer } from '../_lib/auth.js';
 
 const INVITE_RE = /^[A-Za-z0-9_-]{20,64}$/;
 
@@ -37,6 +41,47 @@ async function classesOf(code) {
     if (rec) out.push({ id, rec });
   }
   return out;
+}
+
+// What an account owns, counted before anything is deleted.
+async function countTeacherData(rec) {
+  const classes = await classesOf(rec.code);
+  let tasks = 0, submissions = 0;
+  for (const { rec: c } of classes) {
+    tasks += (c.taskIds || []).length;
+    for (const t of c.taskIds || []) {
+      try {
+        const subs = await kv.get(submissionsKey(t));
+        if (Array.isArray(subs)) submissions += subs.length;
+      } catch { /* informational */ }
+    }
+  }
+  return { classes, counts: { classes: classes.length, tasks, submissions } };
+}
+
+// Deletes an account and everything it owns: every class, with its tasks,
+// score PDFs, recordings and submissions (purgeClass), then the account.
+// Classes first, account last: if this is interrupted the account still
+// exists, so doing it again finishes the job. Throws with .removed attached.
+async function purgeTeacher(rec, classes) {
+  const removed = { classes: 0, tasks: 0, submissions: 0, blobs: 0, blobErrors: [] };
+  try {
+    for (const { id, rec: c } of classes) {
+      const r = await purgeClass(id, c, deleteBlob);
+      removed.classes += 1;
+      removed.tasks += r.tasks;
+      removed.submissions += r.submissions;
+      removed.blobs += r.blobs;
+      removed.blobErrors.push(...r.blobErrors);
+    }
+    await kv.del(teacherClassesKey(rec.code));
+    await kv.del(teacherKey(rec.nameKey));
+    await kv.srem(TEACHER_INDEX_KEY, rec.nameKey);
+  } catch (err) {
+    err.removed = removed;
+    throw err;
+  }
+  return removed;
 }
 
 async function newInvite(record) {
@@ -160,6 +205,61 @@ export default async function handler(req, res) {
     return;
   }
 
+  // ---------- a teacher deleting their own account ----------
+  if (action === 'delete-self') {
+    if (!passphraseConfigured()) {
+      res.status(503).json({ error: 'Teacher accounts are not switched on for this site.' });
+      return;
+    }
+    // Password guesses are what this has to slow down.
+    if (!(await rateLimit(res, 'delete-self', clientIp(req), 10, 3600))) return;
+    const session = await resolveSession(bearer(req));
+    if (!session) {
+      res.status(401).json({ error: 'Teacher sign-in required.', needsUnlock: true });
+      return;
+    }
+    if (session.role !== 'teacher') {
+      // The owner's sign-in is the site's passphrase, not an account.
+      res.status(403).json({ error: 'The site owner’s sign-in is not an account and can’t be deleted here.' });
+      return;
+    }
+    let rec;
+    try { rec = await kv.get(teacherKey(nameKeyOf(session.name))); }
+    catch (err) {
+      console.error('KV failed reading account:', err);
+      res.status(500).json({ error: 'Could not look up your account. Please try again.' });
+      return;
+    }
+    if (!rec || rec.code !== session.code) {
+      res.status(404).json({ error: 'This account no longer exists.' });
+      return;
+    }
+    let found;
+    try { found = await countTeacherData(rec); }
+    catch (err) {
+      console.error('Reading classes failed:', err);
+      res.status(500).json({ error: 'Could not read your classes. Please try again.' });
+      return;
+    }
+    if (body.dryRun) {
+      res.status(200).json({ dryRun: true, name: rec.name, ...found.counts,
+                             classIds: found.classes.map(c => c.id) });
+      return;
+    }
+    if (!(await checkPassword(body.password, rec))) {
+      res.status(403).json({ error: 'That password isn’t right.' });
+      return;
+    }
+    try {
+      const removed = await purgeTeacher(rec, found.classes);
+      res.status(200).json({ ok: true, name: rec.name, ...removed });
+    } catch (err) {
+      console.error('Deleting own account failed:', err);
+      res.status(500).json({ error: 'Deleting stopped partway. Please try again to finish it.', removed: err.removed });
+    }
+    return;
+  }
+
   // ---------- the owner's side ----------
   if (!(await requireOwner(req, res))) return;
 
@@ -190,48 +290,24 @@ export default async function handler(req, res) {
 
   if (action === 'remove') {
     // Irreversible and it destroys students' work, so the count comes first.
-    let classes;
-    try { classes = await classesOf(rec.code); }
+    let found;
+    try { found = await countTeacherData(rec); }
     catch (err) {
       console.error('Reading classes failed:', err);
       res.status(500).json({ error: 'Could not read that teacher’s classes. Please try again.' });
       return;
     }
     if (body.dryRun) {
-      let tasks = 0, submissions = 0;
-      for (const { rec: c } of classes) {
-        tasks += (c.taskIds || []).length;
-        for (const t of c.taskIds || []) {
-          try {
-            const subs = await kv.get(submissionsKey(t));
-            if (Array.isArray(subs)) submissions += subs.length;
-          } catch { /* informational */ }
-        }
-      }
-      res.status(200).json({ dryRun: true, name: rec.name, classes: classes.length, tasks, submissions });
+      res.status(200).json({ dryRun: true, name: rec.name, ...found.counts });
       return;
     }
-    const removed = { classes: 0, tasks: 0, submissions: 0, blobs: 0, blobErrors: [] };
     try {
-      // Classes first, account last: if this is interrupted the account is
-      // still listed, so pressing Remove again finishes the job.
-      for (const { id, rec: c } of classes) {
-        const r = await purgeClass(id, c, deleteBlob);
-        removed.classes += 1;
-        removed.tasks += r.tasks;
-        removed.submissions += r.submissions;
-        removed.blobs += r.blobs;
-        removed.blobErrors.push(...r.blobErrors);
-      }
-      await kv.del(teacherClassesKey(rec.code));
-      await kv.del(teacherKey(rec.nameKey));
-      await kv.srem(TEACHER_INDEX_KEY, rec.nameKey);
+      const removed = await purgeTeacher(rec, found.classes);
+      res.status(200).json({ ok: true, name: rec.name, ...removed });
     } catch (err) {
       console.error('Removing teacher failed:', err);
-      res.status(500).json({ error: 'Removal stopped partway. Please try again.', removed });
-      return;
+      res.status(500).json({ error: 'Removal stopped partway. Please try again.', removed: err.removed });
     }
-    res.status(200).json({ ok: true, name: rec.name, ...removed });
     return;
   }
 
