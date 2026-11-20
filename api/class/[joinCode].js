@@ -58,7 +58,7 @@ export default async function handler(req, res) {
       continue;
     }
     if (!task) continue;
-    tasks.push({ id, title: task.title, questionText: task.questionText, createdAt: task.createdAt });
+    tasks.push({ id, title: task.title, questionText: task.questionText, kind: task.kind || null, createdAt: task.createdAt });
   }
   tasks.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 

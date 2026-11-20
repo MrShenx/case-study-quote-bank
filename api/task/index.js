@@ -7,7 +7,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { kv, noKvResponse, ID_RE, MAX_BYTES, byteSize, readJsonBody,
-         classKey, taskKey } from '../_lib/kv.js';
+         classKey, taskKey, cleanTaskKind } from '../_lib/kv.js';
 import { requireTeacher } from '../_lib/auth.js';
 
 export default async function handler(req, res) {
@@ -23,7 +23,7 @@ export default async function handler(req, res) {
 
   const teacherCode = await requireTeacher(req, res, body);
   if (!teacherCode) return;
-  const { classId, title, questionText, videoId, pdfBlobUrl, pdfName,
+  const { classId, title, questionText, videoId, pdfBlobUrl, pdfName, kind,
           markersByPage, pageSystems, groups, barCounter } = body;
 
   if (typeof classId !== 'string' || !ID_RE.test(classId)) {
@@ -58,6 +58,7 @@ export default async function handler(req, res) {
     id: taskId,
     classId,
     title: cleanTitle,
+    kind: cleanTaskKind(kind),
     questionText: typeof questionText === 'string' ? questionText.slice(0, 4000) : '',
     videoId: typeof videoId === 'string' ? videoId.slice(0, 64) : null,
     pdfBlobUrl: typeof pdfBlobUrl === 'string' ? pdfBlobUrl : null,

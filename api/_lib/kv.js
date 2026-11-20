@@ -129,3 +129,9 @@ export async function deleteBlob(url) {
   const { del } = await import('@vercel/blob');
   await del(url);
 }
+
+// 'writing' (a question, no score) or 'annotation' (a score students tag and
+// annotate, then hand in). Tasks made before this have no kind and keep their
+// old behaviour: a score plus a written response about it.
+export const TASK_KINDS = ['writing', 'annotation'];
+export function cleanTaskKind(k) { return TASK_KINDS.includes(k) ? k : null; }

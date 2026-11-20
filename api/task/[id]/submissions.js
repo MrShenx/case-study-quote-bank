@@ -11,6 +11,12 @@ import { kv, noKvResponse, ID_RE, MAX_BYTES, byteSize, readJsonBody,
          classKey, taskKey, submissionsKey } from '../../_lib/kv.js';
 import { requireTeacher, isClassMember, clientIp, rateLimit } from '../../_lib/auth.js';
 
+const str = (v, max) => (typeof v === 'string' ? v.slice(0, max) : '');
+function cleanNote(n) {
+  if (!n || typeof n !== 'object') return null;
+  return { heading: str(n.heading, 200), where: str(n.where, 200), what: str(n.what, 4000), why: str(n.why, 4000) };
+}
+
 export default async function handler(req, res) {
   if (!kv) { noKvResponse(res); return; }
 
@@ -60,7 +66,7 @@ export default async function handler(req, res) {
     const body = await readJsonBody(req, res);
     if (body === undefined) return;
 
-    const { displayName, studentId, questionText, paragraphs, selfCheckResult } = body;
+    const { displayName, studentId, questionText, paragraphs, selfCheckResult, notes } = body;
     let task, classRec;
     try {
       task = await kv.get(taskKey(id));
@@ -89,6 +95,10 @@ export default async function handler(req, res) {
       questionText: typeof questionText === 'string' ? questionText.slice(0, 4000) : '',
       paragraphs: Array.isArray(paragraphs) ? paragraphs.slice(0, 20) : [],
       selfCheckResult: selfCheckResult && typeof selfCheckResult === 'object' ? selfCheckResult : null,
+      // An annotation task hands in the student's notes on the score instead
+      // of paragraphs: where, what, why, and the heading each sits under.
+      kind: Array.isArray(notes) ? 'annotation' : 'writing',
+      notes: Array.isArray(notes) ? notes.slice(0, 500).map(cleanNote).filter(Boolean) : undefined,
       submittedAt: Date.now()
     };
     if (byteSize(submission) > MAX_BYTES) {

@@ -14,7 +14,7 @@
 // students who already joined via this task's id keep working.
 
 import { kv, noKvResponse, ID_RE, MAX_BYTES, byteSize, readJsonBody,
-         classKey, taskKey, submissionsKey, purgeTask, deleteBlob } from '../_lib/kv.js';
+         classKey, taskKey, submissionsKey, purgeTask, deleteBlob, cleanTaskKind } from '../_lib/kv.js';
 import { requireTeacher } from '../_lib/auth.js';
 
 export default async function handler(req, res) {
@@ -49,7 +49,7 @@ export default async function handler(req, res) {
 
     const teacherCode = await requireTeacher(req, res, body);
     if (!teacherCode) return;
-    const { title, questionText, videoId, pdfBlobUrl, pdfName,
+    const { title, questionText, videoId, pdfBlobUrl, pdfName, kind,
             markersByPage, pageSystems, groups, barCounter } = body;
 
     let task, classRec;
@@ -71,6 +71,7 @@ export default async function handler(req, res) {
       ...task,
       title: typeof title === 'string' && title.trim() ? title.trim().slice(0, 200) : task.title,
       questionText: typeof questionText === 'string' ? questionText.slice(0, 4000) : task.questionText,
+      kind: cleanTaskKind(kind) || task.kind || null,
       videoId: typeof videoId === 'string' ? videoId.slice(0, 64) : (videoId === null ? null : task.videoId),
       pdfBlobUrl: typeof pdfBlobUrl === 'string' ? pdfBlobUrl : task.pdfBlobUrl,
       pdfName: typeof pdfName === 'string' ? pdfName.slice(0, 200) : task.pdfName,

@@ -879,6 +879,12 @@
   .modal-box textarea{width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);margin-bottom:14px;box-sizing:border-box;resize:vertical;}
   .modal-box input[type=file]{width:100%;margin-bottom:14px;font-size:0.8rem;}
   #newTaskBox,#submissionsBox{width:480px;}
+  #newTaskBox{max-height:90vh;overflow:auto;}
+  .nt-kind{margin:0 0 14px;}
+  .nt-label{display:block;font-size:0.8rem;color:var(--ink-soft);margin-bottom:4px;}
+  #newTaskBox textarea,#newTaskBox select{width:100%;padding:8px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit;font-size:0.85rem;margin-bottom:10px;box-sizing:border-box;}
+  #newTaskBox textarea{resize:vertical;line-height:1.5;margin-bottom:14px;}
+  .task-kind-tag{display:inline-block;padding:1px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-weight:600;font-size:0.7rem;margin-right:6px;}
   #newTaskStatus{margin-top:-8px;margin-bottom:8px;}
   #practiceSubmitBox input[type=text]{margin-bottom:8px;}
   .submission-card{background:var(--bg);border-radius:10px;padding:10px 12px;margin-bottom:10px;box-shadow:var(--shadow-sm);}
@@ -1245,6 +1251,7 @@
     <button class="btn" id="homeBtn"><span data-icon="arrow-left"></span> Back</button>
     <span class="project-name-label" id="projectNameLabel"></span>
     <button class="btn primary" id="taskWriteBtn" style="display:none;"><span data-icon="pen-line"></span> Write about this task</button>
+    <button class="btn primary" id="taskSubmitNotesBtn" style="display:none;"><span data-icon="send"></span> Submit annotations</button>
     <button class="btn primary" id="uploadBtn"><span data-icon="upload"></span> Upload PDF score</button>
     <input type="file" id="pdfFile" accept="application/pdf" style="display:none;">
     <button class="btn" id="detectBtn" disabled><span data-icon="scan-search"></span> Auto-detect bars</button>
@@ -1682,22 +1689,41 @@
 
 <div id="newTaskModal" class="modal-overlay" style="display:none;">
   <div class="modal-box" id="newTaskBox">
-    <h2>New task</h2>
-    <label style="font-size:0.8rem;color:var(--ink-soft);">Title</label>
+    <h2 id="newTaskHeading">New task</h2>
+    <div class="pp-seg nt-kind" id="newTaskKindSeg">
+      <button class="btn active" data-kind="writing"><span data-icon="pen-line" data-icon-size="15"></span> Writing</button>
+      <button class="btn" data-kind="annotation"><span data-icon="music" data-icon-size="15"></span> Annotation</button>
+    </div>
+    <label class="nt-label">Title</label>
     <input type="text" id="newTaskTitleInput" placeholder="e.g. Epic Diva — tone colour">
-    <label style="font-size:0.8rem;color:var(--ink-soft);">Question</label>
-    <textarea id="newTaskQuestionInput" rows="3" placeholder="Paste or write the essay question students will answer…"></textarea>
-    <label style="font-size:0.8rem;color:var(--ink-soft);">YouTube video link (optional)</label>
-    <input type="text" id="newTaskVideoInput" placeholder="Paste a YouTube link…">
-    <div id="newTaskPdfField">
-      <label style="font-size:0.8rem;color:var(--ink-soft);">Score PDF (chord chart, lead sheet, full score — any type)</label>
+    <label class="nt-label">Question</label>
+    <select id="newTaskBankSelect"></select>
+    <textarea id="newTaskQuestionInput" rows="4" placeholder="Write a question, or pick one from the question bank above"></textarea>
+    <div id="newTaskScoreFields">
+      <label class="nt-label">Score PDF</label>
       <input type="file" id="newTaskPdfInput" accept="application/pdf">
+      <label class="nt-label">YouTube video link (optional)</label>
+      <input type="text" id="newTaskVideoInput" placeholder="Paste a YouTube link…">
     </div>
     <div class="modal-actions">
       <button class="btn ghost" id="newTaskCancelBtn">Cancel</button>
       <button class="btn primary" id="newTaskCreateBtn">Create task</button>
     </div>
     <div id="newTaskStatus" style="font-size:0.78rem;color:var(--ink-soft);"></div>
+  </div>
+</div>
+
+<div id="submitNotesModal" class="modal-overlay" style="display:none;">
+  <div class="modal-box" id="submitNotesBox">
+    <h2>Submit annotations</h2>
+    <p id="submitNotesSummary" style="font-size:0.86rem;color:var(--ink-soft);margin:-4px 0 14px;"></p>
+    <label class="nt-label">Your name (shown to your teacher)</label>
+    <input type="text" id="submitNotesNameInput" placeholder="e.g. Jordan L">
+    <div class="modal-actions">
+      <span id="submitNotesStatus" style="font-size:0.78rem;color:var(--ink-soft);margin-right:auto;align-self:center;"></span>
+      <button class="btn ghost" id="submitNotesCancelBtn">Close</button>
+      <button class="btn primary" id="submitNotesGoBtn"><span data-icon="send" data-icon-size="14"></span> Submit</button>
+    </div>
   </div>
 </div>
 
@@ -1871,6 +1897,7 @@ let currentClassId = null;
 let currentTaskRole = null;
 let taskSyncTimer = null;    // a teacher's task score saving to the server — see scheduleTaskSync()
 let taskSyncPending = false;
+let currentTaskKind = null;   // "writing" | "annotation" | null (a task from before kinds)
 let currentTaskQuestionText = null; // shown read-only in Studio for taskRole "student"
 let barCounter = 0;
 let dragNoteId = null;    // note.id currently being dragged, or null
@@ -2071,6 +2098,7 @@ function normalizeProjectRecord(rec){
   rec.classId = rec.classId || null;
   rec.taskRole = rec.taskRole || null;
   rec.taskQuestionText = rec.taskQuestionText || null;
+  rec.taskKind = rec.taskKind || null;
   Object.values(rec.markersByPage).forEach(list=>{
     (list||[]).forEach(m=>{
       if(m.manual===undefined) m.manual = false;
@@ -2095,7 +2123,8 @@ function persist(){
     markersByPage, pageSystems, notes, groups, barCounter, videoId, audioName, ungroupedCollapsed, cloudId, cloudSavedAt,
     share: shareInfo,
     taskId: currentTaskId, classId: currentClassId, taskRole: currentTaskRole,
-    taskQuestionText: currentTaskQuestionText
+    taskQuestionText: currentTaskQuestionText,
+    taskKind: currentTaskKind
   });
   scheduleAutoBackup(); // no-op until this project has a cloud code
   scheduleTaskSync();   // no-op unless this is a teacher's task score
@@ -2131,7 +2160,8 @@ async function createProject(name, extra){
     taskId: (extra && extra.taskId) || null,
     classId: (extra && extra.classId) || null,
     taskRole: (extra && extra.taskRole) || null,
-    taskQuestionText: (extra && extra.taskQuestionText) || null
+    taskQuestionText: (extra && extra.taskQuestionText) || null,
+    taskKind: (extra && extra.taskKind) || null
   });
   return id;
 }
@@ -2598,6 +2628,7 @@ async function openProject(id){
   currentClassId = rec.classId;
   currentTaskRole = rec.taskRole;
   currentTaskQuestionText = rec.taskQuestionText;
+  currentTaskKind = rec.taskKind;
   const isTeacherTask = currentTaskRole === "teacher";
   document.getElementById("taskEditBanner").style.display = isTeacherTask ? "flex" : "none";
   if(isTeacherTask){
@@ -2606,7 +2637,11 @@ async function openProject(id){
     setTaskSyncStatus("");
     requestAnimationFrame(()=> autoGrowTaskQuestion());
   }
-  document.getElementById("taskWriteBtn").style.display = currentTaskRole === "student" ? "" : "none";
+  // An annotation task is handed in as annotations; anything else is
+  // written about.
+  const isAnnotationTask = currentTaskRole === "student" && currentTaskKind === "annotation";
+  document.getElementById("taskWriteBtn").style.display = currentTaskRole === "student" && !isAnnotationTask ? "" : "none";
+  document.getElementById("taskSubmitNotesBtn").style.display = isAnnotationTask ? "" : "none";
   // A student can tag/annotate a class task freely, but the score PDF and
   // video link are the teacher's to set — only those two are locked, and
   // the question they're meant to be answering is shown read-only instead
@@ -7435,7 +7470,7 @@ function practiceShowWrite(){
   // to — an ordinary practice response (picked from QUESTION_POOLS) has no
   // linked project at all.
   const isTask = !!(practiceCurrentResponse && practiceCurrentResponse.taskId);
-  document.getElementById("practiceBackToScoreBtn").style.display = isTask && practiceWriteFromList ? "" : "none";
+  document.getElementById("practiceBackToScoreBtn").style.display = isTask && practiceWriteFromList && practiceCurrentResponse.taskKind !== "writing" ? "" : "none";
   // The real submit action lives inside the self-check modal; this is a
   // same-destination shortcut so "submit" is never hidden behind a first step.
   document.getElementById("practiceWriteSubmitBtn").style.display = isTask ? "" : "none";
@@ -10191,6 +10226,11 @@ document.getElementById("teacherCopyJoinCodeBtn").addEventListener("click", ()=>
   if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(code).catch(()=>{});
 });
 
+function taskKindTag(kind){
+  if(kind === "writing") return '<span class="task-kind-tag">Writing</span>';
+  if(kind === "annotation") return '<span class="task-kind-tag">Annotation</span>';
+  return "";
+}
 async function teacherRenderTaskGrid(){
   const grid = document.getElementById("teacherTaskGrid");
   grid.innerHTML = "<div style=\"color:var(--ink-soft);\">Loading tasks…</div>";
@@ -10214,7 +10254,7 @@ async function teacherRenderTaskGrid(){
     card.innerHTML =
       '<div class="project-card-top"><span class="project-name">' + escapeHtml(t.title) + '</span>' +
       '<button class="project-icon-btn del" data-action="delete-task" title="Delete this task, its score and its submissions">' + icon("trash-2",14) + '</button></div>' +
-      '<div class="project-meta">' + escapeHtml((t.questionText||"").slice(0,90)) + (t.questionText && t.questionText.length>90 ? "…" : "") + '</div>';
+      '<div class="project-meta">' + taskKindTag(t.kind) + escapeHtml((t.questionText||"").slice(0,90)) + (t.questionText && t.questionText.length>90 ? "…" : "") + '</div>';
     const viewBtn = document.createElement("button");
     viewBtn.className = "btn";
     viewBtn.style.marginTop = "6px";
@@ -10223,8 +10263,8 @@ async function teacherRenderTaskGrid(){
     card.appendChild(viewBtn);
     const delBtn = card.querySelector('[data-action="delete-task"]');
     delBtn.addEventListener("click", (e)=>{ e.stopPropagation(); teacherDeleteTask(t); });
-    card.title = "Open this task's score";
-    card.addEventListener("click", ()=> teacherOpenTaskScore(t));
+    card.title = t.kind === "writing" ? "Edit this task" : "Open this task's score";
+    card.addEventListener("click", ()=> t.kind === "writing" ? openTaskDialog(t) : teacherOpenTaskScore(t));
     grid.appendChild(card);
   });
 }
@@ -10252,7 +10292,7 @@ async function teacherOpenTaskScore(t){
     return;
   }
   const localId = await createProject(task.title, {
-    taskId: task.id, classId: task.classId, taskRole: "teacher", taskQuestionText: task.questionText
+    taskId: task.id, classId: task.classId, taskRole: "teacher", taskQuestionText: task.questionText, taskKind: task.kind || null
   });
   await showStudio(localId);
   applyImportedProjectData({
@@ -10334,15 +10374,81 @@ document.getElementById("newClassNameInput").addEventListener("keydown", (e)=>{
 });
 
 // ---------- new task (score PDF + video + question) ----------
-document.getElementById("newTaskBtn").addEventListener("click", ()=>{
-  document.getElementById("newTaskTitleInput").value = "";
-  document.getElementById("newTaskQuestionInput").value = "";
+// One dialog makes a task and edits a writing task. Annotation tasks are
+// edited on their score page instead (see teacherOpenTaskScore).
+let newTaskKind = "writing";
+let newTaskEditing = null; // the writing task being edited, or null when making one
+function setNewTaskKind(kind){
+  newTaskKind = kind;
+  document.querySelectorAll("#newTaskKindSeg .btn").forEach(b=> b.classList.toggle("active", b.dataset.kind === kind));
+  document.getElementById("newTaskScoreFields").style.display = kind === "annotation" ? "" : "none";
+}
+document.querySelectorAll("#newTaskKindSeg .btn").forEach(b=> b.addEventListener("click", ()=> setNewTaskKind(b.dataset.kind)));
+function fillQuestionBankSelect(){
+  const sel = document.getElementById("newTaskBankSelect");
+  if(sel.options.length) { sel.value = ""; return; }
+  let html = '<option value="">Pick from the question bank…</option>';
+  Object.keys(QUESTION_POOLS).forEach(key=>{
+    const pool = QUESTION_POOLS[key];
+    if(!pool.questions.length) return;
+    html += '<optgroup label="' + escapeHtml(pool.label) + '">' +
+      pool.questions.map(q=> '<option value="' + escapeHtml(key + "|" + q.id) + '">' +
+        escapeHtml(q.year + " — " + (q.text.length > 70 ? q.text.slice(0,70) + "…" : q.text)) + '</option>').join("") +
+      '</optgroup>';
+  });
+  sel.innerHTML = html;
+}
+document.getElementById("newTaskBankSelect").addEventListener("change", (e)=>{
+  const [key, qid] = e.target.value.split("|");
+  const q = key && QUESTION_POOLS[key] ? QUESTION_POOLS[key].questions.find(x=>x.id===qid) : null;
+  if(!q) return;
+  document.getElementById("newTaskQuestionInput").value = q.text;
+  const title = document.getElementById("newTaskTitleInput");
+  if(!title.value.trim()) title.value = (key === "year12" ? "HSC " : "") + q.year;
+});
+function openTaskDialog(task){
+  newTaskEditing = task || null;
+  document.getElementById("newTaskHeading").textContent = task ? "Edit task" : "New task";
+  document.getElementById("newTaskCreateBtn").textContent = task ? "Save changes" : "Create task";
+  // A task's kind is set when it's made: a writing task has no score to
+  // switch to, and an annotation task's students may already be tagging.
+  document.getElementById("newTaskKindSeg").style.display = task ? "none" : "";
+  setNewTaskKind(task ? (task.kind || "writing") : newTaskKind);
+  fillQuestionBankSelect();
+  document.getElementById("newTaskTitleInput").value = task ? task.title || "" : "";
+  document.getElementById("newTaskQuestionInput").value = task ? task.questionText || "" : "";
   document.getElementById("newTaskVideoInput").value = "";
   document.getElementById("newTaskPdfInput").value = "";
   document.getElementById("newTaskStatus").textContent = "";
   document.getElementById("newTaskModal").style.display = "flex";
   document.getElementById("newTaskTitleInput").focus();
-});
+}
+document.getElementById("newTaskBtn").addEventListener("click", ()=> openTaskDialog(null));
+async function saveWritingTaskEdits(){
+  const task = newTaskEditing;
+  const title = document.getElementById("newTaskTitleInput").value.trim();
+  const questionText = document.getElementById("newTaskQuestionInput").value.trim();
+  if(!title){ alert("A task title is required."); return; }
+  if(!questionText){ alert("A writing task needs a question."); return; }
+  const btn = document.getElementById("newTaskCreateBtn");
+  const status = document.getElementById("newTaskStatus");
+  btn.disabled = true;
+  status.textContent = "Saving…";
+  try{
+    const resp = await teacherFetch("/api/task/" + encodeURIComponent(task.id), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ teacherCode: getTeacherCode(), title, questionText })
+    });
+    if(!resp.ok) throw new Error((await resp.json().catch(()=>({}))).error || "Server error");
+    document.getElementById("newTaskModal").style.display = "none";
+    await teacherRenderTaskGrid();
+  }catch(err){
+    status.textContent = "Couldn't save: " + err.message;
+  }finally{
+    btn.disabled = false;
+  }
+}
 document.getElementById("newTaskCancelBtn").addEventListener("click", ()=>{
   document.getElementById("newTaskModal").style.display = "none";
 });
@@ -10370,20 +10476,36 @@ async function uploadTaskPdf(file, teacherCode){
 }
 
 document.getElementById("newTaskCreateBtn").addEventListener("click", async ()=>{
+  if(newTaskEditing){ await saveWritingTaskEdits(); return; }
+  const kind = newTaskKind;
   const title = document.getElementById("newTaskTitleInput").value.trim();
   const questionText = document.getElementById("newTaskQuestionInput").value.trim();
   const videoRaw = document.getElementById("newTaskVideoInput").value.trim();
   const pdfFile = document.getElementById("newTaskPdfInput").files[0];
   if(!title){ alert("A task title is required."); return; }
-  if(!pdfFile){ alert("Choose a score PDF for this task."); return; }
-  const videoIdParsed = videoRaw ? parseYouTubeId(videoRaw) : null;
-  if(videoRaw && !videoIdParsed){ alert("Couldn't parse a YouTube video ID from that link."); return; }
+  if(kind === "writing" && !questionText){ alert("A writing task needs a question."); return; }
+  if(kind === "annotation" && !pdfFile){ alert("Choose a score PDF for this task."); return; }
+  const videoIdParsed = kind === "annotation" && videoRaw ? parseYouTubeId(videoRaw) : null;
+  if(kind === "annotation" && videoRaw && !videoIdParsed){ alert("Couldn't parse a YouTube video ID from that link."); return; }
 
   const btn = document.getElementById("newTaskCreateBtn");
   const status = document.getElementById("newTaskStatus");
   btn.disabled = true;
   const teacherCode = getTeacherCode();
   try{
+    if(kind === "writing"){
+      status.textContent = "Saving task…";
+      const resp = await teacherFetch("/api/task", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ teacherCode, classId: teacherSelectedClass.id, title, questionText, kind })
+      });
+      if(!resp.ok) throw new Error((await resp.json().catch(()=>({}))).error || "Server error");
+      document.getElementById("newTaskModal").style.display = "none";
+      status.textContent = "";
+      await teacherRenderTaskGrid();
+      return;
+    }
     status.textContent = "Uploading score PDF…";
     const pdfBlobUrl = await uploadTaskPdf(pdfFile, teacherCode);
 
@@ -10392,7 +10514,7 @@ document.getElementById("newTaskCreateBtn").addEventListener("click", async ()=>
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        teacherCode, classId: teacherSelectedClass.id, title, questionText,
+        teacherCode, classId: teacherSelectedClass.id, title, questionText, kind,
         videoId: videoIdParsed, pdfBlobUrl, pdfName: pdfFile.name,
         markersByPage: {}, pageSystems: {}, groups: [], barCounter: 0
       })
@@ -10406,7 +10528,7 @@ document.getElementById("newTaskCreateBtn").addEventListener("click", async ()=>
     // matters here: showStudio()/openProject() must run first so
     // currentProjectId actually points at this new project before
     // loadPdfBlob() persists the PDF blob under it.
-    const localId = await createProject(title, { taskId, classId: teacherSelectedClass.id, taskRole: "teacher", taskQuestionText: questionText });
+    const localId = await createProject(title, { taskId, classId: teacherSelectedClass.id, taskRole: "teacher", taskQuestionText: questionText, taskKind: kind });
     document.getElementById("newTaskModal").style.display = "none";
     await showStudio(localId);
     loadPdfBlob(pdfFile, pdfFile.name, false, false);
@@ -10494,6 +10616,62 @@ document.getElementById("taskEditQuestion").addEventListener("input", (e)=>{
   persist();
 });
 
+// What an annotation task hands in: every note with something written in it,
+// in heading order, with where it is on the score.
+function collectTaskNotes(){
+  const order = new Map(groups.map((g,i)=>[g.id, i]));
+  const headingOf = new Map(groups.map(g=>[g.id, g.name || ""]));
+  return notes
+    .filter(n=> (n.what||"").trim() || (n.why||"").trim())
+    .map((n,i)=>({ n, i, g: n.groupId && order.has(n.groupId) ? order.get(n.groupId) : Infinity }))
+    .sort((a,b)=> (a.g === b.g ? 0 : a.g < b.g ? -1 : 1) || a.i - b.i)
+    .map(({n})=>({ heading: headingOf.get(n.groupId) || "", where: whereLabel(n), what: n.what || "", why: n.why || "" }));
+}
+document.getElementById("taskSubmitNotesBtn").addEventListener("click", ()=>{
+  const list = collectTaskNotes();
+  const headings = new Set(list.map(n=>n.heading).filter(Boolean)).size;
+  document.getElementById("submitNotesSummary").textContent = list.length
+    ? list.length + " note" + (list.length===1?"":"s") + (headings ? " under " + headings + " heading" + (headings===1?"":"s") : "") + " will go to your teacher."
+    : "You haven't written any notes yet.";
+  document.getElementById("submitNotesGoBtn").disabled = !list.length;
+  const name = document.getElementById("submitNotesNameInput");
+  if(!name.value) name.value = getStudentName();
+  document.getElementById("submitNotesStatus").textContent = "";
+  document.getElementById("submitNotesModal").style.display = "flex";
+});
+document.getElementById("submitNotesCancelBtn").addEventListener("click", ()=>{
+  document.getElementById("submitNotesModal").style.display = "none";
+});
+document.getElementById("submitNotesGoBtn").addEventListener("click", async ()=>{
+  if(!currentTaskId) return;
+  const btn = document.getElementById("submitNotesGoBtn");
+  const status = document.getElementById("submitNotesStatus");
+  const displayName = document.getElementById("submitNotesNameInput").value.trim();
+  setStudentName(displayName);
+  btn.disabled = true;
+  status.textContent = "Submitting…";
+  try{
+    const resp = await fetch("/api/task/" + encodeURIComponent(currentTaskId) + "/submissions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        displayName,
+        studentId: getStudentId(),
+        classTokens: getJoinedClasses().map(c=>c.classToken).filter(Boolean),
+        joinCodes: getJoinedClasses().map(c=>c.joinCode).filter(Boolean),
+        questionText: currentTaskQuestionText || "",
+        notes: collectTaskNotes()
+      })
+    });
+    if(!resp.ok) throw new Error((await resp.json().catch(()=>({}))).error || ("Server responded with " + resp.status));
+    status.innerHTML = icon("check-circle-2",14) + " Submitted to your teacher.";
+  }catch(err){
+    status.textContent = "Couldn't submit: " + err.message;
+  }finally{
+    btn.disabled = false;
+  }
+});
+
 document.getElementById("taskWriteBtn").addEventListener("click", async ()=>{
   if(!currentTaskId) return;
   // No fetch needed — the question is already loaded onto this project
@@ -10533,6 +10711,18 @@ document.getElementById("taskWriteBtn").addEventListener("click", async ()=>{
 });
 
 // ---------- submissions viewer (teacher-only, gated by teacherCode) ----------
+function notesSubmissionText(list){
+  let out = "", heading = null;
+  list.forEach(n=>{
+    if(n.heading !== heading){
+      heading = n.heading;
+      out += (out ? "\n" : "") + (heading ? heading.toUpperCase() : "Not under a heading") + "\n";
+    }
+    out += "• " + (n.where ? n.where + ": " : "") + (n.what || "") + "\n";
+    if(n.why) out += "   Why: " + n.why + "\n";
+  });
+  return out.trim();
+}
 async function teacherOpenSubmissions(task){
   document.getElementById("submissionsList").innerHTML = "<div style=\"color:var(--ink-soft);\">Loading submissions…</div>";
   document.getElementById("submissionsModal").style.display = "flex";
@@ -10554,17 +10744,22 @@ async function teacherOpenSubmissions(task){
   submissions.forEach(s=>{
     const card = document.createElement("div");
     card.className = "submission-card";
+    const isNotes = Array.isArray(s.notes);
     const band = s.selfCheckResult && s.selfCheckResult.bandEstimate ? s.selfCheckResult.bandEstimate.range : "—";
-    const fullText = (s.paragraphs||[]).map(p => (p.title||"") + "\n" + (p.text||"")).join("\n\n");
+    const fullText = isNotes ? notesSubmissionText(s.notes)
+      : (s.paragraphs||[]).map(p => (p.title||"") + "\n" + (p.text||"")).join("\n\n");
+    const what = isNotes ? "annotations" : "response";
     card.innerHTML =
-      '<div class="sc-top">' + escapeHtml(s.displayName) + '<span class="sc-band">' + escapeHtml(band) + ' marks</span></div>' +
+      '<div class="sc-top">' + escapeHtml(s.displayName) +
+        (isNotes ? '<span class="sc-band">' + s.notes.length + ' note' + (s.notes.length===1?'':'s') + '</span>'
+                 : '<span class="sc-band">' + escapeHtml(band) + ' marks</span>') + '</div>' +
       '<div class="sc-meta">' + new Date(s.submittedAt).toLocaleString() + '</div>' +
-      '<button class="sc-toggle">' + icon("chevron-down",14) + ' Show response</button>' +
+      '<button class="sc-toggle">' + icon("chevron-down",14) + ' Show ' + what + '</button>' +
       '<div class="sc-text">' + escapeHtml(fullText) + '</div>';
     card.querySelector(".sc-toggle").addEventListener("click", ()=>{
       card.classList.toggle("expanded");
       const expanded = card.classList.contains("expanded");
-      card.querySelector(".sc-toggle").innerHTML = icon(expanded ? "chevron-up" : "chevron-down", 14) + (expanded ? " Hide response" : " Show response");
+      card.querySelector(".sc-toggle").innerHTML = icon(expanded ? "chevron-up" : "chevron-down", 14) + (expanded ? " Hide " : " Show ") + what;
     });
     list.appendChild(card);
   });
@@ -10673,6 +10868,8 @@ async function myClassesRenderTaskGrid(cls){
     return;
   }
   const existingByTaskId = new Map((await listProjects()).filter(p=>p.taskId).map(p=>[p.taskId, p]));
+  // A writing task has no score; it's started once there's a response to it.
+  (await listResponses()).filter(r=>r.taskId).forEach(r=>{ if(!existingByTaskId.has(r.taskId)) existingByTaskId.set(r.taskId, r); });
   grid.innerHTML = "";
   if(tasks.length === 0){
     grid.innerHTML = '<div id="homeEmpty">No tasks yet — check back later.</div>';
@@ -10684,11 +10881,53 @@ async function myClassesRenderTaskGrid(cls){
     card.className = "project-card";
     card.innerHTML =
       '<div class="project-card-top"><span class="project-name">' + escapeHtml(t.title) + '</span></div>' +
-      '<div class="project-meta">' + escapeHtml((t.questionText||"").slice(0,90)) + (t.questionText && t.questionText.length>90 ? "…" : "") + '</div>' +
+      '<div class="project-meta">' + taskKindTag(t.kind) + escapeHtml((t.questionText||"").slice(0,90)) + (t.questionText && t.questionText.length>90 ? "…" : "") + '</div>' +
       '<span class="task-card-status ' + (existing?"continue":"start") + '">' + (existing?"Continue":"Start") + '</span>';
-    card.addEventListener("click", ()=> openOrCreateTaskProject(t.id));
+    card.addEventListener("click", ()=> t.kind === "writing" ? openWritingTask(t, cls) : openOrCreateTaskProject(t.id));
     grid.appendChild(card);
   });
+}
+
+// A writing task goes straight to the writing page: the student's own
+// response to it if they've started one, otherwise a fresh one. The question
+// is always the teacher's current wording.
+async function openWritingTask(t, cls){
+  let task = t;
+  try{
+    const resp = await fetch("/api/task/" + encodeURIComponent(t.id));
+    if(resp.ok) task = Object.assign({}, t, await resp.json());
+  }catch(e){ /* the listing's copy of the question will do */ }
+  const mine = (await listResponses()).filter(r=> r.taskId === t.id)
+    .sort((a,b)=> (b.updatedAt||0) - (a.updatedAt||0))[0];
+  let resp = mine;
+  if(resp){
+    resp.questionText = task.questionText || resp.questionText;
+  }else{
+    resp = {
+      id: uid(),
+      questionId: "task:" + t.id,
+      questionText: task.questionText || "",
+      questionYear: "Class task",
+      questionLevel: task.title || "",
+      taskId: t.id,
+      taskKind: "writing",
+      classId: (cls && cls.classId) || task.classId || null,
+      mode: "notes",
+      createdAt: Date.now(), updatedAt: Date.now(),
+      paragraphs: [
+        { id: uid(), title:"Introduction", text:"", evidenceIds:[] },
+        { id: uid(), title:"Body 1", text:"", evidenceIds:[] },
+        { id: uid(), title:"Conclusion", text:"", evidenceIds:[] },
+      ],
+      timer: { durationSec: 1200, remainingSec: 1200, endAt: null, running: false }
+    };
+  }
+  await saveResponseRecord(resp);
+  practicePieces = await listStudyProjects();
+  showView("practiceView");
+  practiceCurrentResponse = resp;
+  practiceWriteFromList = false; // Back returns to the class
+  practiceShowWrite();
 }
 
 // Looks up an existing local project for this task first (so reopening the
@@ -10710,16 +10949,17 @@ async function openOrCreateTaskProject(taskId){
     alert("Couldn't open that task: " + err.message);
     return;
   }
-  const existing = (await listProjects()).find(p=>p.taskId===taskId);
+  const existing = (await listProjects()).find(p=>p.taskId===taskId && p.taskRole !== "teacher");
   if(existing){
     existing.taskQuestionText = task.questionText;
+    existing.taskKind = task.kind || null;
     existing.videoId = task.videoId;
     await dbPut(META_STORE, existing);
     await showStudio(existing.id);
     return;
   }
   const localId = await createProject(task.title, {
-    taskId: task.id, classId: task.classId, taskRole: "student", taskQuestionText: task.questionText
+    taskId: task.id, classId: task.classId, taskRole: "student", taskQuestionText: task.questionText, taskKind: task.kind || null
   });
   await showStudio(localId);
   // Reuses the exact same import path a JSON project file takes — the
