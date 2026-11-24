@@ -305,7 +305,7 @@
      scrolled to — zoomed in, the score stopped at the window's edge instead
      of its own. margin:auto on the page centres it while it fits and lets it
      overflow only rightwards (scrollably) once it doesn't. */
-  #scoreScroll{flex:1;overflow:auto;padding:20px;display:flex;align-items:flex-start;background:repeating-linear-gradient(45deg, transparent, transparent 12px, rgba(128,128,128,0.03) 12px, rgba(128,128,128,0.03) 24px);}
+  #scoreScroll{flex:1;overflow:auto;padding:20px;display:flex;align-items:flex-start;touch-action:pan-x pan-y;background:repeating-linear-gradient(45deg, transparent, transparent 12px, rgba(128,128,128,0.03) 12px, rgba(128,128,128,0.03) 24px);}
   #uploadPrompt{margin:auto;text-align:center;color:var(--ink-soft);padding:40px;border:2px dashed var(--line);border-radius:var(--radius);cursor:pointer;max-width:360px;transition:border-color 0.15s,background 0.15s;}
   #uploadPrompt strong{color:var(--ink);}
   #scoreScroll.drag-over{background-color:var(--accent-soft);}
@@ -2811,6 +2811,7 @@ async function openProject(id){
   document.getElementById("vwUrlRow").style.display = isStudentTask ? "none" : "";
 
   pendingRenderPageNum = null; // abandon any queued render from the project we're leaving
+  currentPageRendered = null;
   pdfDoc = null; numPages = 0; currentPage = 1; selectedMarkerId = null;
   tagMode = false; systemMode = false; sectionMode = false; dragNoteId = null;
   document.body.classList.remove("tag-mode","system-mode","section-mode");
@@ -3017,6 +3018,7 @@ function loadPdfBlob(blobOrFile, name, fromStorage, isReplacing){
 // requested page turned out to be (skipping every intermediate one).
 let renderInProgress = false;
 let pendingRenderPageNum = null;
+let currentPageRendered = null; // the page the canvas shows now, so a zoom can stretch it in place
 function renderPage(pageNum){
   if(renderInProgress){
     pendingRenderPageNum = pageNum;
@@ -3039,14 +3041,31 @@ function renderPage(pageNum){
     const renderScale = Math.min(uncappedScale, 3500 / baseViewport.width);
     const renderViewport = page.getViewport({ scale: renderScale });
     const canvas = document.getElementById("pdfCanvas");
-    canvas.width = renderViewport.width;
-    canvas.height = renderViewport.height;
-    canvas.style.width = (cssScale * baseViewport.width) + "px";
-    canvas.style.height = (cssScale * baseViewport.height) + "px";
-    document.getElementById("canvasWrap").style.width = canvas.style.width;
-    document.getElementById("canvasWrap").style.height = canvas.style.height;
-    const ctx = canvas.getContext("2d");
-    return page.render({ canvasContext: ctx, viewport: renderViewport }).promise.then(()=>{
+    // Drawn off-screen first and swapped in when finished, so a redraw (after
+    // a zoom or a pinch settles) never blanks the page while PDF.js works.
+    const curW = parseFloat(canvas.style.width) || 0;
+    if(Math.abs(curW - targetWidth) > 0.5 && canvas.width > 0 && pageNum === currentPageRendered){
+      canvas.style.width = document.getElementById("canvasWrap").style.width = targetWidth + "px";
+      canvas.style.height = document.getElementById("canvasWrap").style.height = (targetWidth * baseViewport.height / baseViewport.width) + "px";
+      renderMarkerOverlay();
+    }
+    const buffer = document.createElement("canvas");
+    buffer.width = renderViewport.width;
+    buffer.height = renderViewport.height;
+    return page.render({ canvasContext: buffer.getContext("2d"), viewport: renderViewport }).promise.then(()=>{
+      if(currentProjectId !== renderingForProject) return;
+      canvas.width = buffer.width;
+      canvas.height = buffer.height;
+      canvas.getContext("2d").drawImage(buffer, 0, 0);
+      buffer.width = buffer.height = 0; // let the memory go now, not at GC
+      // Sized from the zoom as it is NOW: a pinch may have moved on while
+      // this was drawing, and the page must not jump back.
+      const nowW = Math.min(scroll.clientWidth - 40, 900) * zoomLevel;
+      canvas.style.width = nowW + "px";
+      canvas.style.height = (nowW * baseViewport.height / baseViewport.width) + "px";
+      document.getElementById("canvasWrap").style.width = canvas.style.width;
+      document.getElementById("canvasWrap").style.height = canvas.style.height;
+      currentPageRendered = pageNum;
       setPageLabel(pageNum);
       document.getElementById("prevPageBtn").disabled = pageNum<=1;
       document.getElementById("nextPageBtn").disabled = pageNum>=numPages;
@@ -3128,6 +3147,120 @@ document.getElementById("zoomResetBtn").addEventListener("click", ()=>{
   updateZoomLabel();
   if(pdfDoc) renderPage(currentPage);
 });
+
+// ---------- pinch to zoom ----------
+// Two fingers on a trackpad or a touchscreen zoom the score around the point
+// between them. While the fingers move, the page bitmap is just stretched
+// (cheap, so it keeps up) with the bar markers moved to match; the sharp
+// redraw waits until the pinch has stopped. The point that was under the
+// fingers when the pinch began stays under them, which also lets a touch
+// pinch pan the page as the fingers travel.
+//
+// Calibration: a trackpad pinch reaches the page as a ctrl+wheel event whose
+// deltaY is about -100·ln(scale) (Chromium's conversion; Firefox's is close),
+// so exp(-deltaY/100) gives back the fingers' own scale — the page grows
+// exactly as far as the fingers spread. Safari sends gesture events with the
+// scale itself, and a touch pinch is the ratio of finger distances: both 1:1.
+// A real ctrl+mouse-wheel notch (deltaY ≈ 100–120, or line/page units) is
+// one 15% step instead, the same as the + button.
+const PINCH_WHEEL_K = 0.01, PINCH_NOTCH_DELTA = 14, PINCH_EVENT_MAX = 40, PINCH_SETTLE_MS = 220;
+let pinchSettleTimer = null, pinchFrame = null, pinchPending = null;
+
+// Puts the page at `zoom`, with page-fraction (fx, fy) under client point
+// (cx, cy). Coalesced to one layout per animation frame.
+function setZoomAround(zoom, fx, fy, cx, cy){
+  if(!pdfDoc || !currentPageBase) return;
+  pinchPending = { zoom: Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom)), fx, fy, cx, cy };
+  if(pinchFrame) return;
+  pinchFrame = requestAnimationFrame(()=>{
+    pinchFrame = null;
+    const p = pinchPending; pinchPending = null;
+    if(!p) return;
+    const scroll = document.getElementById("scoreScroll");
+    const canvas = document.getElementById("pdfCanvas"), wrap = document.getElementById("canvasWrap");
+    const changed = Math.abs(p.zoom - zoomLevel) > 1e-4;
+    zoomLevel = p.zoom;
+    const cssW = Math.min(scroll.clientWidth - 40, 900) * zoomLevel;
+    const cssH = cssW * currentPageBase.h / currentPageBase.w;
+    canvas.style.width = wrap.style.width = cssW + "px";
+    canvas.style.height = wrap.style.height = cssH + "px";
+    if(changed) renderMarkerOverlay();
+    // move the scroll so the anchor point sits under the fingers again
+    const r = wrap.getBoundingClientRect();
+    scroll.scrollLeft += (r.left + p.fx * r.width) - p.cx;
+    scroll.scrollTop  += (r.top  + p.fy * r.height) - p.cy;
+    updateZoomLabel();
+    clearTimeout(pinchSettleTimer);
+    pinchSettleTimer = setTimeout(()=>{ if(pdfDoc) renderPage(currentPage); }, PINCH_SETTLE_MS);
+  });
+}
+// Where on the page (as fractions of its size) a client point falls.
+function pageFractionAt(cx, cy){
+  const r = document.getElementById("canvasWrap").getBoundingClientRect();
+  return { fx: (cx - r.left) / r.width, fy: (cy - r.top) / r.height };
+}
+const scoreScrollPinchEl = document.getElementById("scoreScroll");
+
+// Trackpad pinch in Chrome/Edge/Firefox (and ctrl + mouse wheel).
+scoreScrollPinchEl.addEventListener("wheel", (e)=>{
+  if(!e.ctrlKey || !pdfDoc) return; // plain scrolling stays plain scrolling
+  e.preventDefault();               // and the browser doesn't zoom the whole page
+  // Pixel deltas from a trackpad pinch are small and used as they are; a
+  // mouse-wheel notch (line/page units, or a big pixel jump) is one capped step.
+  let dy = e.deltaY;
+  if(e.deltaMode !== 0 || Math.abs(dy) >= 50) dy = Math.sign(dy) * PINCH_NOTCH_DELTA;
+  else dy = Math.max(-PINCH_EVENT_MAX, Math.min(PINCH_EVENT_MAX, dy));
+  // Build on a zoom still waiting for its frame, so fast events add up.
+  const base = pinchPending ? pinchPending.zoom : zoomLevel;
+  const { fx, fy } = pinchPending ? pinchPending : pageFractionAt(e.clientX, e.clientY);
+  setZoomAround(base * Math.exp(-dy * PINCH_WHEEL_K), fx, fy, e.clientX, e.clientY);
+}, { passive: false });
+
+// Trackpad pinch in Safari (macOS), which sends its own gesture events.
+let safariPinch = null;
+scoreScrollPinchEl.addEventListener("gesturestart", (e)=>{
+  e.preventDefault();
+  if(!pdfDoc || touchPinch) return; // on an iPad the touch handler below owns it
+  safariPinch = { zoom: zoomLevel, ...pageFractionAt(e.clientX, e.clientY) };
+});
+scoreScrollPinchEl.addEventListener("gesturechange", (e)=>{
+  e.preventDefault();
+  if(!safariPinch || touchPinch) return;
+  setZoomAround(safariPinch.zoom * e.scale, safariPinch.fx, safariPinch.fy, e.clientX, e.clientY);
+});
+scoreScrollPinchEl.addEventListener("gestureend", (e)=>{ e.preventDefault(); safariPinch = null; });
+
+// Two fingers on a touchscreen (iPad, Android, touch laptops). Touch events
+// rather than pointer events: the browser hands a pinch to page zoom before
+// pointer events can claim it, but a cancelled touchmove keeps it here.
+let touchPinch = null;
+function touchMid(t){ return { x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2 }; }
+function touchDist(t){ return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY); }
+scoreScrollPinchEl.addEventListener("touchstart", (e)=>{
+  if(!pdfDoc || e.touches.length !== 2) return;
+  const d = touchDist(e.touches);
+  if(d < 10) return;
+  const m = touchMid(e.touches);
+  touchPinch = { zoom: zoomLevel, dist: d, ...pageFractionAt(m.x, m.y) };
+  document.body.classList.add("score-pinching");
+  // The first finger may already have started drawing a system or section,
+  // or moving a bar line: a pinch isn't that, so drop it unfinished.
+  document.dispatchEvent(new Event("pointercancel"));
+}, { passive: true });
+scoreScrollPinchEl.addEventListener("touchmove", (e)=>{
+  if(!touchPinch) return;
+  if(e.touches.length !== 2){ return; }
+  e.preventDefault(); // no page zoom, no one-finger scroll fighting the pinch
+  const m = touchMid(e.touches);
+  setZoomAround(touchPinch.zoom * touchDist(e.touches) / touchPinch.dist, touchPinch.fx, touchPinch.fy, m.x, m.y);
+}, { passive: false });
+function endTouchPinch(e){
+  if(!touchPinch || e.touches.length >= 2) return;
+  touchPinch = null;
+  document.body.classList.remove("score-pinching");
+}
+scoreScrollPinchEl.addEventListener("touchend", endTouchPinch);
+scoreScrollPinchEl.addEventListener("touchcancel", endTouchPinch);
 
 // ---------- keeping the page fitted as the score panel changes width ----------
 // Window resizes and the split handle both land here. The page is resized
