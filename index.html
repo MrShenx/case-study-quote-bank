@@ -260,6 +260,21 @@
      browser) and the notes take the rest; the handle between them drags it. */
   #scorePanel{flex:0 0 var(--split,50%);display:flex;flex-direction:column;min-width:0;}
   #notesPanel{flex:1 1 0;display:flex;flex-direction:column;min-width:0;container-type:inline-size;}
+  /* Notes hidden: the score takes the whole width and a tab on the right edge
+     brings the notes back (click, or drag it left). The panel is shrunk to
+     nothing rather than removed, so a playing video or recording keeps going. */
+  #notesPullTab{display:none;}
+  @media(min-width:861px){
+    #main.notes-hidden #scorePanel{flex:1 1 0;}
+    #main.notes-hidden #notesPanel{flex:0 0 0;width:0;overflow:hidden;visibility:hidden;}
+    #main.notes-hidden #splitHandle{display:none;}
+    #main.notes-hidden #notesPullTab{display:flex;}
+  }
+  #notesPullTab{position:absolute;right:0;top:50%;transform:translateY(-50%);z-index:8;flex-direction:column;align-items:center;gap:8px;
+    padding:12px 5px 14px 6px;border:1px solid var(--line);border-right:none;border-radius:12px 0 0 12px;
+    background:var(--panel);color:var(--ink-soft);box-shadow:var(--shadow-md);cursor:col-resize;touch-action:none;font:inherit;}
+  #notesPullTab:hover,#notesPullTab:focus-visible{color:var(--accent);border-color:var(--accent);outline:none;}
+  #notesPullTab .npt-text{writing-mode:vertical-rl;transform:rotate(180deg);font-size:0.74rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;}
   /* A 9px grab zone that draws as the 1px rule the panels used to share. */
   #splitHandle{flex:0 0 9px;margin:0 -4px;position:relative;z-index:6;cursor:col-resize;touch-action:none;outline:none;}
   #splitHandle::before{content:"";position:absolute;top:0;bottom:0;left:4px;width:1px;background:var(--line);
@@ -1390,6 +1405,9 @@
   </div>
 
   <div id="main">
+    <button id="notesPullTab" type="button" title="Show the notes · drag left to choose a width" aria-label="Show the notes" aria-controls="notesPanel">
+      <span data-icon="chevron-left" data-icon-size="14"></span><span class="npt-text">Notes</span>
+    </button>
     <div id="scorePanel">
       <div id="scoreToolbar">
         <div class="pagenav">
@@ -3320,10 +3338,37 @@ applySplit(splitFrac, false);
 // notes never get squeezed below their minimum.
 if(window.ResizeObserver) new ResizeObserver(()=> applySplit(splitFrac, false)).observe(mainEl);
 
+// ---------- hiding the notes by dragging them away ----------
+// Drag the handle on past the notes' minimum width and, once the notes would
+// be under half of it, they snap shut — live, so dragging back brings them
+// straight back, and letting go there leaves them hidden. (The same rule
+// side panels use in VS Code and similar.) A tab on the right edge brings
+// them back: click for the last width, or drag it out to any width.
+const NOTES_HIDDEN_KEY = "scoreStudioNotesHidden";
+const NOTES_HIDE_BELOW = SPLIT_MIN_NOTES / 2; // px of notes width the pointer leaves
+let notesHidden = false;
+let splitFracBeforeHide = splitFrac;
+try{ notesHidden = localStorage.getItem(NOTES_HIDDEN_KEY) === "1"; }catch(e){}
+const notesPullTabEl = document.getElementById("notesPullTab");
+function setNotesHidden(hidden, remember){
+  if(hidden && !notesHidden) splitFracBeforeHide = splitFrac;
+  notesHidden = hidden;
+  mainEl.classList.toggle("notes-hidden", hidden);
+  splitHandleEl.setAttribute("aria-valuenow", hidden ? 100 : Math.round(splitFrac*100));
+  if(remember){ try{ localStorage.setItem(NOTES_HIDDEN_KEY, hidden ? "1" : "0"); }catch(e){} }
+}
+function showNotes(){
+  if(!notesHidden) return;
+  setNotesHidden(false, true);
+  applySplit(splitFracBeforeHide, true);
+}
+setNotesHidden(notesHidden, false);
+
 let splitDrag = null;
 splitHandleEl.addEventListener("pointerdown", (e)=>{
   if(e.button !== 0) return;
   const r = mainEl.getBoundingClientRect();
+  splitFracBeforeHide = splitFrac;
   splitDrag = { left: r.left, width: r.width, grab: e.clientX - (r.left + splitFrac * r.width), id: e.pointerId };
   try{ splitHandleEl.setPointerCapture(e.pointerId); }catch(err){ /* not captureable */ }
   document.body.classList.add("split-dragging");
@@ -3331,13 +3376,26 @@ splitHandleEl.addEventListener("pointerdown", (e)=>{
 });
 const SPLIT_SNAP_PX = 14; // how close to the middle counts as "meant to be the middle"
 const splitGuideEl = document.getElementById("splitGuide");
+// Where a drag at client x puts things: the notes hidden, or the split there.
+function dragSplitTo(clientX, grab){
+  const frac = (clientX - grab - splitDrag.left) / splitDrag.width;
+  const notesW = (1 - frac) * splitDrag.width;
+  if(notesW < NOTES_HIDE_BELOW){
+    if(!notesHidden){ setNotesHidden(true, false); splitFracBeforeHide = splitDrag.startFrac; }
+    splitGuideEl.classList.remove("snapped");
+    return;
+  }
+  if(notesHidden) setNotesHidden(false, false);
+  let f = frac;
+  const snapped = Math.abs(f - 0.5) * splitDrag.width <= SPLIT_SNAP_PX;
+  if(snapped) f = 0.5;
+  splitGuideEl.classList.toggle("snapped", snapped);
+  applySplit(f, false);
+}
 splitHandleEl.addEventListener("pointermove", (e)=>{
   if(!splitDrag || e.pointerId !== splitDrag.id) return;
-  let frac = (e.clientX - splitDrag.grab - splitDrag.left) / splitDrag.width;
-  const snapped = Math.abs(frac - 0.5) * splitDrag.width <= SPLIT_SNAP_PX;
-  if(snapped) frac = 0.5;
-  splitGuideEl.classList.toggle("snapped", snapped);
-  applySplit(frac, false);
+  if(splitDrag.startFrac == null) splitDrag.startFrac = splitFrac;
+  dragSplitTo(e.clientX, splitDrag.grab);
 });
 function endSplitDrag(e){
   if(!splitDrag || e.pointerId !== splitDrag.id) return;
@@ -3345,7 +3403,8 @@ function endSplitDrag(e){
   splitGuideEl.classList.remove("snapped");
   try{ splitHandleEl.releasePointerCapture(e.pointerId); }catch(err){ /* already released */ }
   document.body.classList.remove("split-dragging");
-  applySplit(splitFrac, true);
+  if(notesHidden) setNotesHidden(true, true);
+  else { setNotesHidden(false, true); applySplit(splitFrac, true); }
 }
 splitHandleEl.addEventListener("pointerup", endSplitDrag);
 splitHandleEl.addEventListener("pointercancel", endSplitDrag);
@@ -3355,10 +3414,45 @@ splitHandleEl.addEventListener("keydown", (e)=>{
   if(e.key === "ArrowLeft") applySplit(splitFrac - step, true);
   else if(e.key === "ArrowRight") applySplit(splitFrac + step, true);
   else if(e.key === "Home") applySplit(0, true);
-  else if(e.key === "End") applySplit(1, true);
+  else if(e.key === "End") setNotesHidden(true, true);
   else if(e.key === "Enter") applySplit(0.5, true);
   else return;
   e.preventDefault();
+});
+
+let pullDrag = null;
+notesPullTabEl.addEventListener("pointerdown", (e)=>{
+  if(e.button !== 0) return;
+  const r = mainEl.getBoundingClientRect();
+  // grab 0: the split follows the pointer itself while pulling out
+  splitDrag = { left: r.left, width: r.width, grab: 0, id: e.pointerId, startFrac: splitFracBeforeHide };
+  pullDrag = { x: e.clientX, moved: false, id: e.pointerId };
+  try{ notesPullTabEl.setPointerCapture(e.pointerId); }catch(err){}
+  document.body.classList.add("split-dragging");
+  e.preventDefault();
+});
+notesPullTabEl.addEventListener("pointermove", (e)=>{
+  if(!pullDrag || e.pointerId !== pullDrag.id) return;
+  if(!pullDrag.moved && Math.abs(e.clientX - pullDrag.x) < 4) return; // a click, so far
+  pullDrag.moved = true;
+  dragSplitTo(e.clientX, 0);
+});
+function endPullDrag(e){
+  if(!pullDrag || e.pointerId !== pullDrag.id) return;
+  const moved = pullDrag.moved;
+  pullDrag = null;
+  splitDrag = null;
+  splitGuideEl.classList.remove("snapped");
+  try{ notesPullTabEl.releasePointerCapture(e.pointerId); }catch(err){}
+  document.body.classList.remove("split-dragging");
+  if(!moved){ if(e.type === "pointerup") showNotes(); return; } // a click: back to the last width
+  if(notesHidden) setNotesHidden(true, true);
+  else { setNotesHidden(false, true); applySplit(splitFrac, true); }
+}
+notesPullTabEl.addEventListener("pointerup", endPullDrag);
+notesPullTabEl.addEventListener("pointercancel", endPullDrag);
+notesPullTabEl.addEventListener("keydown", (e)=>{
+  if(e.key === "Enter" || e.key === " " || e.key === "ArrowLeft"){ e.preventDefault(); showNotes(); }
 });
 
 // ==BAR-DETECTION-BEGIN== (tests/bar-detection/ loads everything between
@@ -4782,6 +4876,7 @@ function onMarkerClick(id){
 
   selectedMarkerId = id;
   renderMarkerOverlay();
+  showNotes(); // the note it jumps to has to be visible
   const note = notes.find(n=> n.startBarId===id || n.endBarId===id);
   if(note){
     jumpToNote(note.id);
